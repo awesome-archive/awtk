@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  fill on bgr565
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -27,10 +27,12 @@
 #define pixel_dst_format pixel_bgr565_format
 #define pixel_dst_to_rgba pixel_bgr565_to_rgba
 #define pixel_dst_from_rgb pixel_bgr565_from_rgb
-#define pixel_dst_from_rgba(r, g, b, a) pixel_bgr565_from_rgb(r, g, b)
+#define pixel_dst_from_rgba pixel_bgr565_from_rgba
+// #define pixel_dst_from_rgba(r, g, b, a) pixel_bgr565_from_rgb(r, g, b)
 
 #define pixel_t pixel_dst_t
 #define pixel_from_rgb pixel_dst_from_rgb
+#define pixel_from_rgba pixel_dst_from_rgba
 #define pixel_to_rgba pixel_dst_to_rgba
 #define pixel_blend_rgba_dark pixel_bgr565_blend_rgba_dark
 #define pixel_blend_rgba_premulti pixel_bgr565_blend_rgba_premulti

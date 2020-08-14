@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  timer manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,7 +22,7 @@
 #ifndef TK_TIMER_H
 #define TK_TIMER_H
 
-#include "base/timer_manager.h"
+#include "tkc/timer_manager.h"
 
 BEGIN_C_DECLS
 
@@ -51,14 +51,14 @@ BEGIN_C_DECLS
  */
 
 /**
- * @method timer_init
+ * @method timer_prepare
  * 初始化定时器系统。
  * @annotation ["private", "static"]
  * @param {timer_get_time_t} get_time 获取当前时间的函数。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t timer_init(timer_get_time_t get_time);
+ret_t timer_prepare(timer_get_time_t get_time);
 
 /**
  * @method timer_add
@@ -162,15 +162,6 @@ uint32_t timer_count(void);
  * @return {uint32_t} 返回最近的timer到期时间。
  */
 uint32_t timer_next_time(void);
-
-/**
- * @method timer_now
- * 获取当前时间(ms)。
- * @annotation ["static"]
- *
- * @return {uint32_t} 返回获取当前时间(ms)。
- */
-uint32_t timer_now(void);
 
 END_C_DECLS
 

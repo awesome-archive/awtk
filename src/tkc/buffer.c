@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  buffer
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -33,7 +33,7 @@ wbuffer_t* wbuffer_init(wbuffer_t* wbuffer, uint8_t* data, uint32_t capacity) {
   return wbuffer;
 }
 
-static ret_t wbuffer_extend_capacity(wbuffer_t* wbuffer, uint32_t capacity) {
+ret_t wbuffer_extend_capacity(wbuffer_t* wbuffer, uint32_t capacity) {
   uint8_t* data = NULL;
   return_value_if_fail(wbuffer != NULL, RET_BAD_PARAMS);
 
@@ -142,6 +142,12 @@ ret_t wbuffer_write_binary(wbuffer_t* wbuffer, const void* data, uint32_t size) 
   wbuffer->cursor += size;
 
   return RET_OK;
+}
+
+bool_t wbuffer_has_room(wbuffer_t* wbuffer, uint32_t size) {
+  return_value_if_fail(wbuffer != NULL && wbuffer->data != NULL, FALSE);
+
+  return (wbuffer->cursor + size) <= wbuffer->capacity;
 }
 
 ret_t wbuffer_write_string(wbuffer_t* wbuffer, const char* data) {

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  input method interface.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -28,9 +28,6 @@
 
 BEGIN_C_DECLS
 
-struct _input_method_t;
-typedef struct _input_method_t input_method_t;
-
 typedef ret_t (*input_method_request_t)(input_method_t* im, widget_t* widget);
 typedef ret_t (*input_method_destroy_t)(input_method_t* im);
 
@@ -43,54 +40,79 @@ typedef ret_t (*input_method_destroy_t)(input_method_t* im);
 typedef enum _input_type_t {
   /**
    * @const INPUT_TEXT
-   * 文本。
+   * 文本。字符串属性值：text
    */
   INPUT_TEXT = 0,
   /**
    * @const INPUT_INT
-   * 整数。
+   * 整数。字符串属性值：int
    */
   INPUT_INT,
   /**
    * @const INPUT_UINT
-   * 非负整数。
+   * 非负整数。字符串属性值：uint
    */
   INPUT_UINT,
   /**
    * @const INPUT_HEX
-   * 16进制整数。
+   * 16进制整数。字符串属性值：hex
    */
   INPUT_HEX,
   /**
    * @const INPUT_FLOAT
-   * 浮点数。
+   * 浮点数。字符串属性值：float
    */
   INPUT_FLOAT,
   /**
    * @const INPUT_UFLOAT
-   * 非负浮点数。
+   * 非负浮点数。字符串属性值：ufloat
    */
   INPUT_UFLOAT,
   /**
    * @const INPUT_EMAIL
-   * 邮件地址。
+   * 邮件地址。字符串属性值：email
    */
   INPUT_EMAIL,
   /**
    * @const INPUT_PASSWORD
-   * 密码。
+   * 密码。字符串属性值：password
    */
   INPUT_PASSWORD,
   /**
    * @const INPUT_PHONE
-   * 电话号码。
+   * 电话号码。字符串属性值：phone
    */
   INPUT_PHONE,
   /**
-   * @const INPUT_CUSTOM
-   * 使用自定义的软键盘(如计算器等应用不希望弹出系统软键盘)。
+   * @const INPUT_IPV4
+   * IP Addr V4(如：192.168.1.1)。字符串属性值：ipv4
    */
-  INPUT_CUSTOM
+  INPUT_IPV4,
+  /**
+   * @const INPUT_DATE
+   * 日期(如：2020/02/20)。字符串属性值：date
+   */
+  INPUT_DATE,
+  /**
+   * @const INPUT_TIME
+   * 时间(时分，如：12:00)。字符串属性值：time
+   */
+  INPUT_TIME,
+  /**
+   * @const INPUT_TIME_FULL
+   * 时间(时分秒，如：12:00:00)。字符串属性值：time_full
+   */
+  INPUT_TIME_FULL,
+  /**
+   * @const INPUT_CUSTOM
+   * 使用自定义的软键盘(如计算器等应用不希望弹出系统软键盘)。字符串属性值：custom
+   */
+  INPUT_CUSTOM,
+  /**
+   * @const INPUT_CUSTOM_PASSWORD
+   * 使用自定义的密码软键盘。字符串属性值：custom_password
+   */
+  INPUT_CUSTOM_PASSWORD
 } input_type_t;
 
 /**
@@ -113,7 +135,19 @@ typedef struct _im_commit_event_t {
    * 是否替换原来的文本。
    */
   bool_t replace;
+
 } im_commit_event_t;
+
+/**
+ * @method im_commit_event_init
+ * 初始化im_commit事件。
+ * @param {im_commit_event_t*} e 事件对象。
+ * @param {const char*} text 文本。
+ * @param {bool_t} replace 是否替代当前的内容。
+ *
+ * @return {event_t*} 返回事件对象。
+ */
+event_t* im_commit_event_init(im_commit_event_t* e, const char* text, bool_t replace);
 
 /**
  * @class im_action_button_info_event_t
@@ -156,6 +190,13 @@ typedef struct _im_candidates_event_t {
    * 可选的文本的个数。
    */
   uint32_t candidates_nr;
+
+  /**
+   * @property {int32_t} selected;
+   * @annotation ["readable"]
+   * 缺省选中某个候选字，小余0不选择任何候选字 。
+   */
+  int32_t selected;
 } im_candidates_event_t;
 
 /**
@@ -213,6 +254,13 @@ struct _input_method_t {
   int32_t win_delta_y;
 
   /**
+   * @property {int32_t} win_old_y
+   * @annotation ["private"]
+   * 窗口原来的位置。
+   */
+  int32_t win_old_y;
+
+  /**
    * @property {bool_t} action_button_enable
    * @annotation ["readable"]
    * 软键盘的上的action按钮是否可用。
@@ -234,11 +282,11 @@ struct _input_method_t {
   emitter_t emitter;
 
   /**
-   * @property {input_type_t} input_type
+   * @property {char*} keyboard_name
    * @annotation ["readable"]
-   * 当前输入的类型。
+   * 软键盘资源名称。
    */
-  input_type_t input_type;
+  char keyboard_name[TK_NAME_LEN + 1];
 
   input_engine_t* engine;
   suggest_words_t* suggest_words;
@@ -250,6 +298,8 @@ struct _input_method_t {
 
   /*private*/
   bool_t busy;
+  void* data;
+  uint32_t idle_close_id;
 };
 
 /**
@@ -329,18 +379,46 @@ ret_t input_method_dispatch_action(input_method_t* im);
  * 提交输入文本。
  * @annotation ["scriptable"]
  * @param {input_method_t*} im 输入法对象。
- * @param {char*} text 文本。
+ * @param {const char*} text 文本。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t input_method_commit_text(input_method_t* im, const char* text);
 
 /**
+ * @method input_method_set_lang
+ * 设置语言。
+ *
+ * > 有时在同一种语言环境下，也需要输入多种文字，典型的情况是同时输入中文和英文。
+ * > 比如T9输入法，可以同时支持中文和英文输入，配合软键盘随时切换输入的语言。
+ * > 数字、小写字母、大写字母和符合也可以视为输入的语言。
+ * > 主要用于提示输入法引擎选择适当的输入方法。
+ * 
+ * @annotation ["scriptable"]
+ * @param {input_method_t*} im 输入法对象。
+ * @param {const char*} lang 语言。格式为语言+国家/地区码。如：zh_cn和en_us等。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t input_method_set_lang(input_method_t* im, const char* lang);
+
+/**
+ * @method input_method_get_lang
+ * 获取语言。
+ *
+ * @annotation ["scriptable"]
+ * @param {input_method_t*} im 输入法对象。
+ *
+ * @return {const char*} 返回语言。
+ */
+const char* input_method_get_lang(input_method_t* im);
+
+/**
  * @method input_method_commit_text_ex
  * 提交输入文本。
  * @param {input_method_t*} im 输入法对象。
  * @param {bool_t} replace 是否替换原来的文本。
- * @param {char*} text 文本。
+ * @param {const char*} text 文本。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -358,15 +436,75 @@ ret_t input_method_commit_text_ex(input_method_t* im, bool_t replace, const char
 ret_t input_method_dispatch_key(input_method_t* im, uint32_t key);
 
 /**
+ * @method input_method_dispatch_keys
+ * 提交按键。
+ * @annotation ["scriptable"]
+ * @param {input_method_t*} im 输入法对象。
+ * @param {const char*} key 键值。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t input_method_dispatch_keys(input_method_t* im, const char* keys);
+
+/**
+ * @method input_method_dispatch_preedit
+ * 分发进入预编辑状态的事件。
+ * @annotation ["scriptable"]
+ * @param {input_method_t*} im 输入法对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t input_method_dispatch_preedit(input_method_t* im);
+
+/**
+ * @method input_method_dispatch_preedit_confirm
+ * 分发确认预编辑状态的事件(提交预编辑内容，退出预编辑状态)。
+ * @annotation ["scriptable"]
+ * @param {input_method_t*} im 输入法对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t input_method_dispatch_preedit_confirm(input_method_t* im);
+
+/**
+ * @method input_method_dispatch_preedit_abort
+ * 分发取消预编辑状态的事件(提交预编辑内容，退出预编辑状态)。
+ * @annotation ["scriptable"]
+ * @param {input_method_t*} im 输入法对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t input_method_dispatch_preedit_abort(input_method_t* im);
+
+/**
  * @method input_method_dispatch_candidates
  * 请求显示候选字。
  * @param {input_method_t*} im 输入法对象。
  * @param {char*} strs 候选字列表。
  * @param {uint32_t} nr 候选字个数。
+ * @param {int32_t} selected 缺省选中候选字的序数。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t input_method_dispatch_candidates(input_method_t* im, const char* strs, uint32_t nr);
+ret_t input_method_dispatch_candidates(input_method_t* im, const char* strs, uint32_t nr,
+                                       int32_t selected);
+
+/**
+ * @method input_method_dispatch_pre_candidates
+ * 请求显示预候选字。
+ * 
+ * > 预候选字: 在有的输入法中，比如T9硬键盘输入时，按下12两个键时，预候选字会显示可用的拼音列表。
+ * > 从预候选字列表中选择拼音，再查询拼音对应的候选字列表。
+ * 
+ * @param {input_method_t*} im 输入法对象。
+ * @param {char*} strs 候选字列表。
+ * @param {uint32_t} nr 候选字个数。
+ * @param {int32_t} selected 缺省选中候选字的序数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t input_method_dispatch_pre_candidates(input_method_t* im, const char* strs, uint32_t nr,
+                                           int32_t selected);
 
 /**
  * @method input_method_create
@@ -404,7 +542,13 @@ input_method_t* input_method(void);
  */
 ret_t input_method_set(input_method_t* im);
 
-event_t* im_commit_event_init(im_commit_event_t* e, const char* text, bool_t replace);
+#define IM_LANG_DIGIT "123"
+#define IM_LANG_LOWER "abc"
+#define IM_LANG_UPPER "ABC"
+#define IM_LANG_SYMBOL "sym"
+#define IM_LANG_EN_US "en_us"
+#define IM_LANG_ZH_CN "zh_cn"
+#define IM_LANG_ZH_TW "zh_tw"
 
 END_C_DECLS
 

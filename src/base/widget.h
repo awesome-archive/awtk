@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  basic class of all widget
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -46,6 +46,7 @@
 #include "base/self_layouter.h"
 #include "base/widget_animator.h"
 #include "base/children_layouter.h"
+#include "base/native_window.h"
 
 BEGIN_C_DECLS
 
@@ -58,28 +59,41 @@ typedef ret_t (*widget_on_paint_children_t)(widget_t* widget, canvas_t* c);
 typedef ret_t (*widget_on_paint_border_t)(widget_t* widget, canvas_t* c);
 typedef ret_t (*widget_on_paint_begin_t)(widget_t* widget, canvas_t* c);
 typedef ret_t (*widget_on_paint_end_t)(widget_t* widget, canvas_t* c);
+typedef ret_t (*widget_on_wheel_t)(widget_t* widget, wheel_event_t* e);
 typedef ret_t (*widget_on_keydown_t)(widget_t* widget, key_event_t* e);
 typedef ret_t (*widget_on_keyup_t)(widget_t* widget, key_event_t* e);
+typedef ret_t (*widget_on_re_translate_t)(widget_t* widget);
 typedef ret_t (*widget_on_pointer_down_t)(widget_t* widget, pointer_event_t* e);
 typedef ret_t (*widget_on_pointer_move_t)(widget_t* widget, pointer_event_t* e);
 typedef ret_t (*widget_on_pointer_up_t)(widget_t* widget, pointer_event_t* e);
+typedef ret_t (*widget_on_context_menu_t)(widget_t* widget, pointer_event_t* e);
 typedef ret_t (*widget_on_add_child_t)(widget_t* widget, widget_t* child);
 typedef ret_t (*widget_on_remove_child_t)(widget_t* widget, widget_t* child);
+typedef ret_t (*widget_on_attach_parent_t)(widget_t* widget, widget_t* parent);
+typedef ret_t (*widget_on_detach_parent_t)(widget_t* widget, widget_t* parent);
 typedef ret_t (*widget_on_layout_children_t)(widget_t* widget);
 typedef ret_t (*widget_get_prop_t)(widget_t* widget, const char* name, value_t* v);
 typedef ret_t (*widget_get_prop_default_value_t)(widget_t* widget, const char* name, value_t* v);
 typedef ret_t (*widget_set_prop_t)(widget_t* widget, const char* name, const value_t* v);
+typedef ret_t (*widget_on_copy_t)(widget_t* widget, widget_t* other);
 typedef widget_t* (*widget_find_target_t)(widget_t* widget, xy_t x, xy_t y);
 typedef widget_t* (*widget_create_t)(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 typedef ret_t (*widget_on_destroy_t)(widget_t* widget);
+
+typedef ret_t (*widget_exec_t)(widget_t* widget, const char* args);
+
+typedef struct _widget_cmd_t {
+  const char* name;
+  widget_exec_t exec;
+} widget_cmd_t;
 
 struct _widget_vtable_t {
   uint32_t size;
   const char* type;
   /*克隆widget时需要复制的属性*/
-  const char** clone_properties;
+  const char* const* clone_properties;
   /*持久化widget时需要保存的属性*/
-  const char** persistent_properties;
+  const char* const* persistent_properties;
   /**
    * 是否可以滚动。
    */
@@ -135,13 +149,23 @@ struct _widget_vtable_t {
    * parent class vtable
    */
   const struct _widget_vtable_t* parent;
+  /**
+   * cursor image name
+   */
+  const char* pointer_cursor;
 
   widget_create_t create;
   widget_get_prop_t get_prop;
-  widget_get_prop_default_value_t get_prop_default_value;
   widget_set_prop_t set_prop;
+  widget_invalidate_t invalidate;
+  widget_find_target_t find_target;
+  widget_get_prop_default_value_t get_prop_default_value;
+
+  widget_on_copy_t on_copy;
   widget_on_keyup_t on_keyup;
   widget_on_keydown_t on_keydown;
+  widget_on_wheel_t on_wheel;
+  widget_on_re_translate_t on_re_translate;
   widget_on_paint_background_t on_paint_background;
   widget_on_paint_self_t on_paint_self;
   widget_on_paint_children_t on_paint_children;
@@ -151,19 +175,20 @@ struct _widget_vtable_t {
   widget_on_pointer_down_t on_pointer_down;
   widget_on_pointer_move_t on_pointer_move;
   widget_on_pointer_up_t on_pointer_up;
+  widget_on_context_menu_t on_context_menu;
   widget_on_layout_children_t on_layout_children;
-  widget_invalidate_t invalidate;
   widget_on_add_child_t on_add_child;
   widget_on_remove_child_t on_remove_child;
+  widget_on_attach_parent_t on_attach_parent;
+  widget_on_detach_parent_t on_detach_parent;
   widget_on_event_t on_event;
   widget_on_event_before_children_t on_event_before_children;
-  widget_find_target_t find_target;
   widget_on_destroy_t on_destroy;
 };
 
 /**
  * @class widget_t
- * @annotation ["scriptable"]
+ * @annotation ["scriptable","widget"]
  * **widget_t** 是所有控件、窗口和窗口管理器的基类。
  * **widget_t**也是一个容器，可放其它**widget_t**到它的内部，形成一个树形结构。
  *
@@ -256,6 +281,12 @@ struct _widget_t {
    */
   char* name;
   /**
+   * @property {char*} pointer_cursor
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 鼠标光标图片名称。
+   */
+  char* pointer_cursor;
+  /**
    * @property {char*} tr_text
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 保存用于翻译的字符串。
@@ -279,6 +310,12 @@ struct _widget_t {
    * 启用/禁用状态。
    */
   uint8_t enable : 1;
+  /**
+   * @property {bool_t} feedback
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否启用按键音、触屏音和震动等反馈。
+   */
+  uint8_t feedback : 1;
   /**
    * @property {bool_t} visible
    * @annotation ["set_prop","get_prop","readable","writable","persitent","design","scriptable"]
@@ -337,17 +374,30 @@ struct _widget_t {
    */
   uint8_t need_relayout_children : 1;
   /**
-   * @property {uint16_t} can_not_destroy
+   * @property {bool_t} need_update_style
    * @annotation ["readable"]
-   * 标识控件目前不能被销毁(比如正在分发事件)，如果此时调用widget\_destroy，自动异步处理。
+   * 标识控件是否需要update style。
    */
-  uint16_t can_not_destroy;
+  uint8_t need_update_style : 1;
+  /**
+   * @property {int32_t} ref_count
+   * @annotation ["readable"]
+   * 引用计数，计数为0时销毁。
+   */
+  int32_t ref_count;
+
   /**
    * @property {bool_t} initializing
    * @annotation ["readable"]
    * 标识控件正在初始化。
    */
   uint8_t initializing : 1;
+  /**
+   * @property {bool_t} loading
+   * @annotation ["readable"]
+   * 标识控件正在加载。
+   */
+  uint8_t loading : 1;
   /**
    * @property {bool_t} destroying
    * @annotation ["readable"]
@@ -359,13 +409,22 @@ struct _widget_t {
    * @annotation ["readable"]
    * 控件的状态(取值参考widget_state_t)。
    */
-  const char* state;
+  char* state;
   /**
    * @property {uint8_t} opacity
    * @annotation ["readable"]
    * 不透明度(0-255)，0完全透明，255完全不透明。
    */
   uint8_t opacity;
+  /**
+   * @property {uint16_t} dirty_rect_tolerance 
+   * @annotation ["readable","design","scriptable"]
+   * 脏矩形超出控件本身大小的最大范围(一般不用指定)。
+   *
+   *> 如果 border 太粗或 offset 太大等原因，导致脏矩形超出控件本身大小太多（大于缺省值）时，才需要指定。
+   */
+  uint16_t dirty_rect_tolerance;
+
   /**
    * @property {wstr_t} text
    * @annotation ["readable"]
@@ -374,7 +433,7 @@ struct _widget_t {
   wstr_t text;
   /**
    * @property {widget_t*} parent
-   * @annotation ["readable"]
+   * @annotation ["readable", "scriptable"]
    * 父控件
    */
   widget_t* parent;
@@ -445,6 +504,8 @@ struct _widget_t {
    * 虚函数表。
    */
   const widget_vtable_t* vt;
+  /*private*/
+  assets_manager_t* assets_manager;
 };
 
 /**
@@ -579,6 +640,16 @@ int32_t widget_count_children(widget_t* widget);
 widget_t* widget_get_child(widget_t* widget, int32_t index);
 
 /**
+ * @method widget_get_native_window
+ * 获取原生窗口对象。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {native_window_t*} 原生窗口对象。
+ */
+native_window_t* widget_get_native_window(widget_t* widget);
+
+/**
  * @method widget_index_of
  * 获取控件在父控件中的索引编号。
  * @annotation ["scriptable"]
@@ -587,6 +658,16 @@ widget_t* widget_get_child(widget_t* widget, int32_t index);
  * @return {int32_t} 在父控件中的索引编号。
  */
 int32_t widget_index_of(widget_t* widget);
+
+/**
+ * @method widget_close_window
+ * 关闭控件所在的窗口。
+ * @annotation ["deconstructor", "scriptable"]
+ * @param {widget_t*} widget widget对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_close_window(widget_t* widget);
 
 /**
  * @method widget_move
@@ -668,7 +749,7 @@ ret_t widget_add_value(widget_t* widget, int32_t delta);
  * 设置控件的文本。
  * 只是对widget\_set\_prop的包装，文本的意义由子类控件决定。
  * @param {widget_t*} widget 控件对象。
- * @param {wchar_t*}  text 文本。
+ * @param {const wchar_t*}  text 文本。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -679,7 +760,7 @@ ret_t widget_set_text(widget_t* widget, const wchar_t* text);
  * 启用指定的主题。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*}  style style的名称。
+ * @param {const char*}  style style的名称。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -692,18 +773,47 @@ ret_t widget_use_style(widget_t* widget, const char* style);
  * @annotation ["scriptable"]
  * @alias set_text
  * @param {widget_t*} widget 控件对象。
- * @param {char*}  text 文本。
+ * @param {const char*}  text 文本。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t widget_set_text_utf8(widget_t* widget, const char* text);
 
 /**
+ * @method widget_set_child_text_utf8
+ * 设置子控件的文本。
+ * 只是对widget\_set\_prop的包装，文本的意义由子类控件决定。
+ * @annotation ["scriptable"]
+ * @alias set_child_text
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*}  name 子控件的名称。
+ * @param {const char*}  text 文本。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_set_child_text_utf8(widget_t* widget, const char* name, const char* text);
+
+/**
+ * @method widget_set_child_text_with_double
+ * 用一个浮点数去设置子控件的文本。
+ * 只是对widget\_set\_prop的包装，文本的意义由子类控件决定。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*}  name 子控件的名称。
+ * @param {const char*}  format 格式字符串(如："%2.2lf")。
+ * @param {double} value 浮点数值。
+ * 
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_set_child_text_with_double(widget_t* widget, const char* name, const char* format,
+                                        double value);
+
+/**
  * @method widget_set_tr_text
  * 获取翻译之后的文本，然后调用widget_set_text。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*}  text 文本。
+ * @param {const char*}  text 文本。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -723,10 +833,21 @@ int32_t widget_get_value(widget_t* widget);
  * @method widget_get_text
  * 获取控件的文本。
  * 只是对widget\_get\_prop的包装，文本的意义由子类控件决定。
+ *
+ * 如果希望获取UTF8格式的文本，可以参考下面的代码：
+ *
+ * ```c
+ *  str_t str;
+ *  str_init(&str, 0);
+ *  str_from_wstr(&str, widget_get_text(target));
+ *  log_debug("%s: %s\n", target->name, str.str);
+ *  str_reset(&str);
+ * ```
+ *
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  *
- * @return {wchar_t*} 返回文本。
+ * @return {const wchar_t*} 返回文本。
  */
 const wchar_t* widget_get_text(widget_t* widget);
 
@@ -765,22 +886,37 @@ ret_t widget_to_screen(widget_t* widget, point_t* p);
  * 设置控件的名称。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} name 名称。
+ * @param {const char*} name 名称。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t widget_set_name(widget_t* widget, const char* name);
 
 /**
- * @method widget_set_cursor
- * 设置鼠标指针的图片名。
+ * @method widget_set_theme
+ * 设置theme的名称，用于动态切换主题。名称与当前主题名称相同，则重新加载全部资源。
+ *
+ * > 目前只支持带有文件系统的平台。
+ *
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} cursor 图片名称(无扩展名)。
+ * @param {const char*} name 主题的名称。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t widget_set_cursor(widget_t* widget, const char* cursor);
+ret_t widget_set_theme(widget_t* widget, const char* name);
+
+/**
+ * @method widget_set_pointer_cursor
+ * 设置鼠标指针的图片名。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*} cursor 图片名称(无扩展名)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_set_pointer_cursor(widget_t* widget, const char* cursor);
+#define widget_set_cursor widget_set_pointer_cursor
 
 /**
  * @method widget_set_animation
@@ -857,7 +993,7 @@ ret_t widget_set_animator_time_scale(widget_t* widget, const char* name, float_t
  *
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} name 动画名称。
+ * @param {const char*} name 动画名称。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -867,9 +1003,8 @@ ret_t widget_pause_animator(widget_t* widget, const char* name);
  * @method widget_find_animator
  * 查找指定名称的动画。
  *
- * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} name 动画名称。
+ * @param {const char*} name 动画名称。
  *
  * @return {widget_animator_t*} 成功返回动画对象，失败返回NULL。
  */
@@ -886,7 +1021,7 @@ widget_animator_t* widget_find_animator(widget_t* widget, const char* name);
  *
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} name 动画名称。
+ * @param {const char*} name 动画名称。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -903,7 +1038,7 @@ ret_t widget_stop_animator(widget_t* widget, const char* name);
  *
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} name 动画名称。
+ * @param {const char*} name 动画名称。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -921,8 +1056,21 @@ ret_t widget_destroy_animator(widget_t* widget, const char* name);
 ret_t widget_set_enable(widget_t* widget, bool_t enable);
 
 /**
+ * @method widget_set_feedback
+ * 设置控件是否启用反馈。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t} feedback 是否启用反馈。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_set_feedback(widget_t* widget, bool_t feedback);
+
+/**
  * @method widget_set_floating
  * 设置控件的floating标志。
+ *> floating的控件不受父控件的子控件布局参数的影响。
+ *
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {bool_t} floating 是否启用floating布局。
@@ -933,18 +1081,30 @@ ret_t widget_set_floating(widget_t* widget, bool_t floating);
 
 /**
  * @method widget_set_focused
- * 设置控件的是否聚焦。
+ * 设置控件是否获得焦点。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {bool_t} focused 是否聚焦。
+ * @param {bool_t} focused 是否获得焦点。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t widget_set_focused(widget_t* widget, bool_t focused);
 
 /**
+ * @method widget_set_focusable
+ * 设置控件是否可获得焦点。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t} focusable 是否可获得焦点。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_set_focusable(widget_t* widget, bool_t focusable);
+
+/**
  * @method widget_set_state
  * 设置控件的状态。
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {const char*} state 状态(必须为真正的常量字符串，在widget的整个生命周期有效)。
  *
@@ -958,6 +1118,7 @@ ret_t widget_set_state(widget_t* widget, const char* state);
  *
  *>在嵌入式平台，半透明效果会使性能大幅下降，请谨慎使用。
  *
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {uint8_t} opacity 不透明度(取值0-255，0表示完全透明，255表示完全不透明)。
  *
@@ -966,8 +1127,22 @@ ret_t widget_set_state(widget_t* widget, const char* state);
 ret_t widget_set_opacity(widget_t* widget, uint8_t opacity);
 
 /**
+ * @method widget_set_dirty_rect_tolerance
+ * 设置控件脏矩形超出控件本身大小的最大范围(一般不用指定)。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {uint16_t} dirty_rect_tolerance 控件脏脏矩形超出控件本身大小的最大范。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_set_dirty_rect_tolerance(widget_t* widget, uint16_t dirty_rect_tolerance);
+
+/**
  * @method widget_destroy_children
  * 销毁全部子控件。
+ *
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -977,6 +1152,8 @@ ret_t widget_destroy_children(widget_t* widget);
 /**
  * @method widget_add_child
  * 加入一个子控件。
+ *
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {widget_t*} child 子控件对象。
  *
@@ -987,6 +1164,8 @@ ret_t widget_add_child(widget_t* widget, widget_t* child);
 /**
  * @method widget_remove_child
  * 移出指定的子控件(并不销毁)。
+ *
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {widget_t*} child 子控件对象。
  *
@@ -997,6 +1176,8 @@ ret_t widget_remove_child(widget_t* widget, widget_t* child);
 /**
  * @method widget_insert_child
  * 插入子控件到指定的位置。
+ *
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {uint32_t} index 位置序数(大于等于总个数，则放到最后)。
  * @param {widget_t*} child 子控件对象。
@@ -1008,6 +1189,8 @@ ret_t widget_insert_child(widget_t* widget, uint32_t index, widget_t* child);
 /**
  * @method widget_restack
  * 调整控件在父控件中的位置序数。
+ *
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {uint32_t} index 位置序数(大于等于总个数，则放到最后)。
  *
@@ -1020,7 +1203,7 @@ ret_t widget_restack(widget_t* widget, uint32_t index);
  * 查找指定名称的子控件(同widget_lookup(widget, name, FALSE))。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} name 子控件的名称。
+ * @param {const char*} name 子控件的名称。
  *
  * @return {widget_t*} 子控件或NULL。
  */
@@ -1031,7 +1214,7 @@ widget_t* widget_child(widget_t* widget, const char* name);
  * 查找指定名称的子控件(返回第一个)。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} name 子控件的名称。
+ * @param {const char*} name 子控件的名称。
  * @param {bool_t} recursive 是否递归查找全部子控件。
  *
  * @return {widget_t*} 子控件或NULL。
@@ -1043,7 +1226,7 @@ widget_t* widget_lookup(widget_t* widget, const char* name, bool_t recursive);
  * 查找指定类型的子控件(返回第一个)。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*} type 子控件的名称。
+ * @param {const char*} type 子控件的名称。
  * @param {bool_t} recursive 是否递归查找全部子控件。
  *
  * @return {widget_t*} 子控件或NULL。
@@ -1089,7 +1272,7 @@ ret_t widget_set_sensitive(widget_t* widget, bool_t sensitive);
  * 注册指定事件的处理函数。
  * @annotation ["scriptable:custom"]
  * @param {widget_t*} widget 控件对象。
- * @param {uint32_t} type 事件类型。
+ * @param {event_type_t} type 事件类型。
  * @param {event_func_t} on_event 事件处理函数。
  * @param {void*} ctx 事件处理函数上下文。
  * 使用示例：
@@ -1100,48 +1283,84 @@ ret_t widget_set_sensitive(widget_t* widget, bool_t sensitive);
  *
  * ```
  *
- * @return {int32_t} 返回id，用于widget_off。
+ * @return {uint32_t} 返回id，用于widget_off。
  */
-int32_t widget_on(widget_t* widget, uint32_t type, event_func_t on_event, void* ctx);
+uint32_t widget_on(widget_t* widget, uint32_t type, event_func_t on_event, void* ctx);
+
+/**
+ * @method widget_on_with_tag
+ * 注册指定tag的事件处理函数。
+ *
+ * > 注册时指定一个tag，可用widget\_off\_by\_tag注销相同tag的事件处理函数。
+ *
+ * @param {widget_t*} widget 控件对象。
+ * @param {event_type_t} type 事件类型。
+ * @param {event_func_t} on_event 事件处理函数。
+ * @param {void*} ctx 事件处理函数上下文。
+ * @param {uint32_t} tag tag。
+ *
+ * @return {uint32_t} 返回id，用于widget_off。
+ */
+uint32_t widget_on_with_tag(widget_t* widget, uint32_t type, event_func_t on_event, void* ctx,
+                            uint32_t tag);
 
 /**
  * @method widget_off
  * 注销指定事件的处理函数。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {int32_t} id widget_on返回的ID。
+ * @param {uint32_t} id widget_on返回的ID。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t widget_off(widget_t* widget, int32_t id);
+ret_t widget_off(widget_t* widget, uint32_t id);
 
 /**
  * @method widget_child_on
  * 为指定名称的子控件注册指定事件的处理函数。
  * 递归查找指定名称的子控件，然后为其注册指定事件的处理函数。
  * @param {widget_t*} widget 控件对象。
- * @param {char*} name 子控件的名称。
- * @param {uint32_t} type 事件类型。
+ * @param {const char*} name 子控件的名称。
+ * @param {event_type_t} type 事件类型。
  * @param {event_func_t} on_event 事件处理函数。
  * @param {void*} ctx 事件处理函数上下文。
  *
- * @return {int32_t} 返回id，用于widget_off。
+ * @return {uint32_t} 返回id，用于widget_off。
  */
-int32_t widget_child_on(widget_t* widget, const char* name, uint32_t type, event_func_t on_event,
-                        void* ctx);
+uint32_t widget_child_on(widget_t* widget, const char* name, uint32_t type, event_func_t on_event,
+                         void* ctx);
 
 /**
  * @method widget_off_by_func
- * 注销指定事件的处理函数。
- * 仅用于辅助实现脚本绑定。
+ * 注销指定函数的事件处理函数。
  * @param {widget_t*} widget 控件对象。
- * @param {uint32_t} type 事件类型。
+ * @param {event_type_t} type 事件类型。
  * @param {event_func_t} on_event 事件处理函数。
  * @param {void*} ctx 事件处理函数上下文。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t widget_off_by_func(widget_t* widget, uint32_t type, event_func_t on_event, void* ctx);
+
+/**
+ * @method widget_off_by_ctx
+ * 注销指定ctx的事件处理函数。
+ * @param {widget_t*} widget 控件对象。
+ * @param {void*} ctx 事件处理函数上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_off_by_ctx(widget_t* widget, void* ctx);
+
+/**
+ * @method widget_off_by_tag
+ * 注销指定tag的事件处理函数。
+ * @param {widget_t*} widget 控件对象。
+ * @param {uint32_t} tag tag。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_off_by_tag(widget_t* widget, uint32_t tag);
 
 /**
  * @method widget_invalidate
@@ -1167,13 +1386,27 @@ ret_t widget_invalidate_force(widget_t* widget, rect_t* r);
 /**
  * @method widget_paint
  * 绘制控件到一个canvas上。
- * @annotation ["private"]
  * @param {widget_t*} widget 控件对象。
  * @param {canvas_t*} c 画布对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t widget_paint(widget_t* widget, canvas_t* c);
+
+/**
+ * @method widget_draw_text_in_rect
+ * 在canvas绘制一行文本。
+ * @param {widget_t*} widget 控件对象。
+ * @param {canvas_t*} c 画布对象。
+ * @param {const wchar_t*} str 文本。
+ * @param {uint32_t} size 文本长度。
+ * @param {rect_t*} r 矩形区域。
+ * @param {bool_t} ellipses 宽度不够时是否显示省略号。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+*/
+ret_t widget_draw_text_in_rect(widget_t* widget, canvas_t* c, const wchar_t* str, uint32_t size,
+                               rect_t* r, bool_t ellipses);
 
 /**
  * @method widget_dispatch
@@ -1184,6 +1417,26 @@ ret_t widget_paint(widget_t* widget, canvas_t* c);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t widget_dispatch(widget_t* widget, event_t* e);
+
+/**
+ * @method widget_dispatch_simple_event
+ * 分发一个简单事件。
+ * @param {widget_t*} widget 控件对象。
+ * @param {uint32_t} type 事件类型。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_dispatch_simple_event(widget_t* widget, uint32_t type);
+
+/**
+ * @method widget_dispatch_recursive
+ * 分发一个事件控件本身及所有子控件。
+ * @param {widget_t*} widget 控件对象。
+ * @param {event_t*} e 事件。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_dispatch_recursive(widget_t* widget, event_t* e);
 
 /**
  * @method widget_get_prop
@@ -1322,6 +1575,28 @@ bool_t widget_get_prop_bool(widget_t* widget, const char* name, bool_t defval);
 bool_t widget_is_window_opened(widget_t* widget);
 
 /**
+ * @method widget_is_parent_of
+ * 判断当前控件是否是指定控件的父控件(包括非直系)。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {widget_t*} child 控件对象。
+ *
+ * @return {bool_t} 返回TRUE表示是，否则表示不是。
+ */
+bool_t widget_is_parent_of(widget_t* widget, widget_t* child);
+
+/**
+ * @method widget_is_direct_parent_of
+ * 判断当前控件是否是指定控件的直系父控件。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {widget_t*} child 控件对象。
+ *
+ * @return {bool_t} 返回TRUE表示是，否则表示不是。
+ */
+bool_t widget_is_direct_parent_of(widget_t* widget, widget_t* child);
+
+/**
  * @method widget_is_window
  * 判断当前控件是否是窗口。
  * @annotation ["scriptable"]
@@ -1410,7 +1685,7 @@ widget_t* widget_get_window_manager(widget_t* widget);
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  *
- * @return {char*} 返回类型名。
+ * @return {const char*} 返回类型名。
  */
 const char* widget_get_type(widget_t* widget);
 
@@ -1461,6 +1736,16 @@ bool_t widget_equal(widget_t* widget, widget_t* other);
  * @return {uint32_t} 返回timer的ID，TK_INVALID_ID表示失败。
  */
 uint32_t widget_add_timer(widget_t* widget, timer_func_t on_timer, uint32_t duration_ms);
+
+/**
+ * @method widget_remove_timer
+ * 删除指定的timer。
+ * @param {widget_t*} widget 控件对象。
+ * @param {uint32_t} timer_id timerID。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_remove_timer(widget_t* widget, uint32_t timer_id);
 
 /**
  * @method widget_add_idle
@@ -1557,14 +1842,50 @@ widget_t* widget_cast(widget_t* widget);
 
 /**
  * @method widget_destroy
- * 销毁控件。
- * 一般无需直接调用，关闭窗口时，自动销毁相关控件。
+ * 从父控件中移除控件，并调用unref函数销毁控件。
+ * 
+ * > 一般无需直接调用，关闭窗口时，自动销毁相关控件。
+ * 
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t widget_destroy(widget_t* widget);
+
+/**
+ * @method widget_destroy_async
+ * 从父控件中移除控件，并调用unref函数销毁控件。
+ * 
+ * > 一般无需直接调用，关闭窗口时，自动销毁相关控件。
+ * 
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_destroy_async(widget_t* widget);
+
+/**
+ * @method widget_ref
+ * 增加控件的引用计数。
+ * 
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {widget_t*} 返回控件对象。
+ */
+widget_t* widget_ref(widget_t* widget);
+
+/**
+ * @method widget_unref
+ * 减少控件的引用计数。引用计数为0时销毁控件。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_unref(widget_t* widget);
 
 #define WIDGET_FOR_EACH_CHILD_BEGIN(twidget, iter, i)             \
   if (twidget->children != NULL && twidget->children->size > 0) { \
@@ -1600,7 +1921,7 @@ ret_t widget_destroy(widget_t* widget);
  * widget_set_prop_bool(group, WIDGET_PROP_IS_KEYBOARD, TRUE);
  * ```
  *
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -1610,10 +1931,9 @@ bool_t widget_is_keyboard(widget_t* widget);
 /**
  * @method widget_paint_helper
  * 帮助子控件实现自己的绘制函数。
- * @annotation ["private"]
  * @param {widget_t*} widget 控件对象。
  * @param {canvas_t*} c 画布对象。
- * @param {char*} icon 图标的名称。
+ * @param {const char*} icon 图标的名称。
  * @param {wstr_t*} text 文字。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -1621,9 +1941,19 @@ bool_t widget_is_keyboard(widget_t* widget);
 ret_t widget_paint_helper(widget_t* widget, canvas_t* c, const char* icon, wstr_t* text);
 
 /**
+ * @method widget_draw_background
+ * 根据控件的style绘制背景矩形。
+ * @param {widget_t*} widget 控件对象。
+ * @param {canvas_t*} c 画布对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_draw_background(widget_t* widget, canvas_t* c);
+
+/**
  * @method widget_stroke_border_rect
  * 根据控件的style绘制边框矩形。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {canvas_t*} c 画布对象。
  * @param {rect_t*} r 矩形区域。
@@ -1635,7 +1965,7 @@ ret_t widget_stroke_border_rect(widget_t* widget, canvas_t* c, rect_t* r);
 /**
  * @method widget_fill_bg_rect
  * 根据控件的style绘制背景矩形。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {canvas_t*} c 画布对象。
  * @param {rect_t*} r 矩形区域。
@@ -1648,7 +1978,7 @@ ret_t widget_fill_bg_rect(widget_t* widget, canvas_t* c, rect_t* r, image_draw_t
 /**
  * @method widget_fill_fg_rect
  * 根据控件的style绘制前景矩形。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {canvas_t*} c 画布对象。
  * @param {rect_t*} r 矩形区域。
@@ -1662,7 +1992,6 @@ ret_t widget_fill_fg_rect(widget_t* widget, canvas_t* c, rect_t* r, image_draw_t
  * @method widget_prepare_text_style
  * 从widget的style中取出字体名称、大小和颜色数据，设置到canvas中。
  *
- * @annotation ["private"]
  * @param {widget_t*} widget 控件对象。
  * @param {canvas_t*} c 画布对象。
  *
@@ -1674,7 +2003,7 @@ ret_t widget_prepare_text_style(widget_t* widget, canvas_t* c);
  * @method widget_measure_text
  * 计算文本的宽度。
  * 字体由控件当前的状态和style决定。
- * @annotation ["private"]
+ *
  * @param {widget_t*} widget 控件对象。
  * @param {wchar_t*} text 文本。
  *
@@ -1685,7 +2014,7 @@ float_t widget_measure_text(widget_t* widget, const wchar_t* text);
 /**
  * @method widget_dispatch_event_to_target_recursive
  * 递归分发事件到targe控件。
- * @annotation ["private"]
+ *
  * @param {widget_t*} widget 控件对象。
  * @param {event_t*}  e 事件对象。
  *
@@ -1696,7 +2025,6 @@ ret_t widget_dispatch_event_to_target_recursive(widget_t* widget, event_t* e);
 /**
  * @method widget_is_point_in
  * 判断一个点是否在控件内。
- * @annotation ["private"]
  * @param {widget_t*} widget 控件对象。
  * @param {xy_t} x x坐标
  * @param {xy_t} y y坐标
@@ -1709,7 +2037,7 @@ bool_t widget_is_point_in(widget_t* widget, xy_t x, xy_t y, bool_t is_local);
 /**
  * @method widget_dispatch_to_target
  * 递归的分发一个事件到所有target子控件。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {event_t*} e 事件。
  *
@@ -1720,7 +2048,7 @@ ret_t widget_dispatch_to_target(widget_t* widget, event_t* e);
 /**
  * @method widget_dispatch_to_key_target
  * 递归的分发一个事件到所有key_target子控件。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {event_t*} e 事件。
  *
@@ -1731,7 +2059,6 @@ ret_t widget_dispatch_to_key_target(widget_t* widget, event_t* e);
 /**
  * @method widget_find_target
  * 查找x/y坐标对应的子控件。
- * @annotation ["private"]
  * @param {widget_t*} widget 控件对象。
  * @param {xy_t} x x坐标。
  * @param {xy_t} y y坐标。
@@ -1743,7 +2070,6 @@ widget_t* widget_find_target(widget_t* widget, xy_t x, xy_t y);
 /**
  * @method widget_re_translate_text
  * 语言改变后，重新翻译控件上的文本(包括子控件)。
- * @annotation ["private"]
  * @param {widget_t*} widget 控件对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -1757,7 +2083,6 @@ ret_t widget_re_translate_text(widget_t* widget);
  * > 请用widget\_create代替本函数。
  *
  * @depreated
- * @annotation ["private"]
  * @param {widget_t*} widget widget对象。
  * @param {widget_t*} parent widget的父控件。
  * @param {widget_vtable_t*} vt 虚表。
@@ -1774,7 +2099,6 @@ widget_t* widget_init(widget_t* widget, widget_t* parent, const widget_vtable_t*
 /**
  * @method widget_create
  * 创建控件。仅在子类控件构造函数中使用。
- * @annotation ["private"]
  * @param {widget_t*} parent widget的父控件。
  * @param {widget_vtable_t*} vt 虚表。
  * @param {xy_t}   x x坐标
@@ -1790,7 +2114,7 @@ widget_t* widget_create(widget_t* parent, const widget_vtable_t* vt, xy_t x, xy_
 /**
  * @method widget_update_style
  * 让控件根据自己当前状态更新style。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -1798,10 +2122,20 @@ widget_t* widget_create(widget_t* parent, const widget_vtable_t* vt, xy_t x, xy_
 ret_t widget_update_style(widget_t* widget);
 
 /**
+ * @method widget_update_style_recursive
+ * 让控件及子控件根据自己当前状态更新style。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_update_style_recursive(widget_t* widget);
+
+/**
  * @method widget_set_as_key_target
  * 递归的把父控件的key_target设置为自己。
  *
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -1813,7 +2147,7 @@ ret_t widget_set_as_key_target(widget_t* widget);
  * 把焦点移动下一个控件。
  *
  *>widget必须是当前焦点控件。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -1825,7 +2159,7 @@ ret_t widget_focus_next(widget_t* widget);
  * 把焦点移动前一个控件。
  *
  *>widget必须是当前焦点控件。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -1835,7 +2169,7 @@ ret_t widget_focus_prev(widget_t* widget);
 /**
  * @method widget_get_state_for_style
  * 把控件的状态转成获取style选要的状态，一般只在子类中使用。
- * @annotation ["private"]
+ * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
  * @param {bool_t} active 控件是否为当前项。
  * @param {bool_t} checked 控件是否为选中项。
@@ -1845,14 +2179,54 @@ ret_t widget_focus_prev(widget_t* widget);
 const char* widget_get_state_for_style(widget_t* widget, bool_t active, bool_t checked);
 
 /**
- * @method widget_update_style_recursive
- * 让控件及其全部子控件根据自己当前状态更新style。
- * @annotation ["private"]
- * @param {widget_t*} widget widget对象。
+ * @method widget_is_system_bar
+ * 检查控件是否是system bar类型。
  *
- * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @return {bool_t} 返回FALSE表示不是，否则表示是。
  */
-ret_t widget_update_style_recursive(widget_t* widget);
+bool_t widget_is_system_bar(widget_t* widget);
+
+/**
+ * @method widget_is_normal_window
+ * 检查控件是否是普通窗口类型。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @return {bool_t} 返回FALSE表示不是，否则表示是。
+ */
+bool_t widget_is_normal_window(widget_t* widget);
+
+/**
+ * @method widget_is_dialog
+ * 检查控件是否是对话框类型。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @return {bool_t} 返回FALSE表示不是，否则表示是。
+ */
+bool_t widget_is_dialog(widget_t* widget);
+
+/**
+ * @method widget_is_popup
+ * 检查控件是否是弹出窗口类型。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @return {bool_t} 返回FALSE表示不是，否则表示是。
+ */
+bool_t widget_is_popup(widget_t* widget);
+
+/**
+ * @method widget_is_opened_popup
+ * 检查控件弹出窗口控件是否已经打开了（而非挂起状态）。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @return {bool_t} 返回FALSE表示不是，否则表示是。
+ */
+bool_t widget_is_opened_popup(widget_t* widget);
 
 /**
  * @method widget_layout
@@ -1947,6 +2321,43 @@ ret_t widget_set_style_str(widget_t* widget, const char* state_and_name, const c
 ret_t widget_set_style_color(widget_t* widget, const char* state_and_name, uint32_t value);
 
 /**
+ * @method widget_take_snapshot
+ * 创建一个bitmap对象，将控件绘制到bitmap上，并返回bitmap对象。
+ *
+ * 调用者需要调用bitmap_destroy销毁返回的bitmap对象。
+ *
+ *```c
+ * bitmap_t* bitmap = widget_take_snapshot(window_manager());
+ * bitmap_save_png(bitmap, "test.png");
+ * bitmap_destroy(bitmap);
+ *``` 
+ *
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {bitmap_t*} 返回位图对象。
+ */
+bitmap_t* widget_take_snapshot(widget_t* widget);
+
+/**
+ * @method widget_take_snapshot_rect
+ * 创建一个bitmap对象，将控件绘制到bitmap上并且可以设置该控件的截屏区域，返回bitmap对象。
+ *
+ * 调用者需要调用bitmap_destroy销毁返回的bitmap对象。
+ *
+ *```c
+ * bitmap_t* bitmap = widget_take_snapshot_rect(window_manager(), NULL);
+ * bitmap_save_png(bitmap, "test.png");
+ * bitmap_destroy(bitmap);
+ *``` 
+ *
+ * @param {widget_t*} widget 控件对象。
+ * @param {rect_t*} r 截屏区域（输入NULL，则为控件全区域截屏）。
+ *
+ * @return {bitmap_t*} 返回位图对象。
+ */
+bitmap_t* widget_take_snapshot_rect(widget_t* widget, rect_t* r);
+
+/**
  * @method widget_get_canvas
  * 获取canvas对象。
  *
@@ -1954,53 +2365,206 @@ ret_t widget_set_style_color(widget_t* widget, const char* state_and_name, uint3
  */
 canvas_t* widget_get_canvas(widget_t* widget);
 
+/**
+ * @method widget_reset_canvas
+ * 重置canvas对象。for designer only,调用者需要unload全部图片
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t widget_reset_canvas(widget_t* widget);
+
 /*虚函数的包装*/
 ret_t widget_on_paint(widget_t* widget, canvas_t* c);
 ret_t widget_on_keydown(widget_t* widget, key_event_t* e);
+ret_t widget_on_wheel(widget_t* widget, wheel_event_t* e);
 ret_t widget_on_keyup(widget_t* widget, key_event_t* e);
 ret_t widget_on_pointer_down(widget_t* widget, pointer_event_t* e);
 ret_t widget_on_pointer_move(widget_t* widget, pointer_event_t* e);
 ret_t widget_on_pointer_up(widget_t* widget, pointer_event_t* e);
+ret_t widget_on_context_menu(widget_t* widget, pointer_event_t* e);
+/**
+ * @method widget_on_paint_background
+ * 绘制背景。
+ * @param {widget_t*} widget 控件对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回。
+ */
 ret_t widget_on_paint_background(widget_t* widget, canvas_t* c);
+/**
+ * @method widget_on_paint_self
+ * 绘制自身。
+ * @param {widget_t*} widget 控件对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回。
+ */
 ret_t widget_on_paint_self(widget_t* widget, canvas_t* c);
+/**
+ * @method widget_on_paint_children
+ * 绘制子控件。
+ * @param {widget_t*} widget 控件对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回。
+ */
 ret_t widget_on_paint_children(widget_t* widget, canvas_t* c);
+/**
+ * @method widget_on_paint_border
+ * 绘制边框。
+ * @param {widget_t*} widget 控件对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回。
+ */
 ret_t widget_on_paint_border(widget_t* widget, canvas_t* c);
 ret_t widget_on_paint_begin(widget_t* widget, canvas_t* c);
 ret_t widget_on_paint_end(widget_t* widget, canvas_t* c);
 
 #define WIDGET(w) ((widget_t*)(w))
 
-const char** widget_get_persistent_props(void);
+const char* const* widget_get_persistent_props(void);
 
+/**
+ * @method widget_is_instance_of
+ * 检查控件是否是指定的类型。
+ * @param {widget_t*} widget 控件对象。
+ * @param {widget_vtable_t*} vt 虚表。
+ *
+ *  @return {bool_t} 返回TRUE表示是，FALSE表示否。
+ */
 bool_t widget_is_instance_of(widget_t* widget, const widget_vtable_t* vt);
+
 #define WIDGET_IS_INSTANCE_OF(widget, name) widget_is_instance_of(widget, TK_REF_VTABLE(name))
-
-bool_t widget_is_system_bar(widget_t* widget);
-
-bool_t widget_is_normal_window(widget_t* widget);
-
-bool_t widget_is_dialog(widget_t* widget);
-
-bool_t widget_is_popup(widget_t* widget);
 
 /*public for subclass*/
 TK_EXTERN_VTABLE(widget);
 
+/**
+ * @method widget_set_need_relayout_children
+ * 设置控件需要relayout标识。
+ * @param {widget_t*} widget 控件对象。
+ *
+ *  @return {ret_t} 返回。
+ */
 ret_t widget_set_need_relayout_children(widget_t* widget);
+/**
+ * @method widget_ensure_visible_in_viewport
+ * 使控件滚动到可见区域。
+ * @param {widget_t*} widget 控件对象。
+ *
+ *  @return {ret_t} 返回。
+ */
 ret_t widget_ensure_visible_in_viewport(widget_t* widget);
+ret_t widget_set_need_update_style(widget_t* widget);
+bool_t widget_is_activate_key(widget_t* widget, key_event_t* e);
+ret_t widget_remove_child_prepare(widget_t* widget, widget_t* child);
 
 /*public for test*/
+
+/**
+ * @method widget_focus_first
+ * 置焦点于第一个控件。
+ * @param {widget_t*} widget 控件对象。
+ *
+ *  @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t widget_focus_first(widget_t* widget);
-ret_t widget_move_focus(widget_t* widget, bool_t next);
+
+/**
+ * @method widget_get_locale_info
+ * 获取locale_info对象。
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {locale_info_t*} 返回locale_info对象。
+ */
 locale_info_t* widget_get_locale_info(widget_t* widget);
+
+/**
+ * @method widget_get_image_manager
+ * 获取image_manager对象。
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {image_manager_t*} 返回image_manager对象。
+ */
 image_manager_t* widget_get_image_manager(widget_t* widget);
+
+/**
+ * @method widget_get_assets_manager
+ * 获取assets_manager对象。
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {assets_manager_t*} 返回assets_manager对象。
+ */
 assets_manager_t* widget_get_assets_manager(widget_t* widget);
+
+/**
+ * @method widget_get_font_manager
+ * 获取font_manager对象。
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {font_manager_t*} 返回font_manager对象。
+ */
 font_manager_t* widget_get_font_manager(widget_t* widget);
-uint32_t widget_add_idle(widget_t* widget, idle_func_t on_idle);
-bool_t widget_has_focused_widget_in_window(widget_t* widget);
+
+/**
+ * @method widget_update_pointer_cursor
+ * 更新鼠标指针。
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
+ret_t widget_update_pointer_cursor(widget_t* widget);
+
+/**
+ * @method widget_begin_wait_pointer_cursor
+ * 开始等待鼠标指针。
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t} ignore_user_input 是否忽略用户输入。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
+ret_t widget_begin_wait_pointer_cursor(widget_t* widget, bool_t ignore_user_input);
+
+/**
+ * @method widget_end_wait_pointer_cursor
+ * 结束等待鼠标指针。
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
+ret_t widget_end_wait_pointer_cursor(widget_t* widget);
+
+/**
+ * @method widget_set_style
+ * 设置widget私有样式。
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*} state_and_name 样式对应类型与名字。
+ * @param {const value_t*} value 值。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
 ret_t widget_set_style(widget_t* widget, const char* state_and_name, const value_t* value);
-ret_t widget_calc_icon_text_rect(const rect_t* ir, int32_t font_size, int32_t icon_at,
-                                 int32_t spacer, rect_t* r_text, rect_t* r_icon);
+/**
+ * @method widget_calc_icon_text_rect
+ * 计算icon text的位置。
+ * 
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
+ret_t widget_calc_icon_text_rect(const rect_t* ir, int32_t font_size, float_t text_size,
+                                 int32_t icon_at, uint32_t img_w, uint32_t img_h, int32_t spacer,
+                                 rect_t* r_text, rect_t* r_icon);
+
+ret_t widget_focus_prev(widget_t* widget);
+ret_t widget_focus_next(widget_t* widget);
+ret_t widget_focus_up(widget_t* widget);
+ret_t widget_focus_down(widget_t* widget);
+ret_t widget_focus_left(widget_t* widget);
+ret_t widget_focus_right(widget_t* widget);
+
+ret_t widget_set_focused_internal(widget_t* widget, bool_t focused);
+bool_t widget_has_focused_widget_in_window(widget_t* widget);
 
 END_C_DECLS
 

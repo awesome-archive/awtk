@@ -9,6 +9,7 @@
 *.lib
 *.exp
 *.exe
+*.os
 .sconsign.dblite
 lua/demo1
 lua/lftk_run
@@ -25,3 +26,6 @@ args.txt
 log
 *.pyc
 __pycache__
+test.bin
+release
+event_log.bin

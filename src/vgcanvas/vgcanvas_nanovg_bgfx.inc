@@ -1,4 +1,4 @@
-enum { BEGIN_IDX = 1, MAX_VIEW_COUNT = 256 };
+﻿enum { BEGIN_IDX = 1, MAX_VIEW_COUNT = 256 };
 static bool_t arrayViewId[MAX_VIEW_COUNT] = {0};
 static int32_t curViewId = 0;
 
@@ -45,7 +45,7 @@ static int32_t getFreeViewId(void) {
   return index;
 }
 
-static ret_t vgcanvas_nanovg_create_fbo(vgcanvas_t* vgcanvas, framebuffer_object_t* fbo) {
+static ret_t vgcanvas_nanovg_create_fbo(vgcanvas_t* vgcanvas, uint32_t w, uint32_t h, framebuffer_object_t* fbo) {
   struct NVGLUframebuffer* handle = NULL;
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
   curViewId = getFreeViewId();
@@ -87,6 +87,11 @@ static ret_t vgcanvas_nanovg_unbind_fbo(vgcanvas_t* vgcanvas, framebuffer_object
   nvgluBindFramebufferEx(NULL);
 
   return RET_OK;
+}
+
+static ret_t vgcanvas_nanovg_fbo_to_imageData(vgcanvas_t* vgcanvas, framebuffer_object_t* fbo,
+                                              bitmap_t* img, rect_t* r) {
+  return RET_NOT_IMPL;
 }
 
 static ret_t vgcanvas_nanovg_destroy(vgcanvas_t* vgcanvas) {

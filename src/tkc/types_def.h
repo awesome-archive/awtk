@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  basic types definitions.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,13 +23,55 @@
 #define TYPES_DEF_H
 
 #include <math.h>
+#include <time.h>
 #include <ctype.h>
 #include <wchar.h>
+#include <errno.h>
 #include <assert.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+
+#if defined(HAS_AWTK_CONFIG)
+#include "awtk_config.h"
+#ifdef FRAGMENT_FRAME_BUFFER_SIZE
+#undef WITH_WINDOW_ANIMATORS
+#endif /*FRAGMENT_FRAME_BUFFER_SIZE*/
+#endif /*HAS_AWTK_CONFIG*/
+
+#if defined(WIN32) || defined(LINUX) || defined(MACOS) || defined(ANDROID) || defined(IOS)
+
+#define WITH_SOCKET 1
+
+#ifdef WIN32
+#define WIN32_LEAN_AND_MEAN 1
+#include <windows.h>
+#include <winsock2.h>
+typedef int socklen_t;
+#else
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#endif /*WIN32*/
+
+#endif /*WIN32 || MACOS || LINUX || IOS || ANDROID*/
+
+#ifdef __cplusplus
+#define BEGIN_C_DECLS extern "C" {
+#define END_C_DECLS }
+#else
+#define BEGIN_C_DECLS
+#define END_C_DECLS
+#endif
 
 #if defined(HAS_STDIO) || defined(AWTK_WEB)
 #include <stdio.h>
@@ -53,14 +95,23 @@ typedef uint8_t bool_t;
 
 typedef int32_t xy_t;
 typedef int32_t wh_t;
-typedef void* pointer_t;
 typedef uint16_t font_size_t;
 
+/* 
+ * 如果使用了 mingw 或者 32 位 pc 的 linux 出现 “conflicting declaration 'typedef float float_t'” 的错误提示的话，
+ * 因为 awtk 的 float_t 类型为 float，所以请定义 __FLT_EVAL_METHOD__ 宏并且宏为 0 （#define __FLT_EVAL_METHOD__ 0 ）
+ */
 #if defined(WITH_DOUBLE_FLOAT)
 typedef long double float_t;
 #else
 typedef float float_t;
 #endif /*WITH_DOUBLE_FLOAT*/
+
+#if !defined(ANDROID) && !defined(IOS) && !defined(LINUX) && !defined(MACOS) && !defined(WIN32)
+#ifndef time_t
+#define time_t uint64_t
+#endif /*time_t*/
+#endif
 
 struct _value_t;
 typedef struct _value_t value_t;
@@ -158,30 +209,35 @@ typedef enum _ret_t {
    * @const RET_BAD_PARAMS
    * 无效参数。
    */
-  RET_BAD_PARAMS
+  RET_BAD_PARAMS,
+  /**
+   * @const RET_TIMEOUT
+   * 超时。
+   */
+  RET_TIMEOUT,
+  /**
+   * @const RET_CRC
+   * CRC错误。
+   */
+  RET_CRC,
+  /**
+   * @const RET_IO
+   * IO错误。
+   */
+  RET_IO,
+  /**
+   * @const RET_EOS
+   * End of Stream
+   */
+  RET_EOS
 } ret_t;
 
-#ifdef WIN32
-#include <windows.h>
+#include "tkc/log.h"
+
+#if defined(WIN32) || defined(__ARMCC_VERSION)
 #define random rand
 #define srandom srand
-#define strcasecmp stricmp
-#define log_debug(format, ...) printf(format, __VA_ARGS__)
-#define log_info(format, ...) printf(format, __VA_ARGS__)
-#define log_warn(format, ...) printf(format, __VA_ARGS__)
-#define log_error(format, ...) printf(format, __VA_ARGS__)
-#define snprintf _snprintf
-#elif defined(HAS_STDIO) || defined(AWTK_WEB)
-#define log_debug(format, args...) printf(format, ##args)
-#define log_info(format, args...) printf(format, ##args)
-#define log_warn(format, args...) printf(format, ##args)
-#define log_error(format, args...) printf(format, ##args)
-#else
-#define log_debug(format, args...)
-#define log_info(format, args...)
-#define log_warn(format, args...)
-#define log_error(format, args...)
-#endif
+#endif /*WIN32||__ARMCC_VERSION*/
 
 #if !defined(WIN32) && !defined(MAX_PATH)
 #define MAX_PATH 255
@@ -189,6 +245,11 @@ typedef enum _ret_t {
 
 #if defined(WIN32)
 #define TK_PATH_SEP '\\'
+#ifndef snprintf
+#define snprintf _snprintf
+#endif /*snprintf*/
+
+#define strcasecmp stricmp
 #else
 #define TK_PATH_SEP '/'
 #endif /*TK_PATH_SEP*/
@@ -242,14 +303,6 @@ typedef enum _ret_t {
 
 #endif
 
-#ifdef __cplusplus
-#define BEGIN_C_DECLS extern "C" {
-#define END_C_DECLS }
-#else
-#define BEGIN_C_DECLS
-#define END_C_DECLS
-#endif
-
 #define tk_min(a, b) ((a) < (b) ? (a) : (b))
 #define tk_abs(a) ((a) < (0) ? (-(a)) : (a))
 #define tk_max(a, b) ((a) > (b) ? (a) : (b))
@@ -263,7 +316,9 @@ typedef enum _ret_t {
 typedef void* (*tk_create_t)(void);
 typedef ret_t (*tk_destroy_t)(void* data);
 typedef ret_t (*tk_on_done_t)(void* data);
+typedef ret_t (*tk_on_result_t)(void* ctx, const void* data);
 typedef bool_t (*tk_is_valid_t)(void* data);
+typedef bool_t (*tk_filter_t)(void* ctx, const void* data);
 typedef int (*tk_compare_t)(const void* a, const void* b);
 typedef ret_t (*tk_visit_t)(void* ctx, const void* data);
 
@@ -282,6 +337,7 @@ enum { TK_NAME_LEN = 31 };
   (((s1) != NULL) && ((s2) != NULL) && *(s1) == *(s2) && wcscmp((s1), (s2)) == 0)
 #endif /*WITH_CPPCHECK*/
 
+#define tk_lfequal(f1, f2) (fabs((f1) - (f2)) < 0.0001)
 #define tk_fequal(f1, f2) (fabs((f1) - (f2)) < 0.0000001)
 
 #define TK_ROUND_TO(size, round_size) ((((size) + round_size - 1) / round_size) * round_size)
@@ -298,14 +354,38 @@ enum { TK_NAME_LEN = 31 };
 #define TK_D2R(d) (((d)*M_PI) / 180)
 #define TK_R2D(r) (((r)*180) / M_PI)
 
-#if defined(HAS_AWTK_CONFIG)
-#include "awtk_config.h"
-#endif /*HAS_AWTK_CONFIG*/
-
 #ifdef _MSC_VER
 #define TK_CONST_DATA_ALIGN(v) __declspec(align(8)) v
 #else
 #define TK_CONST_DATA_ALIGN(v) v __attribute__((aligned(8)))
 #endif /*_MSC_VER*/
+
+typedef uint64_t (*tk_get_time_t)(void);
+typedef uint64_t (*tk_get_time_ms_t)(void);
+typedef void (*tk_sleep_ms_t)(uint32_t ms);
+
+#if defined(WIN32) && !defined(NDEBUG)
+#define TK_ENABLE_CONSOLE()                   \
+  {                                           \
+    AllocConsole();                           \
+    FILE* fp = NULL;                          \
+    freopen_s(&fp, "CONOUT$", "w+t", stdout); \
+  }
+#else
+#define TK_ENABLE_CONSOLE()
+#endif /*WIN32 && !NDEBUG*/
+
+struct _event_source_t;
+typedef struct _event_source_t event_source_t;
+
+struct _event_source_manager_t;
+typedef struct _event_source_manager_t event_source_manager_t;
+
+#ifndef EAGAIN
+#define EAGAIN 11
+#endif /*EAGAIN*/
+
+#define TK_SET_NULL(p) (p) = NULL
+#define TK_ROUND_TO8(size) (((size + 7) >> 3) << 3)
 
 #endif /*TYPES_DEF_H*/

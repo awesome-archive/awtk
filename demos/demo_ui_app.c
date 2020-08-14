@@ -1,9 +1,9 @@
 /**
  * File:   demo1_app.c
  * Author: AWTK Develop Team
- * Brief:  basic class of all widget
+ * Brief:  demoui
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,12 +19,19 @@
  *
  */
 
+/*
+ * XXX: 本示例只是为了展示功能，不适合作为编写代码参考，编写代码请参考：https://github.com/zlgopen/awtk-c-demos
+ */
+
 #include "awtk.h"
 #include "ext_widgets.h"
+#include "base/font_manager.h"
+#include "base/event_recorder_player.h"
 
 static ret_t on_clone_tab(void* ctx, event_t* e);
 static ret_t widget_clone_tab(widget_t* widget);
 static void install_click_hander(widget_t* widget);
+static void open_window(const char* name, widget_t* to_close);
 
 uint32_t tk_mem_speed_test(void* buffer, uint32_t length, uint32_t* pmemcpy_speed,
                            uint32_t* pmemset_speed) {
@@ -34,7 +41,7 @@ uint32_t tk_mem_speed_test(void* buffer, uint32_t length, uint32_t* pmemcpy_spee
   uint32_t memcpy_speed;
   uint32_t memset_speed;
   uint32_t max_size = 100 * 1024 * 1024;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   uint32_t nr = max_size / length;
 
   for (i = 0; i < nr; i++) {
@@ -84,6 +91,21 @@ static ret_t window_to_foreground(void* ctx, event_t* e) {
   return RET_OK;
 }
 
+static ret_t on_context_menu(void* ctx, event_t* e) {
+  open_window("menu_point", NULL);
+
+  return RET_OK;
+}
+
+static ret_t update_title_on_timer(const timer_info_t* info) {
+  char text[128];
+  tk_snprintf(text, sizeof(text), "change title:%d", random() % 100);
+
+  widget_set_text_utf8(WIDGET(info->ctx), text);
+
+  return RET_REPEAT;
+}
+
 static void open_window(const char* name, widget_t* to_close) {
   widget_t* win = to_close ? window_open_and_close(name, to_close) : window_open(name);
 
@@ -97,6 +119,10 @@ static void open_window(const char* name, widget_t* to_close) {
     widget_clone_tab(win);
     widget_clone_tab(win);
     widget_clone_tab(win);
+  }
+
+  if (tk_str_eq(name, "list_view")) {
+    widget_add_timer(win, update_title_on_timer, 1000);
   }
 
   if (tk_str_eq(widget_get_type(win), WIDGET_TYPE_DIALOG)) {
@@ -263,7 +289,7 @@ static ret_t on_open_window(void* ctx, event_t* e) {
   if (tk_str_eq(name, "toast")) {
     dialog_toast("Hello AWTK!\nThis is a toast!", 3000);
   } else if (tk_str_eq(name, "info")) {
-    dialog_info(NULL, "Hello AWTK!\nThis is info dialog!");
+    dialog_info("info", "hello awtk");
   } else if (tk_str_eq(name, "warn")) {
     dialog_warn(NULL, "Hello AWTK!\nDanger!!!");
   } else if (tk_str_eq(name, "confirm")) {
@@ -367,7 +393,36 @@ static ret_t on_combo_box_will_change(void* ctx, event_t* e) {
   widget_t* win = widget_get_window(combo_box);
   widget_t* value = widget_lookup(win, "old_value", TRUE);
 
-  widget_set_tr_text(value, combo_box_get_text(combo_box));
+  if (value != NULL) {
+    widget_set_tr_text(value, combo_box_get_text(combo_box));
+  }
+
+  return RET_OK;
+}
+
+static ret_t on_pages_add_child(void* ctx, event_t* e) {
+  widget_t* widget = WIDGET(ctx);
+  widget_t* win = widget_get_window(widget);
+
+  widget_t* close_btn = widget_lookup(win, "close", TRUE);
+  widget_t* text_label = widget_lookup(win, "text", TRUE);
+  widget_t* tab_button_parent = widget_lookup_by_type(win, "tab_button", TRUE)->parent;
+
+  if (close_btn != NULL) {
+    widget_on(close_btn, EVT_CLICK, on_close, win);
+  }
+
+  if (text_label != NULL) {
+    WIDGET_FOR_EACH_CHILD_BEGIN(tab_button_parent, iter, i)
+
+    if (tk_str_eq(iter->vt->type, "tab_button")) {
+      if (TAB_BUTTON(iter)->value) {
+        widget_set_text_utf8(text_label, iter->name);
+      }
+    }
+
+    WIDGET_FOR_EACH_CHILD_END();
+  }
 
   return RET_OK;
 }
@@ -377,7 +432,9 @@ static ret_t on_combo_box_changed(void* ctx, event_t* e) {
   widget_t* win = widget_get_window(combo_box);
   widget_t* value = widget_lookup(win, "value", TRUE);
 
-  widget_set_tr_text(value, combo_box_get_text(combo_box));
+  if (value != NULL) {
+    widget_set_tr_text(value, combo_box_get_text(combo_box));
+  }
 
   return RET_OK;
 }
@@ -431,6 +488,31 @@ static ret_t on_show_fps(void* ctx, event_t* e) {
   return RET_OK;
 }
 
+extern ret_t assets_set_global_theme(const char* name);
+static ret_t on_reload_theme_test(void* ctx, event_t* e) {
+  widget_t* widget = WIDGET(e->target);
+  assets_manager_t* am = widget_get_assets_manager(widget);
+  const char* theme = "default";
+
+  if (tk_str_eq(am->theme, theme)) {
+    theme = "dark";
+  }
+
+  assets_set_global_theme(theme);
+
+  return RET_OK;
+}
+
+static ret_t on_snapshot(void* ctx, event_t* e) {
+#ifndef AWTK_WEB
+  bitmap_t* bitmap = widget_take_snapshot(window_manager());
+  bitmap_save_png(bitmap, "test.png");
+  bitmap_destroy(bitmap);
+#endif /*AWTK_WEB*/
+
+  return RET_OK;
+}
+
 static ret_t on_mem_test(void* ctx, event_t* e) {
   char text[32];
   uint32_t size = 100 * 1024;
@@ -453,13 +535,15 @@ static ret_t on_mem_test(void* ctx, event_t* e) {
   tk_snprintf(text, sizeof(text), "memcpy: %uK/s", memcpy_speed);
   widget_set_text_utf8(label_memcpy, text);
 
+  font_manager_shrink_cache(font_manager(), 1);
+
   return RET_OK;
 }
 
 static ret_t progress_bar_animate_delta(widget_t* win, const char* name, int32_t delta) {
   widget_t* progress_bar = widget_lookup(win, name, TRUE);
   int32_t value = (PROGRESS_BAR(progress_bar)->value + delta);
-  widget_animate_value_to(progress_bar, tk_min(100, value), 500);
+  widget_animate_value_to(progress_bar, tk_max(0, tk_min(100, value)), 500);
 
   return RET_OK;
 }
@@ -517,6 +601,10 @@ static ret_t install_one(void* ctx, const void* iter) {
     if (strstr(name, "open:") != NULL) {
       widget_on(widget, EVT_CLICK, on_open_window, (void*)(name + 5));
       widget_on(widget, EVT_LONG_PRESS, on_open_window, (void*)(name + 5));
+      if (tk_str_eq(name, "open:menu_point")) {
+        widget_on(widget, EVT_CONTEXT_MENU, on_context_menu, win);
+      }
+
     } else if (tk_str_eq(name, "paint_linear_gradient")) {
       widget_on(widget, EVT_PAINT, on_paint_linear_gradient, NULL);
     } else if (tk_str_eq(name, "paint_radial_gradient")) {
@@ -525,9 +613,14 @@ static ret_t install_one(void* ctx, const void* iter) {
       widget_on(widget, EVT_PAINT, on_paint_stroke_gradient, NULL);
     } else if (tk_str_eq(name, "paint_vgcanvas")) {
       widget_on(widget, EVT_PAINT, on_paint_vgcanvas, NULL);
+    } else if (tk_str_eq(name, "snapshot")) {
+      widget_on(widget, EVT_CLICK, on_snapshot, NULL);
     } else if (tk_str_eq(name, "memtest")) {
       widget_t* win = widget_get_window(widget);
       widget_on(widget, EVT_CLICK, on_mem_test, win);
+    } else if (tk_str_eq(name, "reload_theme")) {
+      widget_t* win = widget_get_window(widget);
+      widget_on(widget, EVT_CLICK, on_reload_theme_test, win);
     } else if (tk_str_eq(name, "show_fps")) {
       widget_on(widget, EVT_CLICK, on_show_fps, widget);
     } else if (tk_str_eq(name, "clone_self")) {
@@ -580,6 +673,8 @@ static ret_t install_one(void* ctx, const void* iter) {
       if (win) {
         widget_on(widget, EVT_CLICK, on_quit_app, win);
       }
+    } else if (tk_str_eq(name, "pages")) {
+      widget_on(widget, EVT_WIDGET_ADD_CHILD, on_pages_add_child, widget);
     }
   } else if (tk_str_eq(widget->vt->type, "combo_box")) {
     widget_on(widget, EVT_VALUE_CHANGED, on_combo_box_changed, widget);
@@ -611,9 +706,10 @@ static ret_t timer_preload(const timer_info_t* timer) {
   widget_t* status = widget_lookup(win, "status", TRUE);
 
   if (s_preload_nr == total) {
-#ifndef MULTI_NATIVE_WINDOW
+#if !defined(MOBILE_APP)
     window_open("system_bar");
-#endif /*MULTI_NATIVE_WINDOW*/
+/*    window_open("system_bar_bottom");*/
+#endif /*MOBILE_APP*/
 
     open_window("main", win);
 
@@ -673,12 +769,51 @@ static ret_t on_screen_saver(void* ctx, event_t* e) {
   return RET_OK;
 }
 
+static ret_t on_key_record_play_events(void* ctx, event_t* e) {
+#ifdef WITH_EVENT_RECORDER_PLAYER
+  key_event_t* evt = (key_event_t*)e;
+
+  if (evt->key == TK_KEY_F5) {
+    event_recorder_player_start_record("event_log.bin");
+    return RET_STOP;
+  } else if (evt->key == TK_KEY_F6) {
+    event_recorder_player_stop_record();
+    return RET_STOP;
+  } else if (evt->key == TK_KEY_F7) {
+    event_recorder_player_start_play("event_log.bin", 0xffff);
+    return RET_STOP;
+  } else if (evt->key == TK_KEY_F8) {
+    event_recorder_player_stop_play();
+    return RET_STOP;
+  } else if (evt->key == TK_KEY_F9) {
+    tk_mem_dump();
+    return RET_STOP;
+  } else if (evt->key == TK_KEY_F10) {
+    font_manager_unload_all(font_manager());
+    image_manager_unload_all(image_manager());
+    assets_manager_clear_cache(assets_manager(), ASSET_TYPE_UI);
+    tk_mem_dump();
+    return RET_STOP;
+  }
+#endif /*WITH_EVENT_RECORDER_PLAYER*/
+
+  return RET_OK;
+}
+
 static ret_t on_key_back_or_back_to_home(void* ctx, event_t* e) {
   key_event_t* evt = (key_event_t*)e;
   if (evt->key == TK_KEY_F2) {
     window_manager_back(WIDGET(ctx));
+
+    return RET_STOP;
   } else if (evt->key == TK_KEY_F3) {
     window_manager_back_to_home(WIDGET(ctx));
+
+    return RET_STOP;
+  } else if (evt->key == TK_KEY_F4) {
+    window_manager_back_to(WIDGET(ctx), "main");
+
+    return RET_STOP;
   }
 
   return RET_OK;
@@ -702,20 +837,45 @@ static ret_t wm_on_out_of_memory(void* ctx, event_t* evt) {
   return RET_OK;
 }
 
-ret_t application_init() {
-  widget_t* wm = window_manager();
+static ret_t wm_on_request_quit(void* ctx, event_t* evt) {
+  /*
+   * do some cleanup work here
+   * return RET_STOP to ignore the request
+   */
+  /*return RET_STOP;*/
 
-  tk_ext_widgets_init();
+  return RET_OK;
+}
+
+ret_t application_init() {
+  char path[MAX_PATH + 1];
+  widget_t* wm = window_manager();
 
   /*enable screen saver*/
   window_manager_set_screen_saver_time(wm, 180 * 1000);
   widget_on(wm, EVT_SCREEN_SAVER, on_screen_saver, NULL);
 
   widget_on(wm, EVT_KEY_DOWN, on_key_back_or_back_to_home, wm);
+  widget_on(wm, EVT_KEY_UP, on_key_record_play_events, wm);
   widget_on(wm, EVT_BEFORE_PAINT, wm_on_before_paint, wm);
   widget_on(wm, EVT_AFTER_PAINT, wm_on_after_paint, wm);
   widget_on(wm, EVT_LOW_MEMORY, wm_on_low_memory, wm);
   widget_on(wm, EVT_OUT_OF_MEMORY, wm_on_out_of_memory, wm);
+  widget_on(wm, EVT_REQUEST_QUIT_APP, wm_on_request_quit, wm);
+
+  fs_get_user_storage_path(os_fs(), path);
+  log_debug("user storage path:%s\n", path);
 
   return show_preload_res_window();
 }
+
+ret_t application_exit() {
+  log_debug("application_exit\n");
+  return RET_OK;
+}
+
+#ifdef WITH_FS_RES
+#define APP_DEFAULT_FONT "default_full"
+#endif /*WITH_FS_RES*/
+
+#include "awtk_main.inc"

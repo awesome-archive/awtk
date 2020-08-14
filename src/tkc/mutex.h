@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  mutex
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -49,6 +49,15 @@ tk_mutex_t* tk_mutex_create(void);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t tk_mutex_lock(tk_mutex_t* mutex);
+
+/**
+ * @method tk_mutex_try_lock
+ * 尝试加锁。
+ * @param {tk_mutex_t*}    mutex mutex对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t tk_mutex_try_lock(tk_mutex_t* mutex);
 
 /**
  * @method tk_mutex_unlock

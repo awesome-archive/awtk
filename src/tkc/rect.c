@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   rect.c
  * Author: AWTK Develop Team
  * Brief:  rect struct and utils functions.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,7 +21,7 @@
 #include "tkc/mem.h"
 #include "tkc/rect.h"
 
-ret_t rect_merge(rect_t* dr, rect_t* r) {
+ret_t rect_merge(rect_t* dr, const rect_t* r) {
   return_value_if_fail(r != NULL && dr != NULL, RET_BAD_PARAMS);
 
   if (r->w > 0 && r->h > 0) {

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  qt to xml
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -279,7 +279,7 @@ int main(int argc, char** argv) {
   const char* in_filename = NULL;
   const char* out_filename = NULL;
 
-  TKMEM_INIT(4 * 1024 * 1024);
+  platform_prepare();
 
   if (argc != 3) {
     printf("Usage: %s in_filename out_filename\n", argv[0]);

@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   font.h
  * Author: AWTK Develop Team
  * Brief:  font interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -61,16 +61,19 @@ static ret_t font_bitmap_get_glyph(font_t* f, wchar_t c, font_size_t font_size, 
 
   p = (font->buff + index->offset);
   memcpy(g, p, sizeof(glyph_t));
-  g->data = font->buff + index->offset + sizeof(glyph_t) - sizeof(g->data);
+  if (c == ' ') {
+    g->data = NULL;
+  } else {
+    g->data = font->buff + index->offset + sizeof(glyph_t) - sizeof(g->data);
+  }
 
   return RET_OK;
 }
 
 static bool_t font_bitmap_match(font_t* f, const char* name, font_size_t font_size) {
   font_bitmap_t* font = (font_bitmap_t*)f;
-  font_bitmap_header_t* header = (font_bitmap_header_t*)(font->buff);
   if (name == NULL || strcmp(name, font->base.name) == 0) {
-    return (int32_t)(header->font_size) == (int32_t)font_size;
+    return TRUE;
   }
 
   return FALSE;
@@ -81,11 +84,16 @@ static ret_t font_bitmap_destroy(font_t* f) {
   return RET_OK;
 }
 
-static int32_t font_bitmap_get_baseline(font_t* f, font_size_t font_size) {
+static font_vmetrics_t font_bitmap_get_vmetrics(font_t* f, font_size_t font_size) {
+  font_vmetrics_t vmetrics;
   font_bitmap_t* font = (font_bitmap_t*)f;
   font_bitmap_header_t* header = (font_bitmap_header_t*)(font->buff);
 
-  return header->baseline;
+  vmetrics.ascent = header->ascent;
+  vmetrics.descent = header->descent;
+  vmetrics.line_gap = header->line_gap;
+
+  return vmetrics;
 }
 
 font_t* font_bitmap_init(font_bitmap_t* f, const char* name, const uint8_t* buff,
@@ -95,10 +103,10 @@ font_t* font_bitmap_init(font_bitmap_t* f, const char* name, const uint8_t* buff
   f->buff = buff;
   f->buff_size = buff_size;
   f->base.match = font_bitmap_match;
-  f->base.get_baseline = font_bitmap_get_baseline;
+  f->base.get_vmetrics = font_bitmap_get_vmetrics;
   f->base.get_glyph = font_bitmap_get_glyph;
   f->base.destroy = font_bitmap_destroy;
-
+  f->base.desc = "bitmap font";
   tk_strncpy(f->base.name, name, TK_NAME_LEN);
 
   return &(f->base);
@@ -123,7 +131,7 @@ static font_t* font_bitmap_load(font_loader_t* loader, const char* name, const u
 
 font_loader_t* font_loader_bitmap(void) {
   static font_loader_t loader;
-  loader.type = ASSET_TYPE_FONT_TTF;
+  loader.type = ASSET_TYPE_FONT_BMP;
   loader.load = font_bitmap_load;
 
   return &loader;

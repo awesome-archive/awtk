@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  mledit
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -42,7 +42,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[mledit.xml](
- * https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/mledit.xml)
+ * https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/mledit.xml)
  *
  * 在c代码中使用函数mledit\_create创建多行编辑器控件。如：
  *
@@ -96,11 +96,17 @@ typedef struct _mledit_t {
    */
   char* tips;
   /**
-   * @property {bool_t} focus
+   * @property {char*} tr_tips
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 设置为焦点(通常用于在XML中缺省设置为焦点控件)。
+   * 保存用于翻译的提示信息。
    */
-  bool_t focus;
+  char* tr_tips;
+  /**
+   * @property {char*} keyboard
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 自定义软键盘名称。
+   */
+  char* keyboard;
 
   /**
    * @property {bool_t} wrap_word
@@ -116,12 +122,30 @@ typedef struct _mledit_t {
    */
   uint32_t max_lines;
 
+  /**
+   * @property {uint32_t} scroll_line
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 鼠标一次滚动行数。
+   */
+  uint32_t scroll_line;
+
   /*private*/
   text_edit_t* model;
   uint32_t timer_id;
 
   wstr_t temp;
+  uint64_t last_user_action_time;
 } mledit_t;
+
+/**
+ * @event {event_t} EVT_VALUE_CHANGING
+ * 文本正在改变事件(编辑中)。
+ */
+
+/**
+ * @event {event_t} EVT_VALUE_CHANGED
+ * 文本改变事件。
+ */
 
 /**
  * @method mledit_create
@@ -149,6 +173,17 @@ widget_t* mledit_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 ret_t mledit_set_readonly(widget_t* widget, bool_t readonly);
 
 /**
+ * @method mledit_set_focus
+ * 设置为焦点。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} focus 是否为焦点。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_focus(widget_t* widget, bool_t focus);
+
+/**
  * @method mledit_set_wrap_word
  * 设置编辑器是否自动折行。
  * @annotation ["scriptable"]
@@ -171,7 +206,7 @@ ret_t mledit_set_wrap_word(widget_t* widget, bool_t wrap_word);
 ret_t mledit_set_max_lines(widget_t* widget, uint32_t max_lines);
 
 /**
- * @method mledit_set_input_tips
+ * @method mledit_set_tips
  * 设置编辑器的输入提示。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
@@ -179,7 +214,52 @@ ret_t mledit_set_max_lines(widget_t* widget, uint32_t max_lines);
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t mledit_set_input_tips(widget_t* widget, const char* tips);
+ret_t mledit_set_tips(widget_t* widget, const char* tips);
+
+/**
+ * @method mledit_set_tr_tips
+ * 获取翻译之后的文本，然后调用mledit_set_tips。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*}  tr_tips 提示信息。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_tr_tips(widget_t* widget, const char* tr_tips);
+
+/**
+ * @method mledit_set_keyboard
+ * 设置自定义软键盘名称。
+ * 
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {char*} keyboard 键盘名称(相应UI资源必须存在)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_keyboard(widget_t* widget, const char* keyboard);
+
+/**
+ * @method mledit_set_cursor
+ * 设置编辑器光标位置。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} cursor 光标位置。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_cursor(widget_t* widget, uint32_t cursor);
+
+/**
+ * @method mledit_set_scroll_line
+ * 设置编辑器滚动速度。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} scroll_line 滚动行数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_scroll_line(widget_t* widget, uint32_t scroll_line);
 
 /**
  * @method mledit_cast
@@ -195,7 +275,11 @@ widget_t* mledit_cast(widget_t* widget);
 
 #define MLEDIT_PROP_MAX_LINES "max_lines"
 #define MLEDIT_PROP_WRAP_WORD "wrap_word"
+#define MLEDIT_PROP_SCROLL_LINE "scroll_line"
 #define MLEDIT(widget) ((mledit_t*)(mledit_cast(WIDGET(widget))))
+
+/*for compatability*/
+#define mledit_set_input_tips(w, t) mledit_set_tips(w, t)
 
 /*public for subclass and runtime type check*/
 TK_EXTERN_VTABLE(mledit);

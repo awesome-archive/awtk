@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  dynamic darray.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -87,7 +87,7 @@ typedef struct _darray_t {
  * @annotation ["constructor"]
  * 创建darray对象。
  *
- * @param {uint32_t*} capacity 数组的初始容量。
+ * @param {uint32_t} capacity 数组的初始容量。
  * @param {tk_destroy_t} destroy 元素销毁函数。
  * @param {tk_compare_t} compare 元素比较函数。
  *
@@ -118,6 +118,40 @@ darray_t* darray_init(darray_t* darray, uint32_t capacity, tk_destroy_t destroy,
  * @return {void*} 如果找到，返回满足条件的对象，否则返回NULL。
  */
 void* darray_find(darray_t* darray, void* ctx);
+
+/**
+ * @method darray_bsearch_index
+ * 二分查找(确保数组有序)。
+ * 
+ * @param {darray_t*} darray 数组对象。
+ * @param {tk_compare_t} cmp 比较函数，为NULL则使用内置的比较函数。
+ * @param {void*} ctx 比较函数的上下文。
+ *
+ * @return {int} 如果找到，返回满足条件的对象的位置，否则返回-1。
+ */
+int darray_bsearch_index(darray_t* darray, tk_compare_t cmp, void* ctx);
+
+/**
+ * @method darray_bsearch
+ * 二分查找(确保数组有序)。
+ * 
+ * @param {darray_t*} darray 数组对象。
+ * @param {tk_compare_t} cmp 比较函数，为NULL则使用内置的比较函数。
+ * @param {void*} ctx 比较函数的上下文。
+ *
+ * @return {void*} 如果找到，返回满足条件的对象，否则返回NULL。
+ */
+void* darray_bsearch(darray_t* darray, tk_compare_t cmp, void* ctx);
+
+/**
+ * @method darray_get
+ * 获取指定序数的元素。
+ * @param {darray_t*} darray 数组对象。
+ * @param {uint32_t} index 序数。
+ *
+ * @return {void*} 返回满足条件的对象，否则返回NULL。
+ */
+void* darray_get(darray_t* darray, uint32_t index);
 
 /**
  * @method darray_find_index
@@ -153,11 +187,43 @@ ret_t darray_remove_index(darray_t* darray, uint32_t index);
  * @method darray_remove_all
  * 删除全部满足条件的元素。
  * @param {darray_t*} darray 数组对象。
+ * @param {tk_compare_t} cmp 比较函数，为NULL则使用内置的比较函数。
  * @param {void*} ctx 比较函数的上下文。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t darray_remove_all(darray_t* darray, void* ctx);
+ret_t darray_remove_all(darray_t* darray, tk_compare_t cmp, void* ctx);
+
+/**
+ * @method darray_sort
+ * 排序。
+ * @param {darray_t*} darray 数组对象。
+ * @param {tk_compare_t} cmp 比较函数，为NULL则使用内置的比较函数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t darray_sort(darray_t* darray, tk_compare_t cmp);
+
+/**
+ * @method darray_find_all
+ * 查找全部满足条件的元素。
+ *
+ * ```
+ * darray_t matched;
+ * darray_init(&matched, 0, NULL, NULL);
+ * darray_find_all(darray, mycmp, myctx, &matched);
+ * ...
+ * darray_deinit(&matched);
+ *
+ * ```
+ * @param {darray_t*} darray 数组对象。
+ * @param {tk_compare_t} cmp 比较函数，为NULL则使用内置的比较函数。
+ * @param {void*} ctx 比较函数的上下文。
+ * @param {darray_t*} matched 返回满足条件的元素。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t darray_find_all(darray_t* darray, tk_compare_t cmp, void* ctx, darray_t* matched);
 
 /**
  * @method darray_pop

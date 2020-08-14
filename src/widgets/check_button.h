@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  check_button
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -47,7 +47,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [button.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/basic.xml)
+ * [button.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/basic.xml)
  *
  * 在c代码中使用函数check\_button\_create创建多选按钮控件。如：
  *
@@ -83,7 +83,7 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme
- * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L227)
+ * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/styles/default.xml#L227)
  *
  */
 typedef struct _check_button_t {
@@ -91,7 +91,7 @@ typedef struct _check_button_t {
   /**
    * @property {bool_t} value
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 值。
+   * 值(勾选为TRUE，非勾选为FALSE)。
    */
   bool_t value;
 
@@ -121,7 +121,7 @@ typedef struct _check_button_t {
  * @param {wh_t} w 宽度
  * @param {wh_t} h 高度
  *
- * @return {widget_t*} 对象。
+ * @return {widget_t*} widget对象。
  */
 widget_t* check_button_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 
@@ -135,7 +135,7 @@ widget_t* check_button_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
  * @param {wh_t} w 宽度
  * @param {wh_t} h 高度
  *
- * @return {widget_t*} 对象。
+ * @return {widget_t*} widget对象。
  */
 widget_t* check_button_create_radio(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 
@@ -144,11 +144,21 @@ widget_t* check_button_create_radio(widget_t* parent, xy_t x, xy_t y, wh_t w, wh
  * 设置控件的值。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget check_button对象。
- * @param {bool_t}  value 值
+ * @param {bool_t}  value 值(勾选为TRUE，非勾选为FALSE)。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t check_button_set_value(widget_t* widget, bool_t value);
+
+/**
+ * @method check_button_get_checked_button
+ * 用于radio button获取同组中勾选的radio button。
+ *
+ * @param {widget_t*} widget radio_button对象。
+ *
+ * @return {widget_t*} 同组中勾选的radio button对象。
+ */
+widget_t* check_button_get_checked_button(widget_t* widget);
 
 /**
  * @method check_button_cast

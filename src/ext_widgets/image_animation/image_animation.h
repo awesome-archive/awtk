@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  image_animation
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -44,7 +44,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [image_animation.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/image_animation.xml)
+ * [image_animation.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/image_animation.xml)
  *
  * 在c代码中使用函数image\_animation\_create创建图片动画控件。如：
  *
@@ -75,7 +75,7 @@ typedef struct _image_animation_t {
   /**
    * @property {char*} sequence
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 播放的序列，字符可选值为:0-9,a-z,A-Z。
+   * 播放的序列，字符可选值为数字和英文大小写字母，字符可以重复。如：0123456789或者123123abcd。
    *
    */
   char* sequence;
@@ -132,7 +132,7 @@ typedef struct _image_animation_t {
   bool_t inited;
   int32_t index;
   uint32_t timer_id;
-  void* image_data;
+  void* image_buffer;
   char image_name[TK_NAME_LEN + 1];
 } image_animation_t;
 
@@ -246,7 +246,7 @@ ret_t image_animation_play(widget_t* widget);
 
 /**
  * @method image_animation_stop
- * 停止(并重置index为0)。
+ * 停止(并重置index为-1)。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget image_animation对象。
  *
@@ -263,6 +263,16 @@ ret_t image_animation_stop(widget_t* widget);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t image_animation_pause(widget_t* widget);
+
+/**
+ * @method image_animation_next
+ * 手动切换到下一张图片。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget image_animation对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_animation_next(widget_t* widget);
 
 /**
  * @method image_animation_set_format

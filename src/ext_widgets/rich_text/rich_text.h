@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  rich_text
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,6 +23,8 @@
 #define TK_RICH_TEXT_H
 
 #include "base/widget.h"
+#include "base/velocity.h"
+#include "base/widget_animator.h"
 #include "rich_text/rich_text_render_node.h"
 
 BEGIN_C_DECLS
@@ -44,7 +46,7 @@ BEGIN_C_DECLS
  * >
  *
  * > 更多用法请参考：
- * [rich_text.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/rich_text.xml)
+ * [rich_text.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/rich_text.xml)
  *
  * 在c代码中使用函数rich\_text\_create创建图文混排控件。如：
  *
@@ -85,14 +87,42 @@ typedef struct _rich_text_t {
   widget_t widget;
 
   /**
-   * @property {int32_t} line_gap
+   * @property {uint32_t} line_gap
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 行间距。
    */
-  int32_t line_gap;
+  uint32_t line_gap;
+
+  /**
+   * @property {uint32_t} margin
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 边距。
+   */
+  uint32_t margin;
+
+  /**
+   * @property {int32_t} yoffset
+   * @annotation ["set_prop","get_prop","readable"]
+   * y偏移。
+   */
+  int32_t yoffset;
+
+  /**
+   * @property {bool_t} need_reset
+   * @annotation ["readable"]
+   * 标识控件是否需要重新绘图。
+   */
+  bool_t need_reset;
 
   /*private*/
+  bool_t pressed;
+  int32_t ydown;
+  int32_t yoffset_end;
+  uint32_t content_h;
   rich_text_node_t* node;
+  widget_animator_t* wa;
+  velocity_t velocity;
+  int32_t yoffset_save;
   rich_text_render_node_t* render_node;
 } rich_text_t;
 

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  vector graphics canvas interface.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -35,6 +35,10 @@ typedef struct _framebuffer_object_t {
   int id;
   void* handle;
   float_t ratio;
+  bool_t init;
+  int online_fbo;
+  int offline_fbo;
+  rect_t online_dirty_rect;
 } framebuffer_object_t;
 
 struct _vgcanvas_t;
@@ -65,6 +69,7 @@ typedef ret_t (*vgcanvas_rounded_rect_t)(vgcanvas_t* vg, float_t x, float_t y, f
                                          float_t r);
 typedef ret_t (*vgcanvas_ellipse_t)(vgcanvas_t* vg, float_t x, float_t y, float_t rx, float_t ry);
 typedef ret_t (*vgcanvas_close_path_t)(vgcanvas_t* vg);
+typedef ret_t (*vgcanvas_path_winding_t)(vgcanvas_t* vg, bool_t dir);
 
 typedef ret_t (*vgcanvas_rotate_t)(vgcanvas_t* vg, float_t rad);
 typedef ret_t (*vgcanvas_scale_t)(vgcanvas_t* vg, float_t x, float_t y);
@@ -75,6 +80,8 @@ typedef ret_t (*vgcanvas_set_transform_t)(vgcanvas_t* vg, float_t a, float_t b, 
                                           float_t d, float_t e, float_t f);
 
 typedef ret_t (*vgcanvas_clip_rect_t)(vgcanvas_t* vg, float_t x, float_t y, float_t w, float_t h);
+typedef ret_t (*vgcanvas_nanovg_intersect_clip_rect_t)(vgcanvas_t* vg, float_t* x, float_t* y,
+                                                       float_t* w, float_t* h);
 typedef ret_t (*vgcanvas_fill_t)(vgcanvas_t* vg);
 typedef ret_t (*vgcanvas_stroke_t)(vgcanvas_t* vg);
 typedef ret_t (*vgcanvas_paint_t)(vgcanvas_t* vg, bool_t stroke, bitmap_t* img);
@@ -83,6 +90,8 @@ typedef ret_t (*vgcanvas_set_font_t)(vgcanvas_t* vg, const char* font);
 typedef ret_t (*vgcanvas_set_font_size_t)(vgcanvas_t* vg, float_t size);
 typedef ret_t (*vgcanvas_set_text_align_t)(vgcanvas_t* vg, const char* value);
 typedef ret_t (*vgcanvas_set_text_baseline_t)(vgcanvas_t* vg, const char* value);
+typedef ret_t (*vgcanvas_get_text_metrics_t)(vgcanvas_t* vg, float_t* ascent, float_t* descent,
+                                             float_t* line_hight);
 typedef ret_t (*vgcanvas_fill_text_t)(vgcanvas_t* vg, const char* text, float_t x, float_t y,
                                       float_t max_width);
 typedef float_t (*vgcanvas_measure_text_t)(vgcanvas_t* vg, const char* text);
@@ -120,10 +129,15 @@ typedef wh_t (*vgcanvas_get_height_t)(vgcanvas_t* vg);
 typedef ret_t (*vgcanvas_save_t)(vgcanvas_t* vg);
 typedef ret_t (*vgcanvas_restore_t)(vgcanvas_t* vg);
 
-typedef ret_t (*vgcanvas_create_fbo_t)(vgcanvas_t* vg, framebuffer_object_t* fbo);
+typedef ret_t (*vgcanvas_create_fbo_t)(vgcanvas_t* vg, uint32_t w, uint32_t h,
+                                       framebuffer_object_t* fbo);
 typedef ret_t (*vgcanvas_destroy_fbo_t)(vgcanvas_t* vg, framebuffer_object_t* fbo);
 typedef ret_t (*vgcanvas_bind_fbo_t)(vgcanvas_t* vg, framebuffer_object_t* fbo);
 typedef ret_t (*vgcanvas_unbind_fbo_t)(vgcanvas_t* vg, framebuffer_object_t* fbo);
+typedef ret_t (*vgcanvas_nanovg_fbo_to_bitmap_t)(vgcanvas_t* vgcanvas, framebuffer_object_t* fbo,
+                                                 bitmap_t* img, rect_t* r);
+
+typedef ret_t (*vgcanvas_clear_cache_t)(vgcanvas_t* vg);
 
 typedef ret_t (*vgcanvas_destroy_t)(vgcanvas_t* vg);
 
@@ -146,6 +160,7 @@ typedef struct _vgcanvas_vtable_t {
   vgcanvas_ellipse_t ellipse;
   vgcanvas_rounded_rect_t rounded_rect;
   vgcanvas_close_path_t close_path;
+  vgcanvas_path_winding_t path_winding;
 
   vgcanvas_scale_t scale;
   vgcanvas_rotate_t rotate;
@@ -154,6 +169,7 @@ typedef struct _vgcanvas_vtable_t {
   vgcanvas_set_transform_t set_transform;
 
   vgcanvas_clip_rect_t clip_rect;
+  vgcanvas_nanovg_intersect_clip_rect_t intersect_clip_rect;
   vgcanvas_fill_t fill;
   vgcanvas_stroke_t stroke;
   vgcanvas_paint_t paint;
@@ -162,6 +178,7 @@ typedef struct _vgcanvas_vtable_t {
   vgcanvas_set_font_size_t set_font_size;
   vgcanvas_set_text_align_t set_text_align;
   vgcanvas_set_text_baseline_t set_text_baseline;
+  vgcanvas_get_text_metrics_t get_text_metrics;
   vgcanvas_fill_text_t fill_text;
   vgcanvas_measure_text_t measure_text;
   vgcanvas_draw_image_t draw_image;
@@ -189,6 +206,9 @@ typedef struct _vgcanvas_vtable_t {
   vgcanvas_destroy_fbo_t destroy_fbo;
   vgcanvas_bind_fbo_t bind_fbo;
   vgcanvas_unbind_fbo_t unbind_fbo;
+  vgcanvas_nanovg_fbo_to_bitmap_t fbo_to_bitmap;
+
+  vgcanvas_clear_cache_t clear_cache;
 
   vgcanvas_destroy_t destroy;
 } vgcanvas_vtable_t;
@@ -253,6 +273,12 @@ struct _vgcanvas_t {
    * canvas的高度
    */
   uint32_t h;
+  /**
+   * @property {uint32_t} stride
+   * @annotation ["readable", "scriptable"]
+   * 一行占的字节
+   */
+  uint32_t stride;
   /**
    * @property {float_t} ratio
    * @annotation ["readable", "scriptable"]
@@ -353,9 +379,10 @@ struct _vgcanvas_t {
    * frame buffer format
    */
   bitmap_format_t format;
-
   rect_t clip_rect;
+  rect_t dirty_rect;
   const vgcanvas_vtable_t* vt;
+  assets_manager_t* assets_manager;
 };
 
 /**
@@ -624,6 +651,20 @@ ret_t vgcanvas_ellipse(vgcanvas_t* vg, float_t x, float_t y, float_t rx, float_t
 ret_t vgcanvas_close_path(vgcanvas_t* vg);
 
 /**
+ * @method vgcanvas_path_winding
+ * 设置路径填充实心与否。
+ *
+ * >CCW(1)为实心，CW(2)为镂空，设置其他则默认根据非零环绕规则判断(nonzero)。
+ *
+ * @annotation ["scriptable"]
+ * @param {vgcanvas_t*} vg vgcanvas对象。
+ * @param {bool_t} dir 填充方法。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t vgcanvas_path_winding(vgcanvas_t* vg, bool_t dir);
+
+/**
  * @method vgcanvas_rotate
  * 旋转。
  *
@@ -713,6 +754,34 @@ ret_t vgcanvas_set_transform(vgcanvas_t* vg, float_t a, float_t b, float_t c, fl
 ret_t vgcanvas_clip_rect(vgcanvas_t* vg, float_t x, float_t y, float_t w, float_t h);
 
 /**
+ * @method vgcanvas_intersect_clip_rect
+ * 设置一个与前一个裁剪区做交集的矩形裁剪区。
+ * 如果下面这种情况，则不能直接调用 rect_intersect 函数来做矩形交集和 vgcanvas_clip_rect 函数设置裁剪区，而采用本函数做交集。
+ * 由于缩放和旋转以及平移会导致 vg 的坐标系和上一个裁剪区的坐标系不同，
+ * 导致直接使用做交集的话，裁剪区会出错。
+ * 
+ * ```
+ * vgcanvas_clip_rect(vg, old_r.x, old_r.y, old_r.w, old_r.h);
+ * vgcanvas_save(vg);
+ * vgcanvas_scale(vg, scale_x, scale_y);
+ * vgcanvas_rotate(vg, TK_D2R(15));
+ * vgcanvas_intersect_clip_rect(vg, r.x, r.y, r.w, r.h);
+ * ..................
+ * vgcanvas_restore(vg);
+ * ```
+ *
+ * @annotation ["scriptable"]
+ * @param {vgcanvas_t*} vg vgcanvas对象。
+ * @param {float_t} x x坐标。
+ * @param {float_t} y y坐标。
+ * @param {float_t} w 宽度。
+ * @param {float_t} h 高度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t vgcanvas_intersect_clip_rect(vgcanvas_t* vg, float_t x, float_t y, float_t w, float_t h);
+
+/**
  * @method vgcanvas_fill
  * 填充多边形。
  *
@@ -795,6 +864,20 @@ ret_t vgcanvas_set_text_align(vgcanvas_t* vg, const char* value);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t vgcanvas_set_text_baseline(vgcanvas_t* vg, const char* value);
+
+/**
+ * @method vgcanvas_get_text_metrics
+ * 获取当前字体的度量信息。
+ *
+ * @param {vgcanvas_t*} vg vgcanvas对象。
+ * @param {float_t*} ascent 用于返回ascent。
+ * @param {float_t*} descent 用于返回descent。
+ * @param {float_t*} line_hight 用于返回line height。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t vgcanvas_get_text_metrics(vgcanvas_t* vg, float_t* ascent, float_t* descent,
+                                float_t* line_hight);
 
 /**
  * @method vgcanvas_fill_text
@@ -1108,6 +1191,15 @@ wh_t vgcanvas_get_width(vgcanvas_t* vgcanvas);
 wh_t vgcanvas_get_height(vgcanvas_t* vgcanvas);
 
 /**
+ * @method vgcanvas_clear_cache
+ * 释放vgcanvas对象的缓冲数据。
+ * @param {vgcanvas_t*} vg vgcanvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t vgcanvas_clear_cache(vgcanvas_t* vg);
+
+/**
  * @method vgcanvas_destroy
  * 销毁vgcanvas对象。
  * @param {vgcanvas_t*} vg vgcanvas对象。
@@ -1116,11 +1208,55 @@ wh_t vgcanvas_get_height(vgcanvas_t* vgcanvas);
  */
 ret_t vgcanvas_destroy(vgcanvas_t* vg);
 
-ret_t vgcanvas_create_fbo(vgcanvas_t* vg, framebuffer_object_t* fbo);
+ret_t vgcanvas_create_fbo(vgcanvas_t* vg, uint32_t w, uint32_t h, framebuffer_object_t* fbo);
 ret_t vgcanvas_destroy_fbo(vgcanvas_t* vg, framebuffer_object_t* fbo);
 ret_t vgcanvas_bind_fbo(vgcanvas_t* vg, framebuffer_object_t* fbo);
 ret_t vgcanvas_unbind_fbo(vgcanvas_t* vg, framebuffer_object_t* fbo);
+ret_t vgcanvas_fbo_to_bitmap(vgcanvas_t* vg, framebuffer_object_t* fbo, bitmap_t* img, rect_t* r);
 ret_t fbo_to_img(framebuffer_object_t* fbo, bitmap_t* img);
+ret_t vgcanvas_set_assets_manager(vgcanvas_t* vg, assets_manager_t* assets_manager);
+
+/**
+ * @enum vgcanvas_line_cap_t
+ * @annotation ["scriptable", "string"]
+ * @prefix VGCANVAS_LINE_CAP_
+ * 线帽类型。
+ */
+/**
+ * @const VGCANVAS_LINE_CAP_ROUND
+ * 圆头。
+ */
+#define VGCANVAS_LINE_CAP_ROUND "round"
+
+/**
+ * @const VGCANVAS_LINE_CAP_SQUARE
+ * 方头。 
+ */
+#define VGCANVAS_LINE_CAP_SQUARE "square"
+
+/**
+ * @enum vgcanvas_line_join_t
+ * @annotation ["scriptable", "string"]
+ * @prefix VGCANVAS_LINE_JOIN_
+ * 线条连接类型。
+ */
+/**
+ * @const VGCANVAS_LINE_JOIN_ROUND
+ * round。
+ */
+#define VGCANVAS_LINE_JOIN_ROUND "round"
+
+/**
+ * @const VGCANVAS_LINE_JOIN_BEVEL
+ * bevel。 
+ */
+#define VGCANVAS_LINE_JOIN_BEVEL "bevel"
+
+/**
+ * @const VGCANVAS_LINE_JOIN_MITTER
+ * mitter。 
+ */
+#define VGCANVAS_LINE_JOIN_MITTER "mitter"
 
 END_C_DECLS
 

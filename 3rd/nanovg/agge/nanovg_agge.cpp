@@ -34,6 +34,7 @@ struct AGGENVGtexture {
   int height;
   int type;
   int flags;
+  int stride;
   const uint8_t* data;
 };
 typedef struct AGGENVGtexture AGGENVGtexture;
@@ -81,6 +82,8 @@ struct AGGENVGcontext {
   agge::rasterizer<agge::clipper<int> > ras;
 };
 
+static int aggenvg__renderFindTexture(void* uptr, const void* data);
+
 static int aggenvg__maxi(int a, int b) {
   return a > b ? a : b;
 }
@@ -105,6 +108,22 @@ static void aggenvg__setLineCap(void* uptr, int lineCap)
       agge->line_style.set_cap(agge::caps::round());
     else if(lineCap == NVG_SQUARE)
       agge->line_style.set_cap(agge::caps::square());
+}
+
+static void aggenvg__clearCacheTexture(AGGENVGcontext* agge) {
+  AGGENVGtexture* textures = NULL;
+  int ntextures = agge->ntextures;
+  int size = sizeof(AGGENVGtexture) * ntextures;
+
+  if (agge->textures != NULL && ntextures > 0) {
+    textures = (AGGENVGtexture*)malloc(size);
+    memcpy(textures, agge->textures, size);
+
+    free(agge->textures);
+    agge->textures = textures;
+    agge->ntextures = ntextures;
+    agge->ctextures = ntextures;
+  }
 }
 
 static AGGENVGtexture* aggenvg__allocTexture(AGGENVGcontext* agge) {
@@ -160,10 +179,17 @@ static int aggenvg__renderCreate(void* uptr) {
   return 1;
 }
 
-static int aggenvg__renderCreateTexture(void* uptr, int type, int w, int h, int imageFlags,
+static int aggenvg__renderCreateTexture(void* uptr, int type, int w, int h, int stride, int imageFlags,
                                         const unsigned char* data) {
+  AGGENVGtexture* tex = NULL;
   AGGENVGcontext* agge = (AGGENVGcontext*)uptr;
-  AGGENVGtexture* tex = aggenvg__allocTexture(agge);
+  int id = aggenvg__renderFindTexture(agge, data);
+  if(id > 0) {
+    tex = aggenvg__findTexture(agge, id);
+  }
+  if (tex == NULL) {
+    tex = aggenvg__allocTexture(agge);
+  }
 
   if (tex == NULL) return 0;
 
@@ -171,6 +197,7 @@ static int aggenvg__renderCreateTexture(void* uptr, int type, int w, int h, int 
   tex->height = h;
   tex->type = type;
   tex->data = data;
+  tex->stride = stride;
   tex->flags = imageFlags;
 
   return tex->id;
@@ -194,6 +221,22 @@ static int aggenvg__renderUpdateTexture(void* uptr, int image, int x, int y, int
   tex->data = data;
 
   return 1;
+}
+
+static int aggenvg__renderFindTexture(void* uptr, const void* data) {
+  int i = 0;
+  AGGENVGtexture* tex = NULL;
+  AGGENVGcontext* agge = (AGGENVGcontext*)uptr;
+  for (; i < agge->ntextures; i++) {
+    if (agge->textures[i].data == data) {
+      tex = &agge->textures[i];
+      break;
+    } 
+  }
+  if (tex == NULL) {
+    return -1;
+  } 
+  return tex->id;
 }
 
 static int aggenvg__renderGetTextureSize(void* uptr, int image, int* w, int* h) {
@@ -254,34 +297,35 @@ void renderPaint(AGGENVGcontext* agge, NVGpaint* paint) {
   if (paint->image > 0) {
     float invxform[6];
     AGGENVGtexture* tex = aggenvg__findTexture(agge, paint->image);
+    if(tex == NULL) return;
     nvgTransformInverse(invxform, paint->xform);
 
     switch (tex->type) {
       case NVG_TEXTURE_RGBA: {
         typedef agge::bitmap<agge::pixel32_rgba, agge::raw_bitmap> rgba_bitmap_t;
-        rgba_bitmap_t src(tex->width, tex->height, tex->width*4, (uint8_t*)(tex->data));
-        agge::nanovg_image_blender<PixelT, rgba_bitmap_t> color(&src, (float*)invxform);
+        rgba_bitmap_t src(tex->width, tex->height, tex->stride, tex->flags, (uint8_t*)(tex->data));
+        agge::nanovg_image_blender<PixelT, rgba_bitmap_t> color(&src, (float*)invxform, paint->innerColor.a);
         ren(surface, 0, ras, color, agge::winding<>());
         break;
       }
       case NVG_TEXTURE_BGRA: {
         typedef agge::bitmap<agge::pixel32_bgra, agge::raw_bitmap> bgra_bitmap_t;
-        bgra_bitmap_t src(tex->width, tex->height, tex->width*4, (uint8_t*)(tex->data));
-        agge::nanovg_image_blender<PixelT, bgra_bitmap_t> color(&src, (float*)invxform);
+        bgra_bitmap_t src(tex->width, tex->height, tex->stride, tex->flags, (uint8_t*)(tex->data));
+        agge::nanovg_image_blender<PixelT, bgra_bitmap_t> color(&src, (float*)invxform, paint->innerColor.a);
         ren(surface, 0, ras, color, agge::winding<>());
         break;
       }
       case NVG_TEXTURE_BGR565: {
         typedef agge::bitmap<agge::pixel16_bgr565, agge::raw_bitmap> bgr565_bitmap_t;
-        bgr565_bitmap_t src(tex->width, tex->height, tex->width*2, (uint8_t*)(tex->data));
-        agge::nanovg_image_blender<PixelT, bgr565_bitmap_t> color(&src, (float*)invxform);
+        bgr565_bitmap_t src(tex->width, tex->height, tex->stride, (uint8_t*)(tex->data));
+        agge::nanovg_image_blender<PixelT, bgr565_bitmap_t> color(&src, (float*)invxform, paint->innerColor.a);
         ren(surface, 0, ras, color, agge::winding<>());
         break;
       }
       case NVG_TEXTURE_RGB: {
         typedef agge::bitmap<agge::pixel24_rgb, agge::raw_bitmap> rgb_bitmap_t;
-        rgb_bitmap_t src(tex->width, tex->height, tex->width*3, (uint8_t*)(tex->data));
-        agge::nanovg_image_blender<PixelT, rgb_bitmap_t> color(&src, (float*)invxform);
+        rgb_bitmap_t src(tex->width, tex->height, tex->stride, (uint8_t*)(tex->data));
+        agge::nanovg_image_blender<PixelT, rgb_bitmap_t> color(&src, (float*)invxform, paint->innerColor.a);
         ren(surface, 0, ras, color, agge::winding<>());
         break;
       }
@@ -386,6 +430,15 @@ static void aggenvg__renderDelete(void* uptr) {
   delete agge;
 }
 
+static int aggenvg__clearCache(void* uptr) {
+  AGGENVGcontext* agge = (AGGENVGcontext*)uptr;
+  if (agge == NULL) return -1;
+  agge::rasterizer<agge::clipper<int> >& ras = agge->ras;
+  ras.clear_cache();
+  aggenvg__clearCacheTexture(agge);
+  return 0;
+}
+
 static void nvgInitAGGE(AGGENVGcontext* agge, NVGparams* params, uint32_t w, uint32_t h, uint32_t stride,
                         enum NVGtexture format, uint8_t* data) {
   agge->w = w;
@@ -452,6 +505,7 @@ NVGcontext* nvgCreateAGGE(uint32_t w, uint32_t h, uint32_t stride, enum NVGtextu
   params.setLineJoin = aggenvg__setLineJoin;
   params.setLineCap = aggenvg__setLineCap;
   params.renderCreate = aggenvg__renderCreate;
+  params.findTexture = aggenvg__renderFindTexture;
   params.renderCreateTexture = aggenvg__renderCreateTexture;
   params.renderDeleteTexture = aggenvg__renderDeleteTexture;
   params.renderUpdateTexture = aggenvg__renderUpdateTexture;
@@ -460,6 +514,7 @@ NVGcontext* nvgCreateAGGE(uint32_t w, uint32_t h, uint32_t stride, enum NVGtextu
   params.renderCancel = aggenvg__renderCancel;
   params.renderFlush = aggenvg__renderFlush;
   params.renderDelete = aggenvg__renderDelete;
+  params.clearCache = aggenvg__clearCache;
   params.userPtr = agge;
   params.edgeAntiAlias = 1;
 

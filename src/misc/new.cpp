@@ -4,7 +4,8 @@
 
 #ifndef HAS_STD_MALLOC
 
-void* operator new(std::size_t size) {
+#ifndef WITH_SDL
+void* operator new(std::size_t size) __TK_THROW_BAD_ALLOC {
   if (size >= MAX_SIZE) {
     log_debug("size is too large\n");
   }
@@ -12,7 +13,7 @@ void* operator new(std::size_t size) {
   return TKMEM_ALLOC(size);
 }
 
-void* operator new[](std::size_t size) {
+void* operator new[](std::size_t size) __TK_THROW_BAD_ALLOC {
   if (size >= MAX_SIZE) {
     log_debug("size is too large\n");
   }
@@ -27,5 +28,6 @@ void operator delete(void* obj) throw() {
 void operator delete[](void* obj) throw() {
   TKMEM_FREE(obj);
 }
+#endif /*WITH_SDL*/
 
 #endif /*HAS_STD_MALLOC*/

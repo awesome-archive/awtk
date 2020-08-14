@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  text_edit
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -41,8 +41,10 @@ typedef struct _text_edit_state_t {
   uint32_t max_rows;
   uint32_t select_start;
   uint32_t select_end;
+  uint32_t last_line_number;
 
   bool_t mask;
+  bool_t preedit;
   bool_t wrap_word;
   wchar_t mask_char;
   bool_t caret_visible;
@@ -142,6 +144,16 @@ ret_t text_edit_copy(text_edit_t* text_edit);
 ret_t text_edit_key_down(text_edit_t* text_edit, key_event_t* evt);
 
 /**
+ * @method text_edit_key_up
+ * 处理按键事件。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {key_event_t*} evt event
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_key_up(text_edit_t* text_edit, key_event_t* evt);
+
+/**
  * @method text_edit_set_select
  * 选择指定范围的文本。
  * @param {text_edit_t*} text_edit text_edit对象。
@@ -151,6 +163,24 @@ ret_t text_edit_key_down(text_edit_t* text_edit, key_event_t* evt);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t text_edit_set_select(text_edit_t* text_edit, uint32_t start, uint32_t end);
+
+/**
+ * @method text_edit_select_all
+ * 全选。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_select_all(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_unselect
+ * 取消选择。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_unselect(text_edit_t* text_edit);
 
 /**
  * @method text_edit_set_cursor
@@ -260,8 +290,35 @@ ret_t text_edit_set_mask_char(text_edit_t* text_edit, wchar_t mask_char);
  */
 ret_t text_edit_paint(text_edit_t* text_edit, canvas_t* c);
 
+/**
+ * @method text_edit_layout
+ * 重新排版。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_layout(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_set_offset
+ * 设置滚动偏移。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {int32_t} ox x偏移量。
+ * @param {int32_t} oy y偏移量。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t text_edit_set_offset(text_edit_t* text_edit, int32_t ox, int32_t oy);
 
+/**
+ * @method text_edit_set_on_state_changed
+ * 设置状态改变回调函数。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {text_edit_on_state_changed_t} on_state_changed 回调函数。
+ * @param {void*} ctx 回调函数上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t text_edit_set_on_state_changed(text_edit_t* text_edit,
                                      text_edit_on_state_changed_t on_state_changed, void* ctx);
 
@@ -273,6 +330,42 @@ ret_t text_edit_set_on_state_changed(text_edit_t* text_edit,
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t text_edit_destroy(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_preedit_clear
+ * 清除预编辑文本。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_preedit_clear(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_preedit
+ * 进入预编辑状态。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_preedit(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_preedit_confirm
+ * 提交预编辑的文本，并退出预编辑状态。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_preedit_confirm(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_preedit_abort
+ * 取消预编辑的文本，并退出预编辑状态。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_preedit_abort(text_edit_t* text_edit);
 
 END_C_DECLS
 

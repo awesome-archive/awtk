@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  combo_box_item
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -39,7 +39,6 @@ static ret_t combo_box_item_on_event(widget_t* widget, event_t* e) {
     }
     case EVT_POINTER_DOWN_ABORT: {
       combo_box_item->pressed = FALSE;
-      widget_ungrab(widget->parent, widget);
       widget_set_state(widget, WIDGET_STATE_NORMAL);
       break;
     }
@@ -52,11 +51,11 @@ static ret_t combo_box_item_on_event(widget_t* widget, event_t* e) {
       }
 
       combo_box_item->pressed = FALSE;
-      widget_ungrab(widget->parent, widget);
       widget_set_state(widget, WIDGET_STATE_NORMAL);
       break;
     }
     case EVT_POINTER_LEAVE:
+      combo_box_item->pressed = FALSE;
       widget_set_state(widget, WIDGET_STATE_NORMAL);
       break;
     case EVT_POINTER_ENTER:
@@ -101,6 +100,9 @@ static ret_t combo_box_item_get_prop(widget_t* widget, const char* name, value_t
 
 TK_DECL_VTABLE(combo_box_item) = {.size = sizeof(combo_box_item_t),
                                   .type = WIDGET_TYPE_COMBO_BOX_ITEM,
+                                  .focusable = TRUE,
+                                  .space_key_to_activate = TRUE,
+                                  .return_key_to_activate = TRUE,
                                   .on_paint_self = combo_box_item_on_paint_self,
                                   .on_event = combo_box_item_on_event,
                                   .get_prop = combo_box_item_get_prop,
@@ -133,7 +135,7 @@ static ret_t combo_box_item_set_checked_only(widget_t* widget, bool_t checked) {
     widget_dispatch(widget, &e);
   }
 
-  widget_update_style(widget);
+  widget_set_need_update_style(widget);
 
   return RET_OK;
 }
@@ -142,11 +144,11 @@ ret_t combo_box_item_set_checked(widget_t* widget, bool_t checked) {
   return_value_if_fail(widget != NULL, RET_BAD_PARAMS);
 
   combo_box_item_set_checked_only(widget, checked);
-  if (widget->parent != NULL) {
+  if (widget->parent != NULL && checked) {
     widget_t* parent = widget->parent;
 
     WIDGET_FOR_EACH_CHILD_BEGIN(parent, iter, i)
-    if (iter != widget) {
+    if (iter != widget && iter->vt == widget->vt) {
       combo_box_item_set_checked_only(iter, !checked);
     }
     WIDGET_FOR_EACH_CHILD_END();

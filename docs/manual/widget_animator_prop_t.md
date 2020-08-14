@@ -1,7 +1,6 @@
 ## widget\_animator\_prop\_t
 ### 概述
- 通过修改对象的指定属性形成动画效果。
-
+通过修改对象的指定属性形成动画效果。
 ----------------------------------
 ### 函数
 <p id="widget_animator_prop_t_methods">
@@ -15,9 +14,7 @@
 
 * 函数功能：
 
-> <p id="widget_animator_prop_t_widget_animator_prop_create"> 创建单属性动画对象。
-
-
+> <p id="widget_animator_prop_t_widget_animator_prop_create">创建单属性动画对象。
 
 * 函数原型：
 
@@ -40,14 +37,12 @@ widget_animator_t* widget_animator_prop_create (widget_t* widget, uint32_t durat
 
 * 函数功能：
 
-> <p id="widget_animator_prop_t_widget_animator_prop_set_params"> 设置动画对象的参数。
-
-
+> <p id="widget_animator_prop_t_widget_animator_prop_set_params">设置动画对象的参数。
 
 * 函数原型：
 
 ```
-ret_t widget_animator_prop_set_params (widget_animator_t* animator, float_t from, float_t to);
+ret_t widget_animator_prop_set_params (widget_animator_t* animator, double from, double to);
 ```
 
 * 参数说明：
@@ -56,5 +51,5 @@ ret_t widget_animator_prop_set_params (widget_animator_t* animator, float_t from
 | -------- | ----- | --------- |
 | 返回值 | ret\_t | 返回RET\_OK表示成功，否则表示失败。 |
 | animator | widget\_animator\_t* | 动画对象本身。 |
-| from | float\_t | prop起始值。 |
-| to | float\_t | prop结束值。 |
+| from | double | prop起始值。 |
+| to | double | prop结束值。 |

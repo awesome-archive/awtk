@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  font interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,6 +26,30 @@
 
 BEGIN_C_DECLS
 
+/**
+ * @enum glyph_format_t
+ * @prefix GLYPH_FMT_
+ * @annotation ["scriptable"]
+ * 字模格式常量定义。
+ */
+typedef enum _glyph_format_t {
+  /**
+   * @const GLYPH_FMT_ALPHA
+   * 每个像素占用1个字节(缺省)。
+   */
+  GLYPH_FMT_ALPHA,
+  /**
+   * @const GLYPH_FMT_MONO
+   * 每个像素占用1个比特。
+   */
+  GLYPH_FMT_MONO,
+  /**
+   * @const GLYPH_FMT_RGBA
+   * 每个像素占用4个字节。
+   */
+  GLYPH_FMT_RGBA
+} glyph_format_t;
+
 struct _font_t;
 typedef struct _font_t font_t;
 
@@ -37,35 +61,47 @@ typedef struct _font_t font_t;
 #pragma pack(push, 1)
 typedef struct _glyph_t {
   /**
-   * @property {int8_t} x
+   * @property {int16_t} x
    * @annotation ["readable"]
    * x坐标。
    */
-  int8_t x;
+  int16_t x;
   /**
-   * @property {int8_t} y
+   * @property {int16_t} y
    * @annotation ["readable"]
    * y坐标。
    */
-  int8_t y;
+  int16_t y;
   /**
-   * @property {uint8_t} w
+   * @property {uint16_t} w
    * @annotation ["readable"]
    * 宽度。
    */
-  uint8_t w;
+  uint16_t w;
   /**
-   * @property {uint8_t} h
+   * @property {uint16_t} h
    * @annotation ["readable"]
    * 高度。
    */
-  uint8_t h;
+  uint16_t h;
   /**
-   * @property {int32_t} advance
+   * @property {uint16_t} advance
    * @annotation ["readable"]
    * 占位宽度。
    */
-  uint32_t advance;
+  uint16_t advance : 16;
+  /**
+   * @property {uint8_t} format
+   * @annotation ["readable"]
+   * 格式。
+   */
+  uint8_t format : 8;
+  /**
+   * @property {uint8_t} pitch
+   * @annotation ["readable"]
+   * pitch。
+   */
+  uint8_t pitch : 8;
   /**
    * @property {const uint8_t*} data
    * @annotation ["readable"]
@@ -103,9 +139,16 @@ glyph_t* glyph_clone(glyph_t* g);
  */
 ret_t glyph_destroy(glyph_t* g);
 
-typedef int32_t (*font_get_baseline_t)(font_t* f, font_size_t font_size);
+typedef struct _font_vmetrics_t {
+  int16_t ascent;
+  int16_t descent;
+  int32_t line_gap;
+} font_vmetrics_t;
+
+typedef font_vmetrics_t (*font_get_vmetrics_t)(font_t* f, font_size_t font_size);
 typedef bool_t (*font_match_t)(font_t* f, const char* name, font_size_t font_size);
 typedef ret_t (*font_get_glyph_t)(font_t* f, wchar_t chr, font_size_t font_size, glyph_t* g);
+typedef ret_t (*font_shrink_cache_t)(font_t* f, uint32_t cache_size);
 
 typedef ret_t (*font_destroy_t)(font_t* f);
 
@@ -117,20 +160,22 @@ typedef ret_t (*font_destroy_t)(font_t* f);
 struct _font_t {
   char name[TK_NAME_LEN + 1];
   font_match_t match;
-  font_get_baseline_t get_baseline;
   font_get_glyph_t get_glyph;
+  font_get_vmetrics_t get_vmetrics;
+  font_shrink_cache_t shrink_cache;
   font_destroy_t destroy;
+  const char* desc;
 };
 
 /**
- * @method font_get_baseline
- * 获取字体的基线。
+ * @method font_get_vmetrics
+ * 获取字体的高度信息。
  * @param {font_t*} font font对象。
  * @param {font_size_t} font_size 字体大小。
  *
- * @return {int32_t} 返回字体的基线。
+ * @return {font_vmetrics_t} 返回字体的高度信息。
  */
-int32_t font_get_baseline(font_t* font, font_size_t font_size);
+font_vmetrics_t font_get_vmetrics(font_t* font, font_size_t font_size);
 
 /**
  * @method font_match
@@ -156,6 +201,17 @@ bool_t font_match(font_t* font, const char* font_name, font_size_t font_size);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t font_get_glyph(font_t* font, wchar_t chr, font_size_t font_size, glyph_t* glyph);
+
+/**
+ * @method font_shrink_cache
+ * 清除最近没使用的字模。
+ *
+ * @param {font_t*} font font对象。
+ * @param {uint32_t} cache_size 保留缓存字模的个数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t font_shrink_cache(font_t* font, uint32_t cache_size);
 
 /**
  * @method font_destroy

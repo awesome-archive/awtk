@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  font manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -142,6 +142,27 @@ font_t* font_manager_get_font(font_manager_t* fm, const char* name, font_size_t 
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t font_manager_unload_font(font_manager_t* fm, const char* name, font_size_t size);
+
+/**
+ * @method font_manager_shrink_cache
+ * 清除最久没有被使用的缓冲字模。
+ * @annotation ["scriptable"]
+ * @param {font_manager_t*} fm 字体管理器对象。
+ * @param {uint32_t} cache_size 每种字体保留缓存字模的个数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t font_manager_shrink_cache(font_manager_t* fm, uint32_t cache_size);
+
+/**
+ * @method font_manager_unload_all
+ * 卸载全部字体。
+ * @annotation ["scriptable"]
+ * @param {font_manager_t*} fm 字体管理器对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t font_manager_unload_all(font_manager_t* fm);
 
 /**
  * @method font_manager_deinit

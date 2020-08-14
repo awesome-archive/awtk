@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  check_button
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,6 +20,7 @@
  */
 
 #include "tkc/mem.h"
+#include "tkc/utils.h"
 #include "widgets/check_button.h"
 #include "base/image_manager.h"
 #include "base/widget_vtable.h"
@@ -90,7 +91,7 @@ static ret_t check_button_set_value_only(widget_t* widget, bool_t value) {
     e = event_init(EVT_VALUE_CHANGED, widget);
     widget_dispatch(widget, &e);
 
-    widget_update_style(widget);
+    widget_set_need_update_style(widget);
     widget_invalidate_force(widget, NULL);
   }
 
@@ -179,7 +180,6 @@ widget_t* check_button_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) 
   return_value_if_fail(check_button != NULL, NULL);
 
   check_button->radio = FALSE;
-  widget->state = WIDGET_STATE_NORMAL;
   check_button_set_value_only(widget, FALSE);
 
   return widget;
@@ -191,7 +191,6 @@ widget_t* check_button_create_radio(widget_t* parent, xy_t x, xy_t y, wh_t w, wh
   return_value_if_fail(check_button != NULL, NULL);
 
   check_button->radio = TRUE;
-  widget->state = WIDGET_STATE_NORMAL;
   check_button_set_value_only(widget, FALSE);
 
   return widget;
@@ -203,4 +202,24 @@ widget_t* check_button_cast(widget_t* widget) {
       NULL);
 
   return widget;
+}
+
+widget_t* check_button_get_checked_button(widget_t* widget) {
+  check_button_t* check_button = CHECK_BUTTON(widget);
+  return_value_if_fail(check_button != NULL, NULL);
+
+  if (check_button->radio && widget->parent != NULL) {
+    widget_t* parent = widget->parent;
+
+    WIDGET_FOR_EACH_CHILD_BEGIN(parent, iter, i)
+    if (iter->vt == widget->vt) {
+      check_button_t* b = CHECK_BUTTON(iter);
+      if (b->value) {
+        return iter;
+      }
+    }
+    WIDGET_FOR_EACH_CHILD_END();
+  }
+
+  return NULL;
 }

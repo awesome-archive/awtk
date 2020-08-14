@@ -12,18 +12,20 @@
 #include <string>
 using std::string;
 
-#define TTF_FILE TK_ROOT "/tests/testdata/assets/raw/fonts/starthere.ttf"
+#define TTF_FILE TK_ROOT "/tests/testdata/assets/default/raw/fonts/starthere.ttf"
 #define BUFF_SIZE 1024 * 1024
 
+#if defined(WITH_FT_FONT) || defined(WITH_STB_FONT)
 TEST(FontGen, basic) {
   uint32_t size = 0;
-  uint16_t font_size = 20;
+  uint16_t font_size = 50;
   uint8_t* bmp_buff = (uint8_t*)TKMEM_ALLOC(BUFF_SIZE);
   uint8_t* ttf_buff = (uint8_t*)read_file(TTF_FILE, &size);
   font_t* ttf_font = font_truetype_create("default", ttf_buff, size);
-  const char* str = "helloworldHELLOWORLD1243541helloworldHELLOWORLD1243541";
-
-  uint32_t ret = font_gen_buff(ttf_font, font_size, str, bmp_buff, BUFF_SIZE);
+  const char* str = "helloworld HELLOWORLD 1243541 helloworld HELLOWORLD 1243541";
+  wbuffer_t wbuffer;
+  wbuffer_init(&wbuffer, bmp_buff, BUFF_SIZE);
+  uint32_t ret = font_gen_buff(ttf_font, font_size, str, &wbuffer);
   font_t* bmp_font = font_bitmap_create("default", bmp_buff, ret);
 
   for (uint32_t i = 0; str[i]; i++) {
@@ -44,6 +46,8 @@ TEST(FontGen, basic) {
   ASSERT_EQ(ret > 0, true);
   font_destroy(ttf_font);
   font_destroy(bmp_font);
+  wbuffer_deinit(&wbuffer);
   TKMEM_FREE(bmp_buff);
   TKMEM_FREE(ttf_buff);
 }
+#endif /**/

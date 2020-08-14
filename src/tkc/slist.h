@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  single link list
  *
- * Copyright (c) 2019 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2019 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -157,6 +157,24 @@ ret_t slist_prepend(slist_t* slist, void* data);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t slist_foreach(slist_t* slist, tk_visit_t visit, void* ctx);
+
+/**
+ * @method slist_tail_pop
+ * 弹出最后一个元素。
+ * @param {slist_t*} slist 单向链表对象。
+ *
+ * @return {ret_t} 成功返回最后一个元素，失败返回NULL。
+ */
+void* slist_tail_pop(slist_t* slist);
+
+/**
+ * @method slist_head_pop
+ * 弹出第一个元素。
+ * @param {slist_t*} slist 单向链表对象。
+ *
+ * @return {ret_t} 成功返回最后一个元素，失败返回NULL。
+ */
+void* slist_head_pop(slist_t* slist);
 
 /**
  * @method slist_size

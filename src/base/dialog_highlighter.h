@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  dialog_highlighter
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied highlighterrranty of
@@ -86,6 +86,12 @@ struct _dialog_highlighter_t {
    */
   widget_t* dialog;
 
+  /**
+   * @property {rect_t*} clip_rect
+   * 截图的显示裁减区
+   */
+  rect_t clip_rect;
+
   /*private*/
   framebuffer_object_t fbo;
   const dialog_highlighter_vtable_t* vt;
@@ -112,6 +118,16 @@ dialog_highlighter_t* dialog_highlighter_create(const dialog_highlighter_vtable_
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t dialog_highlighter_set_bg(dialog_highlighter_t* h, bitmap_t* img, framebuffer_object_t* fbo);
+
+/**
+ * @method dialog_highlighter_set_bg_clip_rect
+ * 设置背景图片的显示裁减区。
+ * @param {dialog_highlighter_t*} h 对话框高亮策略对象。
+ * @param {rect_t*} clip_rect 背景显示裁减区。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t dialog_highlighter_set_bg_clip_rect(dialog_highlighter_t* h, rect_t* clip_rect);
 
 /**
  * @method dialog_highlighter_prepare
@@ -150,6 +166,9 @@ bool_t dialog_highlighter_is_dynamic(dialog_highlighter_t* h);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t dialog_highlighter_destroy(dialog_highlighter_t* h);
+
+/*for window manager*/
+ret_t dialog_highlighter_clear_image(dialog_highlighter_t* h);
 
 END_C_DECLS
 

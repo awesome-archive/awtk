@@ -1,6 +1,6 @@
 ## style\_id\_t
 ### 概述
- style常量定义。
+style常量定义。
 ### 常量
 <p id="style_id_t_consts">
 
@@ -13,6 +13,9 @@
 | STYLE\_ID\_FONT\_SIZE | 字体大小。 |
 | STYLE\_ID\_FONT\_STYLE | 字体风格(粗体、斜体等)。 |
 | STYLE\_ID\_TEXT\_COLOR | 文本颜色。 |
+| STYLE\_ID\_HIGHLIGHT\_FONT\_NAME | 高亮文本的字体名称。 |
+| STYLE\_ID\_HIGHLIGHT\_FONT\_SIZE | 高亮文本的字体大小。 |
+| STYLE\_ID\_HIGHLIGHT\_TEXT\_COLOR | 高亮文本的文本颜色。 |
 | STYLE\_ID\_TIPS\_TEXT\_COLOR | 提示文本颜色。 |
 | STYLE\_ID\_TEXT\_ALIGN\_H | 文本水平对齐的方式。 |
 | STYLE\_ID\_TEXT\_ALIGN\_V | 文本垂直对齐的方式。 |
@@ -38,3 +41,5 @@
 | STYLE\_ID\_SELECTED\_FG\_COLOR | 编辑器中选中区域的前景颜色。 |
 | STYLE\_ID\_SELECTED\_TEXT\_COLOR | 编辑器中选中区域的文本颜色。 |
 | STYLE\_ID\_ROUND\_RADIUS | 圆角半径(仅在WITH\_VGCANVAS定义时生效)。 |
+| STYLE\_ID\_CHILDREN\_LAYOUT | 子控件布局参数。 |
+| STYLE\_ID\_SELF\_LAYOUT | 控件布局参数。 |

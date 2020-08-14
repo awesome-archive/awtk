@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  default ui_loader
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -63,6 +63,7 @@ ret_t ui_loader_load_default(ui_loader_t* loader, const uint8_t* data, uint32_t 
         }
       }
     }
+    if (b->widget == NULL) break;
   }
   ui_builder_on_end(b);
 

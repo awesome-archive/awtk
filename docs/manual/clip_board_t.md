@@ -1,7 +1,6 @@
 ## clip\_board\_t
 ### 概述
- 剪切板接口。
-
+剪切板接口。
 ----------------------------------
 ### 函数
 <p id="clip_board_t_methods">
@@ -16,14 +15,13 @@
 | <a href="#clip_board_t_clip_board_set">clip\_board\_set</a> | 设置缺省的剪切板对象。 |
 | <a href="#clip_board_t_clip_board_set_data">clip\_board\_set\_data</a> | 设置数据到剪切板中。 |
 | <a href="#clip_board_t_clip_board_set_text">clip\_board\_set\_text</a> | 设置文本(UTF8)数据到剪切板。 |
+| <a href="#clip_board_t_data_reader_asset_create">data\_reader\_asset\_create</a> | 创建基于asset的data reader。 |
 #### clip\_board 函数
 -----------------------
 
 * 函数功能：
 
-> <p id="clip_board_t_clip_board"> 获取缺省的剪切板对象。
-
-
+> <p id="clip_board_t_clip_board">获取缺省的剪切板对象。
 
 * 函数原型：
 
@@ -41,9 +39,7 @@ ret_t clip_board ();
 
 * 函数功能：
 
-> <p id="clip_board_t_clip_board_clear"> 清空剪切板中的数据。
-
-
+> <p id="clip_board_t_clip_board_clear">清空剪切板中的数据。
 
 * 函数原型：
 
@@ -62,9 +58,7 @@ ret_t clip_board_clear (clip_board_t* cl);
 
 * 函数功能：
 
-> <p id="clip_board_t_clip_board_destroy"> 销毁剪切板对象。
-
-
+> <p id="clip_board_t_clip_board_destroy">销毁剪切板对象。
 
 * 函数原型：
 
@@ -83,9 +77,7 @@ ret_t clip_board_destroy (clip_board_t* cl);
 
 * 函数功能：
 
-> <p id="clip_board_t_clip_board_get_data"> 从剪切板中获取数据。
-
-
+> <p id="clip_board_t_clip_board_get_data">从剪切板中获取数据。
 
 * 函数原型：
 
@@ -107,9 +99,7 @@ ret_t clip_board_get_data (clip_board_t* cl, clip_board_data_type_t* type, void*
 
 * 函数功能：
 
-> <p id="clip_board_t_clip_board_get_text"> 从剪切板中获取文本(UTF8)数据。
-
-
+> <p id="clip_board_t_clip_board_get_text">从剪切板中获取文本(UTF8)数据。
 
 * 函数原型：
 
@@ -127,9 +117,7 @@ const char* clip_board_get_text ();
 
 * 函数功能：
 
-> <p id="clip_board_t_clip_board_set"> 设置缺省的剪切板对象。
-
-
+> <p id="clip_board_t_clip_board_set">设置缺省的剪切板对象。
 
 * 函数原型：
 
@@ -148,9 +136,7 @@ ret_t clip_board_set (clip_board_t* cl);
 
 * 函数功能：
 
-> <p id="clip_board_t_clip_board_set_data"> 设置数据到剪切板中。
-
-
+> <p id="clip_board_t_clip_board_set_data">设置数据到剪切板中。
 
 * 函数原型：
 
@@ -172,9 +158,7 @@ ret_t clip_board_set_data (clip_board_t* cl, clip_board_data_type_t type, const 
 
 * 函数功能：
 
-> <p id="clip_board_t_clip_board_set_text"> 设置文本(UTF8)数据到剪切板。
-
-
+> <p id="clip_board_t_clip_board_set_text">设置文本(UTF8)数据到剪切板。
 
 * 函数原型：
 
@@ -188,3 +172,22 @@ ret_t clip_board_set_text (const char* text);
 | -------- | ----- | --------- |
 | 返回值 | ret\_t | 返回RET\_OK表示成功，否则表示失败。 |
 | text | const char* | 文本。 |
+#### data\_reader\_asset\_create 函数
+-----------------------
+
+* 函数功能：
+
+> <p id="clip_board_t_data_reader_asset_create">创建基于asset的data reader。
+
+* 函数原型：
+
+```
+data_reader_t* data_reader_asset_create (const char* assetname);
+```
+
+* 参数说明：
+
+| 参数 | 类型 | 说明 |
+| -------- | ----- | --------- |
+| 返回值 | data\_reader\_t* | 返回data reader对象。 |
+| assetname | const char* | 资源的名称。 |

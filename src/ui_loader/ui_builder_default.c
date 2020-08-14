@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   ui_builder_default.c
  * Author: AWTK Develop Team
  * Brief:  ui_builder default
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,10 +19,9 @@
  *
  */
 
-#include "widgets/view.h"
 #include "tkc/utf8.h"
 #include "base/enums.h"
-#include "widgets/dialog.h"
+#include "base/dialog.h"
 #include "base/widget_factory.h"
 #include "ui_loader/ui_builder_default.h"
 #include "ui_loader/ui_loader_default.h"
@@ -45,6 +44,7 @@ static ret_t ui_builder_default_on_widget_start(ui_builder_t* b, const widget_de
   }
 
   b->widget = widget;
+  b->widget->loading = TRUE;
   if (b->root == NULL) {
     b->root = widget;
   }
@@ -62,12 +62,18 @@ static ret_t ui_builder_default_on_widget_prop(ui_builder_t* b, const char* name
 }
 
 static ret_t ui_builder_default_on_widget_prop_end(ui_builder_t* b) {
-  (void)b;
   return RET_OK;
 }
 
 static ret_t ui_builder_default_on_widget_end(ui_builder_t* b) {
-  b->widget = b->widget->parent;
+  if (b->widget != NULL) {
+    event_t e = event_init(EVT_WIDGET_LOAD, NULL);
+    widget_dispatch(b->widget, &e);
+
+    b->widget->loading = FALSE;
+    b->widget = b->widget->parent;
+  }
+
   return RET_OK;
 }
 
@@ -76,7 +82,7 @@ static ret_t ui_builder_default_on_end(ui_builder_t* b) {
     widget_t* widget = b->root;
 
     widget_invalidate_force(widget, NULL);
-    if (widget && widget->name == NULL) {
+    if (widget && (widget->name == NULL || widget->name[0] == 0)) {
       widget_set_name(widget, b->name);
     }
 

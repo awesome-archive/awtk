@@ -1,9 +1,9 @@
 /**
  * File:   demo1_app.c
  * Author: AWTK Develop Team
- * Brief:  basic class of all widget
+ * Brief:  basic demo
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,13 +22,13 @@
 #include "base/timer.h"
 #include "base/enums.h"
 #include "widgets/button.h"
-#include "widgets/dialog.h"
+#include "base/dialog.h"
 #include "widgets/image.h"
 #include "widgets/label.h"
 #include "tkc/mem.h"
 #include "tkc/utils.h"
 #include "tkc/utf8.h"
-#include "widgets/window.h"
+#include "base/window.h"
 #include "widgets/slider.h"
 #include "widgets/group_box.h"
 #include "widgets/check_button.h"
@@ -137,6 +137,7 @@ ret_t application_init() {
   progress_bar = progress_bar_create(win, 260, 80, 20, 118);
   widget_set_value(progress_bar, 40);
   progress_bar_set_vertical(progress_bar, TRUE);
+  timer_add(on_timer, progress_bar, 500);
 
   slider = slider_create(win, 230, 80, 20, 118);
   widget_set_value(slider, 40);
@@ -176,3 +177,10 @@ ret_t application_init() {
 
   return RET_OK;
 }
+
+ret_t application_exit() {
+  log_debug("application_exit\n");
+  return RET_OK;
+}
+
+#include "awtk_main.inc"

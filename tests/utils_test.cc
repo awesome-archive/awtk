@@ -213,9 +213,11 @@ TEST(Utils, xml_file_expand_read) {
   str_init(&s, 0);
 
   ASSERT_EQ(xml_file_expand_read("./tests/testdata/main.xml", &s), RET_OK);
+  str_replace(&s, "\r\n", "\n");
   ASSERT_EQ(string(s.str), "<window><button />\n<label />\n</window>\n");
 
   ASSERT_EQ(xml_file_expand_read("./tests/testdata/button.xml", &s), RET_OK);
+  str_replace(&s, "\r\n", "\n");
   ASSERT_EQ(string(s.str), "<button />\n");
 
   str_reset(&s);
@@ -305,4 +307,64 @@ TEST(Utils, tk_under_score_to_camel) {
   ASSERT_EQ(string(tk_under_score_to_camel("test_obj_get", name, sizeof(name) - 1)),
             string("testObjGet"));
   ASSERT_EQ(string(tk_under_score_to_camel("test_obj_get", name, 7)), string("testObj"));
+}
+
+TEST(Utils, strcmp) {
+  ASSERT_EQ(tk_str_cmp("abc", "abc") == 0, true);
+  ASSERT_NE(tk_str_cmp("abc", "Abc") == 0, true);
+  ASSERT_EQ(tk_str_icmp("abc", "abc") == 0, true);
+  ASSERT_EQ(tk_str_icmp("abc", "Abc") == 0, true);
+}
+
+TEST(Utils, tk_normalize_key_name) {
+  char fix_name[TK_NAME_LEN + 1];
+
+  tk_normalize_key_name("a", fix_name);
+  ASSERT_STREQ(fix_name, "a");
+
+  tk_normalize_key_name("A", fix_name);
+  ASSERT_STREQ(fix_name, "A");
+
+  tk_normalize_key_name("left", fix_name);
+  ASSERT_STREQ(fix_name, "LEFT");
+
+  tk_normalize_key_name("LEFT", fix_name);
+  ASSERT_STREQ(fix_name, "LEFT");
+}
+
+TEST(Utils, tk_str_toupper) {
+  char str[TK_NAME_LEN + 1];
+
+  tk_strcpy(str, "left");
+  tk_str_toupper(str);
+  ASSERT_STREQ(str, "LEFT");
+
+  tk_strcpy(str, "Left");
+  tk_str_toupper(str);
+  ASSERT_STREQ(str, "LEFT");
+}
+
+TEST(Utils, tk_str_tolower) {
+  char str[TK_NAME_LEN + 1];
+
+  tk_strcpy(str, "left");
+  tk_str_tolower(str);
+  ASSERT_STREQ(str, "left");
+
+  tk_strcpy(str, "Left");
+  tk_str_tolower(str);
+  ASSERT_STREQ(str, "left");
+}
+
+TEST(Utils, tk_wstr_count_c) {
+  ASSERT_EQ(tk_wstr_count_c(L"", 'a'), 0);
+  ASSERT_EQ(tk_wstr_count_c(L"a", 'a'), 1);
+  ASSERT_EQ(tk_wstr_count_c(L"abcaba", 'a'), 3);
+}
+
+TEST(Utils, tk_watoi_n) {
+  ASSERT_EQ(tk_watoi_n(L"1234", 1), 1);
+  ASSERT_EQ(tk_watoi_n(L"1234", 2), 12);
+  ASSERT_EQ(tk_watoi_n(L"1234", 3), 123);
+  ASSERT_EQ(tk_watoi_n(L"1234", 4), 1234);
 }

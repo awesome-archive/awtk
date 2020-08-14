@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  utils struct and utils functions.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -242,11 +242,13 @@ const char* tk_ftoa(char* str, int len, double value) {
 }
 
 char* tk_strcpy(char* dst, const char* src) {
+  return_value_if_fail(dst != NULL && src != NULL, NULL);
+
   return strcpy(dst, src);
 }
 
 char* tk_strncpy(char* dst, const char* src, size_t len) {
-  return_value_if_fail(dst != NULL && src != NULL, dst);
+  return_value_if_fail(dst != NULL && src != NULL, NULL);
 
   strncpy(dst, src, len);
   dst[len] = '\0';
@@ -293,7 +295,7 @@ uint16_t* tk_memset16(uint16_t* buff, uint16_t val, uint32_t size) {
 
   return_value_if_fail(buff != NULL, NULL);
 
-  while ((uint32_t)pb % 4 != 0 && size > 0) {
+  while ((size_t)pb % 4 != 0 && size > 0) {
     *p = val;
 
     p++;
@@ -338,7 +340,7 @@ uint32_t* tk_memset24(uint32_t* buff, void* val, uint32_t size) {
   uint8_t* pb = (uint8_t*)buff;
   uint8_t* src = (uint8_t*)val;
 
-  while ((uint32_t)pb % 4 != 0 && size > 0) {
+  while ((size_t)pb % 4 != 0 && size > 0) {
     pb[0] = src[0];
     pb[1] = src[1];
     pb[2] = src[2];
@@ -585,6 +587,22 @@ int32_t tk_str_cmp(const char* a, const char* b) {
   return strcmp(a, b);
 }
 
+int32_t tk_str_icmp(const char* a, const char* b) {
+  if (a == b) {
+    return 0;
+  }
+
+  if (a == NULL) {
+    return -1;
+  }
+
+  if (b == NULL) {
+    return 1;
+  }
+
+  return strcasecmp(a, b);
+}
+
 char* tk_str_copy(char* dst, const char* src) {
   if (src != NULL) {
     uint32_t size = strlen(src) + 1;
@@ -608,13 +626,20 @@ char* tk_str_copy(char* dst, const char* src) {
   return dst;
 }
 
-int tk_watoi(const wchar_t* str) {
+int tk_watoi_n(const wchar_t* str, uint32_t len) {
   char num[TK_NUM_MAX_LEN + 1] = {0};
   return_value_if_fail(str != NULL, 0);
 
-  utf8_from_utf16(str, num, TK_NUM_MAX_LEN);
+  memset(num, 0x00, sizeof(num));
+  tk_utf8_from_utf16_ex(str, len, num, TK_NUM_MAX_LEN);
 
   return tk_atoi(num);
+}
+
+int tk_watoi(const wchar_t* str) {
+  return_value_if_fail(str != NULL, 0);
+
+  return tk_watoi_n(str, wcslen(str));
 }
 
 bool_t tk_watob(const wchar_t* str) {
@@ -629,7 +654,7 @@ double tk_watof(const wchar_t* str) {
   char num[TK_NUM_MAX_LEN + 1] = {0};
   return_value_if_fail(str != NULL, 0);
 
-  utf8_from_utf16(str, num, TK_NUM_MAX_LEN);
+  tk_utf8_from_utf16(str, num, TK_NUM_MAX_LEN);
 
   return tk_atof(num);
 }
@@ -646,6 +671,10 @@ ret_t dummy_destroy(void* data) {
 
 int pointer_compare(const void* a, const void* b) {
   return ((const char*)a - (const char*)b);
+}
+
+int compare_always_equal(const void* a, const void* b) {
+  return 0;
 }
 
 ret_t tk_replace_locale(const char* name, char out[TK_NAME_LEN + 1], const char* locale) {
@@ -692,7 +721,7 @@ bool_t tk_is_valid_name(const char* name) {
 bool_t tk_str_start_with(const char* str, const char* prefix) {
   return_value_if_fail(str != NULL && prefix != NULL, FALSE);
 
-  return memcmp(str, prefix, strlen(prefix)) == 0;
+  return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
 const char* tk_under_score_to_camel(const char* name, char* out, uint32_t max_out_size) {
@@ -718,10 +747,88 @@ const char* tk_under_score_to_camel(const char* name, char* out, uint32_t max_ou
   return out;
 }
 
-int32_t tk_pointer_to_int(void* p) {
+int32_t tk_pointer_to_int(const void* p) {
   return (char*)p - (char*)(NULL);
 }
 
 void* tk_pointer_from_int(int32_t v) {
   return ((char*)NULL) + v;
+}
+
+char* tk_str_toupper(char* str) {
+  char* p = str;
+  return_value_if_fail(str != NULL, NULL);
+
+  while (*p) {
+    *p = toupper(*p);
+    p++;
+  }
+
+  return str;
+}
+
+char* tk_str_tolower(char* str) {
+  char* p = str;
+  return_value_if_fail(str != NULL, NULL);
+
+  while (*p) {
+    *p = tolower(*p);
+    p++;
+  }
+
+  return str;
+}
+
+const char* tk_normalize_key_name(const char* name, char fixed_name[TK_NAME_LEN + 1]) {
+  uint32_t len = 0;
+  return_value_if_fail(name != NULL && fixed_name != NULL, NULL);
+
+  len = strlen(name);
+  tk_strncpy(fixed_name, name, TK_NAME_LEN);
+
+  if (len > 1) {
+    tk_str_toupper(fixed_name);
+  }
+
+  return fixed_name;
+}
+
+uint32_t tk_strlen(const char* str) {
+  if (str == NULL || *str == '\0') {
+    return 0;
+  }
+
+  return strlen(str);
+}
+
+wchar_t* tk_wstr_dup_utf8(const char* str) {
+  int32_t len = 0;
+  int32_t size = 0;
+  wchar_t* wstr = NULL;
+  return_value_if_fail(str != NULL, NULL);
+
+  len = strlen(str) + 1;
+  size = len * sizeof(wchar_t);
+  wstr = TKMEM_ALLOC(size);
+  return_value_if_fail(wstr != NULL, NULL);
+  memset(wstr, 0x00, size);
+
+  tk_utf8_to_utf16(str, wstr, len);
+
+  return wstr;
+}
+
+uint32_t tk_wstr_count_c(const wchar_t* str, wchar_t c) {
+  uint32_t nr = 0;
+  const wchar_t* p = str;
+  return_value_if_fail(p != NULL, nr);
+
+  while (*p) {
+    if (*p == c) {
+      nr++;
+    }
+    p++;
+  }
+
+  return nr;
 }

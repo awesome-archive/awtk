@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  vector graphics canvas interface.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,6 +24,14 @@
 #include "tkc/color_parser.h"
 #include "tkc/mem.h"
 #include "tkc/utils.h"
+
+ret_t vgcanvas_set_assets_manager(vgcanvas_t* vg, assets_manager_t* assets_manager) {
+  return_value_if_fail(vg != NULL, RET_BAD_PARAMS);
+
+  vg->assets_manager = assets_manager;
+
+  return RET_OK;
+}
 
 ret_t vgcanvas_reset(vgcanvas_t* vg) {
   return_value_if_fail(vg != NULL && vg->vt->reset != NULL, RET_BAD_PARAMS);
@@ -86,6 +94,22 @@ ret_t vgcanvas_clip_rect(vgcanvas_t* vg, float_t x, float_t y, float_t w, float_
   return vg->vt->clip_rect(vg, x, y, w, h);
 }
 
+ret_t vgcanvas_intersect_clip_rect(vgcanvas_t* vg, float_t x, float_t y, float_t w, float_t h) {
+  ret_t ret = RET_OK;
+  return_value_if_fail(vg != NULL && vg->vt->intersect_clip_rect != NULL, RET_BAD_PARAMS);
+
+  fix_xywh(x, y, w, h);
+
+  ret = vg->vt->intersect_clip_rect(vg, &x, &y, &w, &h);
+
+  vg->clip_rect.x = x;
+  vg->clip_rect.y = y;
+  vg->clip_rect.w = w;
+  vg->clip_rect.h = h;
+
+  return ret;
+}
+
 ret_t vgcanvas_fill(vgcanvas_t* vg) {
   return_value_if_fail(vg != NULL && vg->vt->fill != NULL, RET_BAD_PARAMS);
 
@@ -146,6 +170,12 @@ ret_t vgcanvas_close_path(vgcanvas_t* vg) {
   return_value_if_fail(vg != NULL && vg->vt->close_path != NULL, RET_BAD_PARAMS);
 
   return vg->vt->close_path(vg);
+}
+
+ret_t vgcanvas_path_winding(vgcanvas_t* vg, bool_t dir) {
+  return_value_if_fail(vg != NULL && vg->vt->path_winding != NULL, RET_BAD_PARAMS);
+
+  return vg->vt->path_winding(vg, dir);
 }
 
 ret_t vgcanvas_transform(vgcanvas_t* vg, float_t a, float_t b, float_t c, float_t d, float_t e,
@@ -378,10 +408,10 @@ ret_t vgcanvas_end_frame(vgcanvas_t* vg) {
   return vg->vt->end_frame(vg);
 }
 
-ret_t vgcanvas_create_fbo(vgcanvas_t* vg, framebuffer_object_t* fbo) {
+ret_t vgcanvas_create_fbo(vgcanvas_t* vg, uint32_t w, uint32_t h, framebuffer_object_t* fbo) {
   return_value_if_fail(vg != NULL && vg->vt->create_fbo != NULL && fbo != NULL, RET_BAD_PARAMS);
 
-  return vg->vt->create_fbo(vg, fbo);
+  return vg->vt->create_fbo(vg, w, h, fbo);
 }
 
 ret_t vgcanvas_destroy_fbo(vgcanvas_t* vg, framebuffer_object_t* fbo) {
@@ -452,6 +482,15 @@ ret_t fbo_to_img(framebuffer_object_t* fbo, bitmap_t* img) {
   return RET_OK;
 }
 
+ret_t vgcanvas_fbo_to_bitmap(vgcanvas_t* vg, framebuffer_object_t* fbo, bitmap_t* img, rect_t* r) {
+  return_value_if_fail(vg != NULL && fbo != NULL && img != NULL, RET_BAD_PARAMS);
+  if (vg->vt != NULL && vg->vt->fbo_to_bitmap != NULL) {
+    return vg->vt->fbo_to_bitmap(vg, fbo, img, r);
+  }
+
+  return RET_NOT_IMPL;
+}
+
 wh_t vgcanvas_get_width(vgcanvas_t* vgcanvas) {
   return_value_if_fail(vgcanvas != NULL && vgcanvas->vt != NULL, 0);
 
@@ -470,4 +509,19 @@ wh_t vgcanvas_get_height(vgcanvas_t* vgcanvas) {
   } else {
     return vgcanvas->h;
   }
+}
+
+ret_t vgcanvas_get_text_metrics(vgcanvas_t* vg, float_t* ascent, float_t* descent,
+                                float_t* line_hight) {
+  return_value_if_fail(vg != NULL && vg->vt != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(vg->vt->get_text_metrics != NULL, RET_BAD_PARAMS);
+
+  return vg->vt->get_text_metrics(vg, ascent, descent, line_hight);
+}
+
+ret_t vgcanvas_clear_cache(vgcanvas_t* vg) {
+  return_value_if_fail(vg != NULL && vg->vt != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(vg->vt->clear_cache != NULL, RET_BAD_PARAMS);
+
+   return vg->vt->clear_cache(vg);
 }

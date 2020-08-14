@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  clip_board on SDL
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,10 +19,10 @@
  *
  */
 
-#ifdef WITH_SDL
-
 #include "tkc/mem.h"
 #include "tkc/str.h"
+
+#ifdef WITH_SDL
 #include "SDL_clipboard.h"
 #include "clip_board/clip_board_sdl.h"
 

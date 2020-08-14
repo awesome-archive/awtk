@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  single link list
  *
- * Copyright (c) 2019 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2019 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -146,6 +146,48 @@ ret_t slist_foreach(slist_t* slist, tk_visit_t visit, void* ctx) {
   }
 
   return RET_OK;
+}
+
+void* slist_tail_pop(slist_t* slist) {
+  void* data = NULL;
+  slist_node_t* iter = NULL;
+  slist_node_t* last_iter = NULL;
+  return_value_if_fail(slist != NULL, NULL);
+
+  iter = slist->first;
+  return_value_if_fail(iter != NULL, NULL);
+
+  if (iter->next == NULL) {
+    slist->first = NULL;
+  } else {
+    while (iter->next != NULL) {
+      last_iter = iter;
+      iter = iter->next;
+    }
+
+    last_iter->next = NULL;
+  }
+
+  data = iter->data;
+  TKMEM_FREE(iter);
+
+  return data;
+}
+
+void* slist_head_pop(slist_t* slist) {
+  void* data = NULL;
+  slist_node_t* iter = NULL;
+  return_value_if_fail(slist != NULL, NULL);
+
+  iter = slist->first;
+  return_value_if_fail(iter != NULL, NULL);
+  
+  slist->first = iter->next;
+
+  data = iter->data;
+  TKMEM_FREE(iter);
+
+  return data;
 }
 
 int32_t slist_size(slist_t* slist) {

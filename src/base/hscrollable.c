@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   hscrollable.c
  * Author: AWTK Develop Team
  * Brief:  hscrollable
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -25,22 +25,12 @@
 #include "base/hscrollable.h"
 #include "base/widget_vtable.h"
 
-#ifndef WITHOUT_WIDGET_ANIMATOR
+#ifndef WITHOUT_WIDGET_ANIMATORS
 #include "widget_animators/widget_animator_scroll.h"
-#endif /*WITHOUT_WIDGET_ANIMATOR*/
+#endif /*WITHOUT_WIDGET_ANIMATORS*/
 
 static widget_t* hscrollable_get_widget(hscrollable_t* hscrollable) {
   return hscrollable != NULL ? hscrollable->widget : NULL;
-}
-
-static ret_t hscrollable_invalidate_self(hscrollable_t* hscrollable) {
-  rect_t r;
-  widget_t* widget = hscrollable_get_widget(hscrollable);
-  return_value_if_fail(hscrollable != NULL && widget != NULL, RET_BAD_PARAMS);
-
-  widget->dirty = FALSE;
-  r = rect_init(widget->x, widget->y, widget->w, widget->h);
-  return widget_invalidate(widget->parent, &r);
 }
 
 static ret_t hscrollable_on_pointer_down(hscrollable_t* hscrollable, pointer_event_t* e) {
@@ -77,17 +67,17 @@ static ret_t hscrollable_on_pointer_move(hscrollable_t* hscrollable, pointer_eve
   return RET_OK;
 }
 
-#ifndef WITHOUT_WIDGET_ANIMATOR
+#ifndef WITHOUT_WIDGET_ANIMATORS
 static ret_t hscrollable_on_scroll_done(void* ctx, event_t* e) {
   hscrollable_t* hscrollable = (hscrollable_t*)(ctx);
   return_value_if_fail(hscrollable != NULL, RET_BAD_PARAMS);
 
   hscrollable->wa = NULL;
-  hscrollable_invalidate_self(hscrollable);
+  widget_invalidate_force(hscrollable_get_widget(hscrollable), NULL);
 
   return RET_REMOVE;
 }
-#endif /*WITHOUT_WIDGET_ANIMATOR*/
+#endif /*WITHOUT_WIDGET_ANIMATORS*/
 
 static ret_t hscrollable_fix_end_offset_default(hscrollable_t* hscrollable) {
   int32_t xoffset_end = 0;
@@ -119,7 +109,7 @@ ret_t hscrollable_scroll_to(hscrollable_t* hscrollable, int32_t xoffset_end, int
     return RET_OK;
   }
 
-#ifndef WITHOUT_WIDGET_ANIMATOR
+#ifndef WITHOUT_WIDGET_ANIMATORS
   hscrollable->xoffset_end = xoffset_end;
   xoffset_end = hscrollable->xoffset_end;
 
@@ -131,7 +121,7 @@ ret_t hscrollable_scroll_to(hscrollable_t* hscrollable, int32_t xoffset_end, int
   widget_animator_start(hscrollable->wa);
 #else
   hscrollable->xoffset = xoffset_end;
-#endif /*WITHOUT_WIDGET_ANIMATOR*/
+#endif /*WITHOUT_WIDGET_ANIMATORS*/
 
   return RET_OK;
 }
@@ -190,7 +180,7 @@ ret_t hscrollable_on_event(hscrollable_t* hscrollable, event_t* e) {
 
       if (hscrollable->dragged) {
         hscrollable_on_pointer_move(hscrollable, evt);
-        hscrollable_invalidate_self(hscrollable);
+        widget_invalidate_force(hscrollable_get_widget(hscrollable), NULL);
       } else {
         int32_t delta = evt->x - hscrollable->down.x;
 
@@ -214,32 +204,10 @@ ret_t hscrollable_on_event(hscrollable_t* hscrollable, event_t* e) {
   return ret;
 }
 
-ret_t hscrollable_invalidate(hscrollable_t* hscrollable, rect_t* r) {
-  rect_t r_self;
-  widget_t* widget = hscrollable_get_widget(hscrollable);
-  return_value_if_fail(hscrollable != NULL && widget != NULL, RET_BAD_PARAMS);
-
-  r_self = rect_init(0, 0, widget->w, widget->h);
-
-  r->x -= hscrollable->xoffset;
-  *r = rect_intersect(r, &r_self);
-
-  r->x += widget->x;
-  r->y += widget->y;
-  if (r->w <= 0 || r->h <= 0) {
-    return RET_OK;
-  }
-
-  if (widget->parent) {
-    widget_invalidate(widget->parent, r);
-  }
-
-  return RET_OK;
-}
-
 ret_t hscrollable_on_paint_children(hscrollable_t* hscrollable, canvas_t* c) {
   rect_t r_save;
   widget_t* widget = hscrollable_get_widget(hscrollable);
+  vgcanvas_t* vg = canvas_get_vgcanvas(c);
   return_value_if_fail(hscrollable != NULL && c != NULL && widget != NULL, RET_BAD_PARAMS);
 
   rect_t r = rect_init(c->ox, c->oy, widget->w, widget->h);
@@ -250,11 +218,22 @@ ret_t hscrollable_on_paint_children(hscrollable_t* hscrollable, canvas_t* c) {
   canvas_get_clip_rect(c, &r_save);
 
   r = rect_intersect(&r, &r_save);
+
+  if (vg != NULL) {
+    vgcanvas_save(vg);
+    vgcanvas_clip_rect(vg, (float_t)r.x, (float_t)r.y, (float_t)r.w, (float_t)r.h);
+  }
+
   canvas_set_clip_rect(c, &r);
   widget_on_paint_children_default(widget, c);
   canvas_set_clip_rect(c, &r_save);
   canvas_untranslate(c, xoffset, 0);
 
+  if (vg != NULL) {
+    vgcanvas_clip_rect(vg, (float_t)r_save.x, (float_t)r_save.y, (float_t)r_save.w,
+                       (float_t)r_save.h);
+    vgcanvas_restore(vg);
+  }
   return RET_OK;
 }
 
@@ -296,7 +275,7 @@ ret_t hscrollable_set_prop(hscrollable_t* hscrollable, const char* name, const v
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_XOFFSET)) {
     hscrollable->xoffset = value_int(v);
-    hscrollable_invalidate_self(hscrollable);
+    widget_invalidate_force(hscrollable_get_widget(hscrollable), NULL);
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_YOFFSET)) {
     return RET_OK;

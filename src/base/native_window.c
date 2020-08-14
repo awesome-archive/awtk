@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  native window
  *
- * Copyright (c) 2019 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2019 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,6 +19,7 @@
  *
  */
 
+#include "base/widget.h"
 #include "base/native_window.h"
 
 ret_t native_window_move(native_window_t* win, xy_t x, xy_t y, bool_t force) {
@@ -106,6 +107,27 @@ ret_t native_window_on_resized(native_window_t* win, wh_t w, wh_t h) {
   return RET_OK;
 }
 
+ret_t native_window_gl_make_current(native_window_t* win) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(win->vt->gl_make_current != NULL, RET_BAD_PARAMS);
+
+  return win->vt->gl_make_current(win);
+}
+
+ret_t native_window_swap_buffer(native_window_t* win) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(win->vt->swap_buffer != NULL, RET_BAD_PARAMS);
+
+  return win->vt->swap_buffer(win);
+}
+
+ret_t native_window_get_info(native_window_t* win, native_window_info_t* info) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(win->vt->get_info != NULL && info != NULL, RET_BAD_PARAMS);
+
+  return win->vt->get_info(win, info);
+}
+
 ret_t native_window_begin_frame(native_window_t* win, lcd_draw_mode_t mode) {
   return_value_if_fail(win != NULL, RET_BAD_PARAMS);
 
@@ -115,10 +137,12 @@ ret_t native_window_begin_frame(native_window_t* win, lcd_draw_mode_t mode) {
       canvas_t* c = native_window_get_canvas(win);
       canvas_begin_frame(c, &r, mode);
       win->dirty = TRUE;
+
+      return RET_OK;
     }
   }
 
-  return RET_OK;
+  return RET_FAIL;
 }
 
 ret_t native_window_paint(native_window_t* win, widget_t* widget) {
@@ -152,4 +176,84 @@ ret_t native_window_clear_dirty_rect(native_window_t* win) {
   win->dirty_rect = rect_init(win->rect.w, win->rect.h, 0, 0);
 
   return RET_OK;
+}
+
+ret_t native_window_preprocess_event(native_window_t* win, event_t* e) {
+  return_value_if_fail(win != NULL && win->vt != NULL && e != NULL, RET_BAD_PARAMS);
+
+  if (win->vt->preprocess_event != NULL) {
+    win->vt->preprocess_event(win, e);
+  }
+
+  return RET_OK;
+}
+
+ret_t native_window_minimize(native_window_t* win) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+
+  if (win->vt->minimize != NULL) {
+    return win->vt->minimize(win);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+ret_t native_window_maximize(native_window_t* win) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+
+  if (win->vt->maximize != NULL) {
+    return win->vt->maximize(win);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+ret_t native_window_restore(native_window_t* win) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+
+  if (win->vt->restore != NULL) {
+    return win->vt->restore(win);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+ret_t native_window_center(native_window_t* win) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+
+  if (win->vt->center != NULL) {
+    return win->vt->center(win);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+ret_t native_window_show_border(native_window_t* win, bool_t show) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+
+  if (win->vt->show_border != NULL) {
+    return win->vt->show_border(win, show);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+ret_t native_window_set_fullscreen(native_window_t* win, bool_t fullscreen) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+
+  if (win->vt->set_fullscreen != NULL) {
+    return win->vt->set_fullscreen(win, fullscreen);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+ret_t native_window_set_cursor(native_window_t* win, const char* name, bitmap_t* img) {
+  return_value_if_fail(win != NULL && win->vt != NULL, RET_BAD_PARAMS);
+
+  if (win->vt->set_cursor != NULL) {
+    return win->vt->set_cursor(win, name, img);
+  }
+
+  return RET_NOT_IMPL;
 }

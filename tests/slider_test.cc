@@ -61,7 +61,7 @@ TEST(Slider, event) {
 
   slider->dragging = TRUE;
   slider_set_value(w, 20);
-  ASSERT_EQ(s_log, "will_change;change;");
+  ASSERT_EQ(s_log, "");
   slider->dragging = FALSE;
 
   widget_destroy(w);
@@ -143,6 +143,17 @@ TEST(Slider, dec_step) {
   ASSERT_EQ(slider_dec(w), RET_OK);
   ASSERT_EQ(slider_dec(w), RET_OK);
   ASSERT_EQ(slider->value, 70);
+
+  widget_destroy(w);
+}
+
+TEST(Slider, inputing) {
+  widget_t* w = slider_create(NULL, 0, 0, 100, 100);
+  slider_t* slider = SLIDER(w);
+
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_INPUTING, TRUE), FALSE);
+  slider->dragging = TRUE;
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_INPUTING, TRUE), TRUE);
 
   widget_destroy(w);
 }

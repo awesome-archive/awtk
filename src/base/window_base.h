@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  window_base
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -30,7 +30,7 @@ BEGIN_C_DECLS
 /**
  * @class window_base_t
  * @parent widget_t
- * @annotation ["scriptable"]
+ * @annotation ["scriptable","widget"]
  * 窗口。
  *
  * 本类把窗口相关的公共行为进行抽象，放到一起方便重用。目前已知的具体实现如下图：
@@ -61,6 +61,13 @@ typedef struct _window_base_t {
   char* theme;
 
   /**
+   * @property {bool_t} disable_anim
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 禁用窗口动画。
+   */
+  bool_t disable_anim;
+
+  /**
    * @property {window_closable_t} closable
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 收到EVT_REQUEST_CLOSE_WINDOW是否自动关闭窗口。
@@ -77,7 +84,7 @@ typedef struct _window_base_t {
 
   /**
    * @property {char*} open_anim_hint
-   * @annotation ["set_prop","get_prop","readable","persitent","design"]
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 打开窗口动画的名称。
    * 请参考[窗口动画](https://github.com/zlgopen/awtk/blob/master/docs/window_animator.md)
    */
@@ -85,7 +92,7 @@ typedef struct _window_base_t {
 
   /**
    * @property {char*} close_anim_hint
-   * @annotation ["set_prop","get_prop","readable","persitent","design"]
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 关闭窗口动画的名称。
    * 请参考[窗口动画](https://github.com/zlgopen/awtk/blob/master/docs/window_animator.md)
    */
@@ -135,23 +142,154 @@ typedef struct _window_base_t {
    * 把资源管理器对象与窗口关联起来，是为了解决UI设计器与被设计的窗口需要从不同的位置加载资源资源的问题。
    */
 
+  /**
+   * @property {char*} move_focus_prev_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向前移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_prev_key;
+
+  /**
+   * @property {char*} move_focus_next_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向后移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_next_key;
+
+  /**
+   * @property {char*} move_focus_up_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向上移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_up_key;
+
+  /**
+   * @property {char*} move_focus_down_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向下移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_down_key;
+
+  /**
+   * @property {char*} move_focus_left_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向左移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_left_key;
+
+  /**
+   * @property {char*} move_focus_right_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向右移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_right_key;
+
   /*private*/
   const asset_info_t* res_theme;
   font_manager_t* font_manager;
-  int32_t move_focus_prev_key;
-  int32_t move_focus_next_key;
   native_window_t* native_window;
+  widget_t* save_focus_widget;
+  uint32_t grab_count_when_to_foreground;
 } window_base_t;
 
 /*for sub class*/
+
+/**
+ * @method window_base_on_destroy
+ * 窗口on_destroy函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_on_destroy(widget_t* widget);
+/**
+ * @method window_base_on_event
+ * 窗口on_event函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {event_t*} e event对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_on_event(widget_t* widget, event_t* e);
 ret_t window_base_invalidate(widget_t* widget, rect_t* r);
+
+/**
+ * @method window_base_on_paint_begin
+ * 窗口on_paint_begin函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_on_paint_begin(widget_t* widget, canvas_t* c);
+/**
+ * @method window_base_on_paint_end
+ * 窗口on_paint_end函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。1
+ */
 ret_t window_base_on_paint_end(widget_t* widget, canvas_t* c);
+
+/**
+ * @method window_base_on_paint_self
+ * 窗口on_paint_self函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_on_paint_self(widget_t* widget, canvas_t* c);
+
+/**
+ * @method window_base_get_prop
+ * 窗口get_prop函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。g
+ * @param {const char*} name 属性名。
+ * @param {value_t*} v value对象
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
 ret_t window_base_get_prop(widget_t* widget, const char* name, value_t* v);
+
+/**
+ * @method window_base_set_prop
+ * 窗口set_prop函数的缺省实现。
+ *
+ * @param {widget_t*} widget window_base对象。
+ * @param {const char*} name 属性名。
+ * @param {const value_t*} v value对象
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_set_prop(widget_t* widget, const char* name, const value_t* v);
+
+/**
+ * @method window_base_create
+ * 创建window base对象。
+ *
+ * @param {widget_t*} parent 父控件
+ * @param {const widget_vtable_t*} vt vtable对象。
+ * @param {xy_t} x x坐标
+ * @param {xy_t} y y坐标
+ * @param {wh_t} w 宽度
+ * @param {wh_t} h 高度
+ *
+ * @return {widget_t*} 窗口对象。
+ */
 widget_t* window_base_create(widget_t* parent, const widget_vtable_t* vt, xy_t x, xy_t y, wh_t w,
                              wh_t h);
 /**

@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   lcd.c
  * Author: AWTK Develop Team
  * Brief:  lcd interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,6 +20,7 @@
  */
 
 #include "base/lcd.h"
+#include "tkc/time_now.h"
 #include "base/system_info.h"
 
 ret_t lcd_begin_frame(lcd_t* lcd, rect_t* dirty_rect, lcd_draw_mode_t draw_mode) {
@@ -215,6 +216,7 @@ ret_t lcd_end_frame(lcd_t* lcd) {
   return_value_if_fail(lcd != NULL && lcd->end_frame != NULL, RET_BAD_PARAMS);
 
   return_value_if_fail(lcd->end_frame(lcd) == RET_OK, RET_FAIL);
+  lcd->last_update_time = time_now_ms();
 
   return RET_OK;
 }
@@ -266,9 +268,13 @@ ret_t lcd_destroy(lcd_t* lcd) {
 }
 
 vgcanvas_t* lcd_get_vgcanvas(lcd_t* lcd) {
-  return_value_if_fail(lcd != NULL && lcd->get_vgcanvas != NULL, NULL);
+  return_value_if_fail(lcd != NULL, NULL);
 
-  return lcd->get_vgcanvas(lcd);
+  if (lcd->get_vgcanvas != NULL) {
+    return lcd->get_vgcanvas(lcd);
+  }
+
+  return NULL;
 }
 
 ret_t lcd_take_snapshot(lcd_t* lcd, bitmap_t* img, bool_t auto_rotate) {
@@ -313,4 +319,10 @@ wh_t lcd_get_height(lcd_t* lcd) {
   } else {
     return lcd->h;
   }
+}
+
+ret_t lcd_get_text_metrics(lcd_t* lcd, float_t* ascent, float_t* descent, float_t* line_hight) {
+  return_value_if_fail(lcd != NULL && lcd->get_text_metrics != NULL, RET_BAD_PARAMS);
+
+  return lcd->get_text_metrics(lcd, ascent, descent, line_hight);
 }

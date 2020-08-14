@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  widget animator interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -73,6 +73,7 @@ ret_t widget_animator_time_elapse(widget_animator_t* animator, uint32_t delta_ti
       animator->delay = delay;
       return RET_OK;
     } else {
+      elapsed_time = -delay;
       animator->now = 0;
       animator->delay = 0;
       animator->start_time = 0;
@@ -108,7 +109,10 @@ ret_t widget_animator_time_elapse(widget_animator_t* animator, uint32_t delta_ti
       event_t e = event_init(EVT_ANIM_ONCE, animator);
       animator->start_time = animator->now;
       animator->reversed = !animator->reversed;
-      animator->yoyo_times--;
+
+      if (!animator->reversed) {
+        animator->yoyo_times--;
+      }
 
       if (animator->yoyo_times == 0 && animator->forever) {
         animator->yoyo_times = TK_UINT32_MAX;
@@ -140,11 +144,16 @@ ret_t widget_animator_start(widget_animator_t* animator) {
   }
 
   if (animator->state == ANIMATOR_DONE) {
-    return RET_FAIL;
+    animator->now = 0;
+    animator->start_time = 0;
+    animator->reversed = FALSE;
+    animator->yoyo_times = animator->total_yoyo_times;
+    animator->repeat_times = animator->total_repeat_times;
   }
 
   animator->state = ANIMATOR_RUNNING;
   emitter_dispatch(&(animator->emitter), &e);
+  widget_animator_update(animator, 0);
 
   return RET_OK;
 }
@@ -182,20 +191,24 @@ ret_t widget_animator_pause(widget_animator_t* animator) {
 }
 
 static ret_t widget_animator_update(widget_animator_t* animator, float_t percent) {
+  ret_t ret = RET_OK;
   return_value_if_fail(animator != NULL && animator->update != NULL, RET_BAD_PARAMS);
 
-  return animator->update(animator, percent);
+  widget_invalidate_force(animator->widget, NULL);
+  ret = animator->update(animator, percent);
+  widget_invalidate_force(animator->widget, NULL);
+
+  return ret;
 }
 
 ret_t widget_animator_set_yoyo(widget_animator_t* animator, uint32_t yoyo_times) {
   return_value_if_fail(animator != NULL && animator->update != NULL, RET_BAD_PARAMS);
 
   animator->repeat_times = 0;
-  animator->yoyo_times = yoyo_times;
+  animator->total_repeat_times = animator->repeat_times;
   animator->forever = yoyo_times == 0;
-  if (animator->forever) {
-    animator->yoyo_times = TK_UINT32_MAX;
-  }
+  animator->yoyo_times = animator->forever ? TK_UINT32_MAX : yoyo_times;
+  animator->total_yoyo_times = animator->yoyo_times;
 
   return RET_OK;
 }
@@ -212,11 +225,10 @@ ret_t widget_animator_set_repeat(widget_animator_t* animator, uint32_t repeat_ti
   return_value_if_fail(animator != NULL && animator->update != NULL, RET_BAD_PARAMS);
 
   animator->yoyo_times = 0;
-  animator->repeat_times = repeat_times;
+  animator->total_yoyo_times = animator->yoyo_times;
   animator->forever = repeat_times == 0;
-  if (animator->forever) {
-    animator->repeat_times = TK_UINT32_MAX;
-  }
+  animator->repeat_times = animator->forever ? TK_UINT32_MAX : repeat_times;
+  animator->total_repeat_times = animator->repeat_times;
 
   return RET_OK;
 }
@@ -258,8 +270,28 @@ ret_t widget_animator_set_destroy_when_done(widget_animator_t* animator, bool_t 
   return RET_OK;
 }
 
+static ret_t widget_animator_do_destroy(widget_animator_t* animator) {
+  TKMEM_FREE(animator->name);
+  emitter_deinit(&(animator->emitter));
+
+  if (animator->destroy != NULL) {
+    return animator->destroy(animator);
+  } else {
+    memset(animator, 0x00, sizeof(widget_animator_t));
+    TKMEM_FREE(animator);
+  }
+
+  return RET_OK;
+}
+
+static ret_t widget_animator_do_destroy_async(const idle_info_t* info) {
+  widget_animator_do_destroy((widget_animator_t*)(info->ctx));
+
+  return RET_REMOVE;
+}
+
 ret_t widget_animator_destroy(widget_animator_t* animator) {
-  return_value_if_fail(animator != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(animator != NULL && animator->update != NULL, RET_BAD_PARAMS);
 
   if (animator->widget_destroy_id != TK_INVALID_ID) {
     widget_off(animator->widget, animator->widget_destroy_id);
@@ -270,14 +302,8 @@ ret_t widget_animator_destroy(widget_animator_t* animator) {
     widget_animator_manager_remove(animator->widget_animator_manager, animator);
   }
 
-  TKMEM_FREE(animator->name);
-  emitter_deinit(&(animator->emitter));
-  if (animator->destroy != NULL) {
-    return animator->destroy(animator);
-  } else {
-    memset(animator, 0x00, sizeof(widget_animator_t));
-    TKMEM_FREE(animator);
-  }
+  animator->update = NULL;
+  idle_add(widget_animator_do_destroy_async, animator);
 
   return RET_OK;
 }

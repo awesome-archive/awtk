@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  ui_builder
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -101,7 +101,7 @@ ret_t ui_builder_on_widget_start(ui_builder_t* builder, const widget_desc_t* des
 ret_t ui_builder_on_widget_prop(ui_builder_t* builder, const char* name, const char* value);
 
 /**
- * @method ui_builder_on_widget_prop
+ * @method ui_builder_on_widget_prop_end
  * ui\_loader在解析到widget全部属性结束时，调用本函数进一步处理。
  *
  * @param {ui_builder_t*} builder builder对象。

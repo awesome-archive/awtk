@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  lcd interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -45,6 +45,8 @@ typedef ret_t (*lcd_begin_frame_t)(lcd_t* lcd, rect_t* dirty_rect);
 typedef ret_t (*lcd_set_clip_rect_t)(lcd_t* lcd, rect_t* rect);
 typedef ret_t (*lcd_get_clip_rect_t)(lcd_t* lcd, rect_t* rect);
 typedef ret_t (*lcd_resize_t)(lcd_t* lcd, wh_t w, wh_t h, uint32_t line_length);
+typedef ret_t (*lcd_get_text_metrics_t)(lcd_t* lcd, float_t* ascent, float_t* descent,
+                                        float_t* line_hight);
 
 typedef ret_t (*lcd_set_global_alpha_t)(lcd_t* lcd, uint8_t alpha);
 typedef ret_t (*lcd_set_text_color_t)(lcd_t* lcd, color_t color);
@@ -52,6 +54,9 @@ typedef ret_t (*lcd_set_stroke_color_t)(lcd_t* lcd, color_t color);
 typedef ret_t (*lcd_set_fill_color_t)(lcd_t* lcd, color_t color);
 typedef ret_t (*lcd_set_font_name_t)(lcd_t* lcd, const char* name);
 typedef ret_t (*lcd_set_font_size_t)(lcd_t* lcd, uint32_t size);
+
+typedef ret_t (*lcd_draw_image_repeat_t)(lcd_t* lcd, bitmap_t* img, rect_t* src_in, rect_t* dst_in,
+                                         wh_t dst_w, wh_t dst_h);
 
 typedef ret_t (*lcd_draw_vline_t)(lcd_t* lcd, xy_t x, xy_t y, wh_t h);
 typedef ret_t (*lcd_draw_hline_t)(lcd_t* lcd, xy_t x, xy_t y, wh_t w);
@@ -139,7 +144,12 @@ typedef enum _lcd_type_t {
    * @const LCD_VGCANVAS
    * 基于VGCANVS的LCD。仅在支持OpenGL时，用nanovg实现。
    */
-  LCD_VGCANVAS
+  LCD_VGCANVAS,
+  /**
+   * @const LCD_MONO
+   * 单色LCD。
+   */
+  LCD_MONO
 } lcd_type_t;
 
 /**
@@ -156,6 +166,7 @@ struct _lcd_t {
   lcd_set_fill_color_t set_fill_color;
   lcd_set_font_name_t set_font_name;
   lcd_set_font_size_t set_font_size;
+  lcd_get_text_metrics_t get_text_metrics;
   lcd_draw_vline_t draw_vline;
   lcd_draw_hline_t draw_hline;
   lcd_fill_rect_t fill_rect;
@@ -166,6 +177,7 @@ struct _lcd_t {
   lcd_draw_text_t draw_text;
   lcd_measure_text_t measure_text;
   lcd_draw_points_t draw_points;
+  lcd_draw_image_repeat_t draw_image_repeat;
   lcd_get_point_color_t get_point_color;
   lcd_swap_t swap; /*适用于double fb，可选*/
   lcd_get_width_t get_width;
@@ -256,9 +268,16 @@ struct _lcd_t {
    */
   bool_t support_dirty_rect;
 
+  /**
+   * @property {uint64_t} last_update_time
+   * @annotation ["readable"]
+   * last update time
+   */
+  uint64_t last_update_time;
+
+  /*private*/
   rect_t fps_rect;
   rect_t dirty_rect;
-
   void* impl_data;
 };
 
@@ -592,6 +611,26 @@ bool_t lcd_is_swappable(lcd_t* lcd);
  */
 ret_t lcd_end_frame(lcd_t* lcd);
 
+/**
+ * @method lcd_get_text_metrics
+ * 获取当前字体的度量信息。
+ *
+ * @param {lcd_t*} lcd lcd对象。
+ * @param {float_t*} ascent 用于返回ascent。
+ * @param {float_t*} descent 用于返回descent。
+ * @param {float_t*} line_hight 用于返回line height。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t lcd_get_text_metrics(lcd_t* lcd, float_t* ascent, float_t* descent, float_t* line_hight);
+
+/**
+ * @method lcd_destroy
+ * 销毁lcd对象。
+ * @param {lcd_t*} lcd lcd对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t lcd_destroy(lcd_t* lcd);
 
 END_C_DECLS

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  label
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -81,6 +81,7 @@ typedef struct _ctx_info_t {
   uint32_t x;
   int32_t y;
   uint32_t w;
+  uint32_t pre_line_w;
   canvas_t* c;
   widget_t* widget;
   uint32_t line_height;
@@ -169,6 +170,8 @@ static ret_t label_on_line_measure(void* ctx, uint32_t index, const wchar_t* str
   float_t text_w = canvas_measure_text(info->c, str, size);
 
   info->w = tk_max(info->w, text_w);
+  info->w = tk_max(info->w, info->pre_line_w);
+  info->pre_line_w = info->w;
   info->y += info->line_height;
 
   return RET_OK;
@@ -192,6 +195,7 @@ ret_t label_resize_to_content(widget_t* widget, uint32_t min_w, uint32_t max_w, 
 
   ctx.c = c;
   ctx.w = 0;
+  ctx.pre_line_w = 0;
   ctx.y = margin;
   ctx.x = margin;
   ctx.widget = widget;
@@ -199,7 +203,7 @@ ret_t label_resize_to_content(widget_t* widget, uint32_t min_w, uint32_t max_w, 
 
   line_breaker_break(widget->text.str, label_on_line_measure, &ctx);
 
-  w = ctx.w;
+  w = ctx.w + 10;
   w = tk_min(w, max_w);
   w = tk_max(w, min_w);
 
@@ -224,7 +228,12 @@ static ret_t label_get_prop(widget_t* widget, const char* name, value_t* v) {
   label_t* label = LABEL(widget);
   return_value_if_fail(label != NULL && name != NULL && v != NULL, RET_BAD_PARAMS);
 
-  if (tk_str_eq(name, WIDGET_PROP_LENGTH)) {
+  if (tk_str_eq(name, WIDGET_PROP_VALUE)) {
+    double d = 0;
+    wstr_to_float(&(widget->text), &d);
+    value_set_double(v, d);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_LENGTH)) {
     value_set_int(v, label->length);
     return RET_OK;
   }
@@ -235,17 +244,22 @@ static ret_t label_get_prop(widget_t* widget, const char* name, value_t* v) {
 static ret_t label_set_prop(widget_t* widget, const char* name, const value_t* v) {
   return_value_if_fail(widget != NULL && name != NULL && v != NULL, RET_BAD_PARAMS);
 
-  if (tk_str_eq(name, WIDGET_PROP_LENGTH)) {
+  if (tk_str_eq(name, WIDGET_PROP_VALUE)) {
+    return wstr_from_value(&(widget->text), v);
+  } else if (tk_str_eq(name, WIDGET_PROP_LENGTH)) {
     return label_set_length(widget, tk_roundi(value_float(v)));
   }
 
   return RET_NOT_FOUND;
 }
 
+static const char* const s_label_properties[] = {WIDGET_PROP_LENGTH, NULL};
+
 TK_DECL_VTABLE(label) = {.size = sizeof(label_t),
                          .type = WIDGET_TYPE_LABEL,
-                         .enable_pool = TRUE,
                          .parent = TK_PARENT_VTABLE(widget),
+                         .clone_properties = s_label_properties,
+                         .persistent_properties = s_label_properties,
                          .create = label_create,
                          .set_prop = label_set_prop,
                          .get_prop = label_get_prop,

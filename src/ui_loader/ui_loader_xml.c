@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   ui_loader_xml.h
  * Author: AWTK Develop Team
  * Brief:  default ui_loader
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -42,7 +42,7 @@ typedef struct _xml_builder_t {
 
   bool_t is_property;
   props_state_t properties_state;
-  char property_name[TK_NAME_LEN + 1];
+  char property_name[TK_NAME_LEN * 2 + 2];
 } xml_builder_t;
 
 /*FIXME: it is not a good solution to hardcode*/
@@ -81,10 +81,10 @@ static bool_t is_valid_self_layout(const char* x, const char* y, const char* w, 
 static void xml_loader_on_start_widget(XmlBuilder* thiz, const char* tag, const char** attrs) {
   char c = '\0';
   uint32_t i = 0;
-  const char* x = "0";
-  const char* y = "0";
-  const char* w = "0";
-  const char* h = "0";
+  const char* x = NULL;
+  const char* y = NULL;
+  const char* w = NULL;
+  const char* h = NULL;
   widget_desc_t desc;
   const char* key = NULL;
   const char* value = NULL;
@@ -113,10 +113,10 @@ static void xml_loader_on_start_widget(XmlBuilder* thiz, const char* tag, const 
   }
 
   strncpy(desc.type, tag, TK_NAME_LEN);
-  desc.layout.x = tk_atoi(x);
-  desc.layout.y = tk_atoi(y);
-  desc.layout.w = tk_atoi(w);
-  desc.layout.h = tk_atoi(h);
+  if (x != NULL) desc.layout.x = tk_atoi(x);
+  if (y != NULL) desc.layout.y = tk_atoi(y);
+  if (w != NULL) desc.layout.w = tk_atoi(w);
+  if (h != NULL) desc.layout.h = tk_atoi(h);
   ui_builder_on_widget_start(b->ui_builder, &desc);
 
   if (is_valid_self_layout(x, y, w, h)) {
@@ -214,7 +214,7 @@ static void xml_loader_on_start_property(XmlBuilder* thiz, const char* tag, cons
     const char* key = attrs[i];
     const char* value = attrs[i + 1];
     if (tk_str_eq(key, "name")) {
-      tk_strncpy(b->property_name, value, TK_NAME_LEN);
+      tk_strncpy(b->property_name, value, TK_NAME_LEN * 2 + 1);
       break;
     }
   }

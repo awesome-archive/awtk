@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  event_queue
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -44,6 +44,7 @@ typedef struct _add_timer_t {
 typedef union _event_queue_req_t {
   event_t event;
   key_event_t key_event;
+  wheel_event_t wheel_event;
   pointer_event_t pointer_event;
   add_idle_t add_idle;
   add_timer_t add_timer;

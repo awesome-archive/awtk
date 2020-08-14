@@ -102,6 +102,7 @@ class ApiGenerator {
   genFuncPrototype(p) {
     let result = '* 函数原型：\n\n';
     result += '```\n';
+    console.log(p.name)
     result += `${p.return.type} ${p.name} (`;
     p.params.forEach((iter, index) => {
       if(index) {
@@ -333,7 +334,7 @@ class ApiGenerator {
     let result = '';
 
     if (cls.consts && cls.consts.length) {
-      result += `### 常量\n`
+      result += `\n### 常量\n`
       result += genAnchor(cls.name, {
         name: 'consts'
       }) + '\n\n';
@@ -341,7 +342,11 @@ class ApiGenerator {
       result += '| -------- | ------- | \n';
 
       cls.consts.forEach(iter => {
-        result += `| ${encodeStr(iter.name)} | ${encodeStr(iter.desc.trim())} |\n`;
+        let desc = iter.desc.trim();
+        desc = desc.replace('\r\n', '');
+        desc = desc.replace('\n', '');
+        desc = desc.replace('\r', '');
+        result += `| ${encodeStr(iter.name)} | ${encodeStr(desc)} |\n`;
       });
     }
 
@@ -416,8 +421,8 @@ class ApiGenerator {
       if(isDesign(p)) {
         result += `| 可在IDE中设置 | ${toBool(isDesign(p))} |\n`;
       }
-      if(isGetProp(p)) {
-        result += `| 可在XML中设置 | ${toBool(isGetProp(p))} |\n`;
+      if(isSetProp(p)) {
+        result += `| 可在XML中设置 | ${toBool(isSetProp(p))} |\n`;
       }
       if(isGetProp(p)) {
         result += `| 可通过widget\\_get\\_prop读取 | ${toBool(isGetProp(p))} |\n`;

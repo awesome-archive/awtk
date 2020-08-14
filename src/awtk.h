@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  awtk entry.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,7 +26,6 @@
 #include "awtk_base.h"
 #include "awtk_global.h"
 #include "awtk_widgets.h"
-#include "blend/image_g2d.h"
 
 #ifndef WITHOUT_EXT_WIDGETS
 #include "awtk_ext_widgets.h"

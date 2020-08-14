@@ -71,8 +71,10 @@ void GenThemeData(uint8_t* buff, uint32_t size, uint32_t state_nr, uint32_t name
       g.AddStyle(s);
     }
   }
-
-  g.Output(buff, size);
+  wbuffer_t wbuffer;
+  wbuffer_t* b = wbuffer_init(&wbuffer, buff, size);
+  g.Output(b);
+  wbuffer_deinit(b);
 }
 
 TEST(Theme, saveLoad) {
@@ -116,9 +118,6 @@ TEST(Theme, basic) {
         char name[32];
         snprintf(name, sizeof(name), "%d", k);
         uint32_t v = style_data_get_int(style_data, name, 0);
-        ASSERT_EQ(v, k);
-        const char* str = style_data_get_str(style_data, name, NULL);
-        v = atoi(str);
         ASSERT_EQ(v, k);
       }
     }

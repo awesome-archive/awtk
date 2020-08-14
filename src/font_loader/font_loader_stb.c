@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   font_stb.h
  * Author: AWTK Develop Team
  * Brief:  stb truetype font loader
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,6 +21,7 @@
 
 #include "tkc/utils.h"
 #include "base/types_def.h"
+#include "font_loader/font_loader_stb.h"
 
 #ifdef WITH_STB_FONT
 
@@ -33,7 +34,6 @@
 
 #include "base/glyph_cache.h"
 #include "stb/stb_truetype.h"
-#include "font_loader/font_loader_stb.h"
 
 typedef struct _font_stb_t {
   font_t base;
@@ -41,7 +41,7 @@ typedef struct _font_stb_t {
   glyph_cache_t cache;
   int ascent;
   int descent;
-  int lineGap;
+  int line_gap;
 
 } font_stb_t;
 
@@ -50,12 +50,17 @@ static bool_t font_stb_match(font_t* f, const char* name, font_size_t font_size)
   return (name == NULL || strcmp(name, f->name) == 0);
 }
 
-static int32_t font_stb_get_baseline(font_t* f, font_size_t font_size) {
+static font_vmetrics_t font_stb_get_vmetrics(font_t* f, font_size_t font_size) {
+  font_vmetrics_t vmetrics;
   font_stb_t* font = (font_stb_t*)f;
   stbtt_fontinfo* sf = &(font->stb_font);
   float scale = stbtt_ScaleForPixelHeight(sf, font_size);
 
-  return scale * font->ascent;
+  vmetrics.ascent = scale * font->ascent;
+  vmetrics.descent = scale * font->descent;
+  vmetrics.line_gap = scale * font->line_gap;
+
+  return vmetrics;
 }
 
 static ret_t font_stb_get_glyph(font_t* f, wchar_t c, font_size_t font_size, glyph_t* g) {
@@ -80,20 +85,31 @@ static ret_t font_stb_get_glyph(font_t* f, wchar_t c, font_size_t font_size, gly
   g->y = y;
   g->w = w;
   g->h = h;
+  g->format = GLYPH_FMT_ALPHA;
   g->advance = advance * scale;
 
   if (g->data != NULL) {
     glyph_t* gg = glyph_clone(g);
     if (gg != NULL) {
-      glyph_cache_add(&(font->cache), c, font_size, gg);
-    } else {
+      if (glyph_cache_add(&(font->cache), c, font_size, gg) != RET_OK) {
+        TKMEM_FREE(gg);
+        gg = NULL;
+      }
+    }
+    if (gg == NULL) {
       STBTT_free(g->data, NULL);
       log_warn("out of memory\n");
       g->data = NULL;
     }
   }
 
-  return g->data != NULL ? RET_OK : RET_NOT_FOUND;
+  return g->data != NULL || c == ' ' ? RET_OK : RET_NOT_FOUND;
+}
+
+static ret_t font_stb_shrink_cache(font_t* f, uint32_t cache_nr) {
+  font_stb_t* font = (font_stb_t*)f;
+
+  return glyph_cache_shrink(&(font->cache), cache_nr);
 }
 
 static ret_t font_stb_destroy(font_t* f) {
@@ -125,13 +141,15 @@ font_t* font_stb_create(const char* name, const uint8_t* buff, uint32_t buff_siz
   f->base.match = font_stb_match;
   f->base.destroy = font_stb_destroy;
   f->base.get_glyph = font_stb_get_glyph;
-  f->base.get_baseline = font_stb_get_baseline;
+  f->base.get_vmetrics = font_stb_get_vmetrics;
+  f->base.shrink_cache = font_stb_shrink_cache;
+  f->base.desc = "truetype(stb)";
 
   tk_strncpy(f->base.name, name, TK_NAME_LEN);
 
   glyph_cache_init(&(f->cache), TK_GLYPH_CACHE_NR, destroy_glyph);
   stbtt_InitFont(&(f->stb_font), buff, stbtt_GetFontOffsetForIndex(buff, 0));
-  stbtt_GetFontVMetrics(&(f->stb_font), &(f->ascent), &(f->descent), &(f->lineGap));
+  stbtt_GetFontVMetrics(&(f->stb_font), &(f->ascent), &(f->descent), &(f->line_gap));
 
   return &(f->base);
 }
@@ -150,5 +168,12 @@ font_loader_t* font_loader_stb(void) {
 
   return &loader;
 }
+#else
+font_loader_t* font_loader_stb(void) {
+  return NULL;
+}
 
+font_t* font_stb_create(const char* name, const uint8_t* buff, uint32_t buff_size) {
+  return NULL;
+}
 #endif /*WITH_STB_FONT*/

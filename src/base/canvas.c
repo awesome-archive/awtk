@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   canvas.c
  * Author: AWTK Develop Team
  * Brief:  canvas provides basic drawings functions.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,10 +23,10 @@
 #include "tkc/mem.h"
 #include "tkc/utf8.h"
 #include "tkc/utils.h"
+#include "base/bidi.h"
 #include "base/canvas.h"
 #include "tkc/time_now.h"
 #include "tkc/color_parser.h"
-#include "base/wuxiaolin.inc"
 #include "base/system_info.h"
 
 #include "base/lcd_profile.h"
@@ -77,6 +77,11 @@ canvas_t* canvas_init(canvas_t* c, lcd_t* lcd, font_manager_t* font_manager) {
   c->lcd = lcd_profile_create(lcd);
   c->font_manager = font_manager;
 
+  c->clip_left = 0;
+  c->clip_top = 0;
+  c->clip_right = lcd->w - 1;
+  c->clip_bottom = lcd->h - 1;
+
   return c;
 }
 
@@ -96,6 +101,19 @@ ret_t canvas_set_font_manager(canvas_t* c, font_manager_t* font_manager) {
   return_value_if_fail(c != NULL && font_manager != NULL, RET_BAD_PARAMS);
 
   c->font_manager = font_manager;
+
+  return RET_OK;
+}
+
+ret_t canvas_set_assets_manager(canvas_t* c, assets_manager_t* assets_manager) {
+  vgcanvas_t* vgcanvas = NULL;
+  return_value_if_fail(c != NULL && assets_manager != NULL, RET_BAD_PARAMS);
+
+  vgcanvas = lcd_get_vgcanvas(c->lcd);
+  c->assets_manager = assets_manager;
+  if (vgcanvas != NULL) {
+    vgcanvas_set_assets_manager(vgcanvas, assets_manager);
+  }
 
   return RET_OK;
 }
@@ -120,21 +138,37 @@ ret_t canvas_set_clip_rect(canvas_t* c, const rect_t* r_in) {
   rect_t r_fix;
   rect_t* r = canvas_fix_rect(r_in, &r_fix);
 
+#ifdef FRAGMENT_FRAME_BUFFER_SIZE
+  rect_t dirty_r = rect_init(c->lcd->dirty_rect.x, c->lcd->dirty_rect.y, c->lcd->dirty_rect.w,
+                             c->lcd->dirty_rect.h);
+#endif
+
   return_value_if_fail(c != NULL, RET_BAD_PARAMS);
 
   lcd_w = lcd_get_width(c->lcd);
   lcd_h = lcd_get_height(c->lcd);
 
   if (r) {
+#ifdef FRAGMENT_FRAME_BUFFER_SIZE
+    r_fix = rect_intersect(&r_fix, &dirty_r);
+#endif
+
     c->clip_left = tk_max(0, r->x);
     c->clip_top = tk_max(0, r->y);
     c->clip_right = r->x + r->w - 1;
     c->clip_bottom = r->y + r->h - 1;
   } else {
+#ifdef FRAGMENT_FRAME_BUFFER_SIZE
+    c->clip_left = tk_max(0, dirty_r.x);
+    c->clip_top = tk_max(0, dirty_r.y);
+    c->clip_right = dirty_r.x + dirty_r.w - 1;
+    c->clip_bottom = dirty_r.y + dirty_r.h - 1;
+#else
     c->clip_left = 0;
     c->clip_top = 0;
     c->clip_right = lcd_w - 1;
     c->clip_bottom = lcd_h - 1;
+#endif
   }
 
   if (c->clip_left < 0) {
@@ -154,12 +188,21 @@ ret_t canvas_set_clip_rect(canvas_t* c, const rect_t* r_in) {
   }
 
   if (c->lcd->set_clip_rect != NULL) {
-    xy_t x = c->clip_left;
-    xy_t y = c->clip_top;
-    wh_t w = c->clip_right - c->clip_left + 1;
-    wh_t h = c->clip_bottom - c->clip_top + 1;
-    rect_t clip_r = rect_init(x, y, w, h);
-    lcd_set_clip_rect(c->lcd, &clip_r);
+    /* 在 opengl 的状态下让 vg 来处理裁剪区的大小直接交给 vg 来处理，去除 LCD 的大小限制的问题 */
+    if (r) {
+      rect_t clip_r = rect_init(tk_max(0, r->x), tk_max(0, r->y), tk_max(0, r->w), tk_max(0, r->h));
+      lcd_set_clip_rect(c->lcd, &clip_r);
+    } else {
+      rect_t clip_r = rect_init(0, 0, lcd_w, lcd_h);
+      lcd_set_clip_rect(c->lcd, &clip_r);
+    }
+#ifdef WITH_NANOVG_GPU
+    /* 把 canvas 的裁剪区设置为无限大，在 opengl 的状态下让 vg 来处理裁剪区的问题 */
+    c->clip_left = 0;
+    c->clip_top = 0;
+    c->clip_right = 0x7fffffff;
+    c->clip_bottom = 0x7fffffff;
+#endif
   }
 
   return RET_OK;
@@ -248,10 +291,10 @@ static float_t canvas_measure_text_default(canvas_t* c, const wchar_t* str, uint
 
   for (i = 0; i < nr; i++) {
     wchar_t chr = str[i];
-    if (chr == ' ') {
-      w += 4;
-    } else if (font_get_glyph(c->font, chr, c->font_size, &g) == RET_OK) {
+    if (font_get_glyph(c->font, chr, c->font_size, &g) == RET_OK) {
       w += g.advance + 1;
+    } else {
+      w += 4;
     }
   }
 
@@ -295,7 +338,11 @@ ret_t canvas_begin_frame(canvas_t* c, rect_t* dirty_rect, lcd_draw_mode_t draw_m
   c->oy = 0;
 
   canvas_set_global_alpha(c, 0xff);
-  ret = lcd_begin_frame(c->lcd, dirty_rect, draw_mode);
+  if (c->lcd->support_dirty_rect) {
+    ret = lcd_begin_frame(c->lcd, dirty_rect, draw_mode);
+  } else {
+    ret = lcd_begin_frame(c->lcd, NULL, draw_mode);
+  }
   if (c->lcd->support_dirty_rect && dirty_rect != NULL) {
     if (draw_mode == LCD_DRAW_NORMAL && c->lcd->type == LCD_VGCANVAS) {
       rect_t r = *dirty_rect;
@@ -493,7 +540,8 @@ static ret_t canvas_draw_glyph(canvas_t* c, glyph_t* g, xy_t x, xy_t y) {
   xy_t x2 = x + g->w - 1;
   xy_t y2 = y + g->h - 1;
 
-  if (x > c->clip_right || x2 < c->clip_left || y > c->clip_bottom || y2 < c->clip_top) {
+  if (g->data == NULL || x > c->clip_right || x2 < c->clip_left || y > c->clip_bottom ||
+      y2 < c->clip_top) {
     return RET_OK;
   }
 
@@ -513,10 +561,11 @@ static ret_t canvas_draw_glyph(canvas_t* c, glyph_t* g, xy_t x, xy_t y) {
 static ret_t canvas_draw_char_impl(canvas_t* c, wchar_t chr, xy_t x, xy_t y) {
   glyph_t g;
   font_size_t font_size = c->font_size;
+  font_vmetrics_t vmetrics = font_get_vmetrics(c->font, c->font_size);
   return_value_if_fail(font_get_glyph(c->font, chr, font_size, &g) == RET_OK, RET_BAD_PARAMS);
 
   x += g.x;
-  y += font_size + g.y;
+  y += vmetrics.ascent + g.y;
 
   return canvas_draw_glyph(c, &g, x, y);
 }
@@ -531,15 +580,14 @@ static ret_t canvas_draw_text_impl(canvas_t* c, const wchar_t* str, uint32_t nr,
   glyph_t g;
   uint32_t i = 0;
   xy_t left = x;
-  uint32_t start_time = time_now_ms();
+  uint64_t start_time = time_now_ms();
+  font_vmetrics_t vmetrics = font_get_vmetrics(c->font, c->font_size);
   font_size_t font_size = c->font_size;
+  int32_t baseline = vmetrics.ascent;
 
-  y -= font_size * 1 / 3;
   for (i = 0; i < nr; i++) {
     wchar_t chr = str[i];
-    if (chr == ' ') {
-      x += 4;
-    } else if (chr == '\r') {
+    if (chr == '\r') {
       if (str[i + 1] != '\n') {
         y += font_size;
         x = left;
@@ -549,7 +597,7 @@ static ret_t canvas_draw_text_impl(canvas_t* c, const wchar_t* str, uint32_t nr,
       x = left;
     } else if (font_get_glyph(c->font, chr, c->font_size, &g) == RET_OK) {
       xy_t xx = x + g.x;
-      xy_t yy = y + font_size + g.y;
+      xy_t yy = y + g.y + baseline;
 
       canvas_draw_glyph(c, &g, xx, yy);
       x += g.advance + 1;
@@ -617,7 +665,7 @@ static ret_t canvas_do_draw_image(canvas_t* c, bitmap_t* img, rect_t* s, rect_t*
   src.w = tk_min((img->w - src.x), src.w);
   src.h = tk_min((img->h - src.y), src.h);
 
-  if (src.w == 0 || src.h == 0 || dst.w == 0 || dst.h == 0) {
+  if (src.w <= 0 || src.h <= 0 || dst.w <= 0 || dst.h <= 0) {
     return RET_OK;
   }
 
@@ -639,50 +687,224 @@ ret_t canvas_draw_image(canvas_t* c, bitmap_t* img, rect_t* src, rect_t* dst_in)
   return canvas_do_draw_image(c, img, src, &d);
 }
 
+static ret_t canvas_draw_image_repeat_default(canvas_t* c, bitmap_t* img, rect_t* src_in,
+                                              rect_t* dst_in, wh_t dst_w, wh_t dst_h) {
+  rect_t s;
+  rect_t d;
+  xy_t x = 0;
+  xy_t y = 0;
+  wh_t sw = 0;
+  wh_t sh = 0;
+  wh_t dw = 0;
+  wh_t dh = 0;
+  rect_t r_fix;
+  rect_t* dst = canvas_fix_rect(dst_in, &r_fix);
+
+  s.x = src_in->x;
+  s.y = src_in->y;
+  s.w = src_in->w;
+  s.h = src_in->h;
+
+  d = *dst;
+
+  while (y < dst->h) {
+    dh = tk_min(dst_h, dst->h - y);
+    sh = tk_min(src_in->h, dst->h - y);
+    while (x < dst->w) {
+      dw = tk_min(dst_w, dst->w - x);
+      sw = tk_min(src_in->w, dst->w - x);
+
+      s.w = sw;
+      s.h = sh;
+
+      d.w = dw;
+      d.h = dh;
+      d.x = x + dst->x;
+      d.y = y + dst->y;
+      canvas_draw_image(c, img, &s, &d);
+      x += dw;
+    }
+    y += dh;
+    x = 0;
+  }
+  return RET_OK;
+}
+
+static ret_t canvas_draw_image_repeat_x_impl(canvas_t* c, bitmap_t* img, rect_t* src_in,
+                                             rect_t* dst_in) {
+  rect_t d;
+  return_value_if_fail(
+      c != NULL && c->lcd != NULL && img != NULL && src_in != NULL && dst_in != NULL,
+      RET_BAD_PARAMS);
+  d.x = dst_in->x + c->ox;
+  d.y = dst_in->y + c->oy;
+  d.w = dst_in->w;
+  d.h = dst_in->h;
+
+  if (c->lcd->draw_image_repeat != NULL &&
+      c->lcd->draw_image_repeat(c->lcd, img, src_in, &d, src_in->w, dst_in->h) == RET_OK) {
+    return RET_OK;
+  }
+
+  return canvas_draw_image_repeat_default(c, img, src_in, dst_in, src_in->w, dst_in->h);
+}
+
+static ret_t canvas_draw_image_repeat_y_impl(canvas_t* c, bitmap_t* img, rect_t* src_in,
+                                             rect_t* dst_in) {
+  rect_t d;
+  return_value_if_fail(
+      c != NULL && c->lcd != NULL && img != NULL && src_in != NULL && dst_in != NULL,
+      RET_BAD_PARAMS);
+  d.x = dst_in->x + c->ox;
+  d.y = dst_in->y + c->oy;
+  d.w = dst_in->w;
+  d.h = dst_in->h;
+
+  if (c->lcd->draw_image_repeat != NULL &&
+      c->lcd->draw_image_repeat(c->lcd, img, src_in, &d, dst_in->w, src_in->h) == RET_OK) {
+    return RET_OK;
+  }
+
+  return canvas_draw_image_repeat_default(c, img, src_in, dst_in, dst_in->w, src_in->h);
+}
+
+static ret_t canvas_draw_image_repeat_impl(canvas_t* c, bitmap_t* img, rect_t* src_in,
+                                           rect_t* dst_in) {
+  rect_t d;
+  return_value_if_fail(
+      c != NULL && c->lcd != NULL && img != NULL && src_in != NULL && dst_in != NULL,
+      RET_BAD_PARAMS);
+  d.x = dst_in->x + c->ox;
+  d.y = dst_in->y + c->oy;
+  d.w = dst_in->w;
+  d.h = dst_in->h;
+
+  if (c->lcd->draw_image_repeat != NULL &&
+      c->lcd->draw_image_repeat(c->lcd, img, src_in, &d, src_in->w, src_in->h) == RET_OK) {
+    return RET_OK;
+  }
+
+  return canvas_draw_image_repeat_default(c, img, src_in, dst_in, src_in->w, src_in->h);
+}
+
 ret_t canvas_draw_image_repeat(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
+  rect_t s;
+  rect_t r_fix;
+  rect_t* dst = canvas_fix_rect(dst_in, &r_fix);
+  return_value_if_fail(c != NULL && img != NULL && dst != NULL, RET_BAD_PARAMS);
+
+  s.x = 0;
+  s.y = 0;
+  s.w = img->w;
+  s.h = img->h;
+  canvas_draw_image_repeat_impl(c, img, &s, dst_in);
+
+  return RET_OK;
+}
+
+ret_t canvas_draw_image_repeat9(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
   rect_t s;
   rect_t d;
   xy_t x = 0;
   xy_t y = 0;
   wh_t w = 0;
   wh_t h = 0;
+  wh_t w_w = 0;
+  wh_t h_h = 0;
+  wh_t img_w = 0;
+  wh_t img_h = 0;
+  wh_t dst_w = 0;
+  wh_t dst_h = 0;
+  wh_t image_w = 0;
+  wh_t image_h = 0;
   rect_t r_fix;
   rect_t* dst = canvas_fix_rect(dst_in, &r_fix);
+
   return_value_if_fail(c != NULL && img != NULL && dst != NULL, RET_BAD_PARAMS);
 
-  s.x = 0;
-  s.y = 0;
-  s.w = img->w;
-  s.h = img->h;
+  img_w = img->w;
+  img_h = img->h;
+  dst_w = dst->w;
+  dst_h = dst->h;
 
-  d = *dst;
+  canvas_translate(c, dst->x, dst->y);
 
-  while (y < dst->h) {
-    h = tk_min(img->h, dst->h - y);
-    while (x < dst->w) {
-      w = tk_min(img->w, dst->w - x);
-      s.w = w;
-      s.h = h;
+  image_w = tk_min(img_w, dst_w);
+  image_h = tk_min(img_h, dst_h);
+  w = image_w >> 1;
+  h = image_h >> 1;
 
-      d.x = x + dst->x;
-      d.y = y + dst->y;
-      d.w = w;
-      d.h = h;
-      canvas_draw_image(c, img, &s, &d);
-      x += w;
-    }
-    y += h;
-    x = 0;
+  w_w = dst_w - w * 2;
+  h_h = dst_h - h * 2;
+
+  /*draw four corners*/
+  /*left top*/
+  s = rect_init(0, 0, w, h);
+  d = rect_init(0, 0, w, h);
+  canvas_draw_image(c, img, &s, &d);
+
+  /*right top*/
+  s = rect_init(img_w - w, 0, w, h);
+  d = rect_init(dst_w - w, 0, w, h);
+  canvas_draw_image(c, img, &s, &d);
+
+  /*left bottom*/
+  s = rect_init(0, img_h - h, w, h);
+  d = rect_init(0, dst_h - h, w, h);
+  canvas_draw_image(c, img, &s, &d);
+
+  /*right bottom*/
+  s = rect_init(img_w - w, img_h - h, w, h);
+  d = rect_init(dst_w - w, dst_h - h, w, h);
+  canvas_draw_image(c, img, &s, &d);
+
+  /*fill center*/
+  x = w;
+  if (w_w > 0) {
+    int32_t tmp = image_w - w - w;
+    s = rect_init(tmp > 0 ? w : w - 1, 0, tmp > 0 ? tmp : 2, h);
+    d = rect_init(w, 0, w_w, h);
+    canvas_draw_image_repeat_x_impl(c, img, &s, &d);
+
+    s = rect_init(tmp > 0 ? w : w - 1, img_h - h, tmp > 0 ? tmp : 2, h);
+    d = rect_init(w, h + h_h, w_w, h);
+    canvas_draw_image_repeat_x_impl(c, img, &s, &d);
   }
+
+  /*fill middle*/
+  y = h;
+  if (h_h > 0) {
+    int32_t tmp = image_h - h - h;
+    s = rect_init(0, tmp > 0 ? h : h - 1, w, tmp > 0 ? tmp : 2);
+    d = rect_init(0, h, w, h_h);
+    canvas_draw_image_repeat_y_impl(c, img, &s, &d);
+
+    s = rect_init(img_w - w, tmp > 0 ? h : h - 1, w, tmp > 0 ? tmp : 2);
+    d = rect_init(w + w_w, h, w, h_h);
+    canvas_draw_image_repeat_y_impl(c, img, &s, &d);
+  }
+
+  /*fill center/middle*/
+  if (w_w > 0 && h_h > 0) {
+    int32_t tmp_w = image_w - w - w;
+    int32_t tmp_h = image_h - h - h;
+    s = rect_init(tmp_w > 0 ? w : w - 1, tmp_h > 0 ? h : h - 1, tmp_w > 0 ? tmp_w : 2,
+                  tmp_h > 0 ? tmp_h : 2);
+    d = rect_init(w, h, w_w, h_h);
+    canvas_draw_image_repeat_impl(c, img, &s, &d);
+  }
+
+  canvas_untranslate(c, dst->x, dst->y);
+
+  (void)x;
+  (void)y;
+  (void)dst_w;
 
   return RET_OK;
 }
 
 ret_t canvas_draw_image_repeat_x(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
   rect_t s;
-  rect_t d;
-  xy_t x = 0;
-  wh_t w = 0;
   rect_t r_fix;
   rect_t* dst = canvas_fix_rect(dst_in, &r_fix);
   return_value_if_fail(c != NULL && img != NULL && dst != NULL, RET_BAD_PARAMS);
@@ -692,21 +914,140 @@ ret_t canvas_draw_image_repeat_x(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
   s.w = img->w;
   s.h = img->h;
 
-  d = *dst;
+  canvas_draw_image_repeat_x_impl(c, img, &s, dst_in);
 
-  while (x < dst->w) {
-    w = tk_min(img->w, dst->w - x);
-    s.w = w;
-    d.x = x;
-    d.w = w;
-    canvas_draw_image(c, img, &s, &d);
-    x += w;
+  return RET_OK;
+}
+
+ret_t canvas_draw_image_repeat3_x(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
+  rect_t s;
+  rect_t d;
+  xy_t y = 0;
+  wh_t w = 0;
+  wh_t w_w = 0;
+  wh_t img_w = 0;
+  wh_t img_h = 0;
+  wh_t dst_w = 0;
+  wh_t dst_h = 0;
+  wh_t image_w = 0;
+  int32_t tmp = 0;
+  rect_t r_fix;
+  rect_t* dst = canvas_fix_rect(dst_in, &r_fix);
+
+  return_value_if_fail(c != NULL && img != NULL && dst != NULL, RET_BAD_PARAMS);
+
+  img_w = img->w;
+  img_h = img->h;
+  dst_w = dst->w;
+  dst_h = dst->h;
+
+  canvas_translate(c, dst->x, dst->y);
+
+  image_w = tk_min(img_w, dst_w);
+  w = image_w >> 1;
+  w_w = dst_w - (w << 1);
+
+  y = (dst_h - img_h) >> 1;
+  if (y < 0) {
+    img_h += y;
+    y = 0;
   }
+
+  /*left*/
+  s = rect_init(0, 0, w, img_h);
+  d = rect_init(0, y, w, img_h);
+  canvas_draw_image(c, img, &s, &d);
+
+  /*center*/
+  tmp = image_w - w - w;
+  if (dst_w > img_w) {
+    s = rect_init(w, 0, tmp > 0 ? tmp : 2, img_h);
+    d = rect_init(w, y, w_w, img_h);
+    canvas_draw_image_repeat_x_impl(c, img, &s, &d);
+  }
+
+  /*right*/
+  s = rect_init(img_w - w, 0, w, img_h);
+  d = rect_init(dst_w - w, y, w, img_h);
+  canvas_draw_image(c, img, &s, &d);
+
+  canvas_untranslate(c, dst->x, dst->y);
 
   return RET_OK;
 }
 
 ret_t canvas_draw_image_repeat_y(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
+  rect_t s;
+  rect_t r_fix;
+  rect_t* dst = canvas_fix_rect(dst_in, &r_fix);
+  return_value_if_fail(c != NULL && img != NULL && dst != NULL, RET_BAD_PARAMS);
+
+  s.x = 0;
+  s.y = 0;
+  s.w = img->w;
+  s.h = img->h;
+  canvas_draw_image_repeat_y_impl(c, img, &s, dst_in);
+  return RET_OK;
+}
+
+ret_t canvas_draw_image_repeat3_y(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
+  rect_t s;
+  rect_t d;
+  xy_t x = 0;
+  wh_t h = 0;
+  wh_t h_h = 0;
+  wh_t img_w = 0;
+  wh_t img_h = 0;
+  wh_t dst_w = 0;
+  wh_t dst_h = 0;
+  wh_t image_h = 0;
+  int32_t tmp = 0;
+  rect_t r_fix;
+  rect_t* dst = canvas_fix_rect(dst_in, &r_fix);
+
+  return_value_if_fail(c != NULL && img != NULL && dst != NULL, RET_BAD_PARAMS);
+
+  img_w = img->w;
+  img_h = img->h;
+  dst_w = dst->w;
+  dst_h = dst->h;
+
+  canvas_translate(c, dst->x, dst->y);
+
+  image_h = tk_min(img_h, dst_h);
+  h = image_h >> 1;
+  h_h = dst_h - (h << 1);
+
+  x = (dst->w - img->w) >> 1;
+  if (x < 0) {
+    img_w += x;
+    x = 0;
+  }
+  /*top*/
+  s = rect_init(0, 0, img_w, h);
+  d = rect_init(x, 0, img_w, h);
+  canvas_draw_image(c, img, &s, &d);
+
+  /*middle*/
+  tmp = image_h - h - h;
+  if (dst_h > img_h) {
+    s = rect_init(0, tmp > 0 ? h : h - 1, img_w, tmp > 0 ? tmp : 2);
+    d = rect_init(x, h, img_w, h_h);
+    canvas_draw_image_repeat_y_impl(c, img, &s, &d);
+  }
+
+  /*bottom*/
+  s = rect_init(0, img_h - h, img_w, h);
+  d = rect_init(x, dst_h - h, img_w, h);
+  canvas_draw_image(c, img, &s, &d);
+
+  canvas_untranslate(c, dst->x, dst->y);
+  (void)dst_w;
+
+  return RET_OK;
+}
+
+ret_t canvas_draw_image_repeat_y_inverse(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
   rect_t s;
   rect_t d;
   xy_t y = 0;
@@ -725,10 +1066,17 @@ ret_t canvas_draw_image_repeat_y(canvas_t* c, bitmap_t* img, rect_t* dst_in) {
   while (y < dst->h) {
     h = tk_min(img->h, dst->h - y);
     s.h = h;
-    d.y = y;
     d.h = h;
-    canvas_draw_image(c, img, &s, &d);
     y += h;
+    d.y = dst->y + (dst->h - y);
+
+    if (s.h < img->h) {
+      s.y = img->h - s.h;
+      canvas_draw_image(c, img, &s, &d);
+    } else {
+      s.y = 0;
+      canvas_draw_image(c, img, &s, &d);
+    }
   }
 
   return RET_OK;
@@ -1178,6 +1526,8 @@ ret_t canvas_draw_image_ex(canvas_t* c, bitmap_t* img, image_draw_type_t draw_ty
       return canvas_draw_image_repeat_x(c, img, dst);
     case IMAGE_DRAW_REPEAT_Y:
       return canvas_draw_image_repeat_y(c, img, dst);
+    case IMAGE_DRAW_REPEAT_Y_INVERSE:
+      return canvas_draw_image_repeat_y_inverse(c, img, dst);
     case IMAGE_DRAW_PATCH9:
       return canvas_draw_image_patch9(c, img, dst);
     case IMAGE_DRAW_PATCH3_X:
@@ -1188,6 +1538,12 @@ ret_t canvas_draw_image_ex(canvas_t* c, bitmap_t* img, image_draw_type_t draw_ty
       return canvas_draw_image_patch3_x_scale_y(c, img, dst);
     case IMAGE_DRAW_PATCH3_Y_SCALE_X:
       return canvas_draw_image_patch3_y_scale_x(c, img, dst);
+    case IMAGE_DRAW_REPEAT9:
+      return canvas_draw_image_repeat9(c, img, dst);
+    case IMAGE_DRAW_REPEAT3_X:
+      return canvas_draw_image_repeat3_x(c, img, dst);
+    case IMAGE_DRAW_REPEAT3_Y:
+      return canvas_draw_image_repeat3_y(c, img, dst);
     default:
       return canvas_draw_image_center(c, img, dst);
   }
@@ -1306,7 +1662,7 @@ static ret_t canvas_draw_fps(canvas_t* c) {
     lcd->fps_rect = r;
     tk_snprintf(fps, sizeof(fps), "%dfps", (int)(c->fps));
 
-    utf8_to_utf16(fps, wfps, strlen(fps) + 1);
+    tk_utf8_to_utf16(fps, wfps, strlen(fps) + 1);
     canvas_fill_rect(c, r.x, r.y, r.w, r.h);
     canvas_draw_text(c, wfps, wcslen(wfps), r.x + 8, r.y + 8);
   } else {
@@ -1317,18 +1673,22 @@ static ret_t canvas_draw_fps(canvas_t* c) {
   return RET_OK;
 }
 
+float_t canvas_get_font_height(canvas_t* c) {
+  font_vmetrics_t vmetrics;
+  return_value_if_fail(c != NULL && c->font_size > 0, 0);
+  vmetrics = font_get_vmetrics(c->font, c->font_size);
+
+  return vmetrics.ascent - vmetrics.descent;
+}
+
 ret_t canvas_draw_text_in_rect(canvas_t* c, const wchar_t* str, uint32_t nr, const rect_t* r_in) {
   int x = 0;
   int y = 0;
-  int32_t text_w = 0;
-  int32_t baseline = 0;
-  int32_t font_size = 0;
   rect_t r_fix;
+  int32_t text_w = 0;
+  int32_t height = canvas_get_font_height(c);
   rect_t* r = canvas_fix_rect(r_in, &r_fix);
   return_value_if_fail(c != NULL && str != NULL && r != NULL, RET_BAD_PARAMS);
-
-  font_size = c->font_size;
-  baseline = font_get_baseline(c->font, font_size);
 
   text_w = canvas_measure_text(c, str, nr);
 
@@ -1337,10 +1697,10 @@ ret_t canvas_draw_text_in_rect(canvas_t* c, const wchar_t* str, uint32_t nr, con
       y = r->y;
       break;
     case ALIGN_V_BOTTOM:
-      y = r->y + (r->h - baseline);
+      y = r->y + (r->h - height);
       break;
     default:
-      y = r->y + ((r->h - baseline) >> 1);
+      y = r->y + ((r->h - height) >> 1);
       break;
   }
 
@@ -1357,6 +1717,58 @@ ret_t canvas_draw_text_in_rect(canvas_t* c, const wchar_t* str, uint32_t nr, con
   }
 
   return canvas_draw_text(c, str, nr, x, y);
+}
+
+#define STR_ELLIPSES L"..."
+
+static ret_t canvas_draw_text_in_rect_ellipses(canvas_t* c, const wchar_t* str, uint32_t nr,
+                                               const rect_t* r_in, bidi_type_t type) {
+  uint32_t i = 0;
+  uint32_t x = 0;
+  rect_t r = *r_in;
+  float_t text_w = 0;
+  float_t ellipses_w = canvas_measure_text(c, STR_ELLIPSES, wcslen(STR_ELLIPSES));
+
+  for (i = 0; i < nr; i++) {
+    float_t char_w = canvas_measure_text(c, str + i, 1);
+    if ((text_w + char_w + ellipses_w) >= r.w) {
+      break;
+    }
+
+    text_w += char_w;
+  }
+
+  r.w = text_w;
+  canvas_draw_text_in_rect(c, str, i, &r);
+  r.x = text_w;
+  r.w = ellipses_w;
+  canvas_draw_text_in_rect(c, STR_ELLIPSES, wcslen(STR_ELLIPSES), &r);
+
+  return RET_OK;
+}
+
+ret_t canvas_draw_text_bidi_in_rect(canvas_t* c, const wchar_t* str, uint32_t nr,
+                                    const rect_t* r_in, const char* bidi_type, bool_t ellipses) {
+  bidi_t b;
+  ret_t ret = RET_FAIL;
+  float_t text_w = canvas_measure_text(c, str, nr);
+  return_value_if_fail(c != NULL && str != NULL && r_in != NULL, RET_BAD_PARAMS);
+
+  bidi_init(&b, FALSE, FALSE, bidi_type_from_name(bidi_type));
+  if (bidi_log2vis(&b, str, nr) == RET_OK) {
+    float_t text_w = canvas_measure_text(c, b.vis_str, b.vis_str_size);
+    if (ellipses && text_w > r_in->w) {
+      ret = canvas_draw_text_in_rect_ellipses(c, b.vis_str, b.vis_str_size, r_in, b.resolved_type);
+    } else {
+      ret = canvas_draw_text_in_rect(c, b.vis_str, b.vis_str_size, r_in);
+    }
+  } else {
+    assert(!"log2vis failed!");
+  }
+
+  bidi_deinit(&b);
+
+  return ret;
 }
 
 ret_t canvas_draw_utf8_in_rect(canvas_t* c, const char* str, const rect_t* r) {
@@ -1439,4 +1851,37 @@ ret_t canvas_reset(canvas_t* c) {
   memset(c, 0x00, sizeof(canvas_t));
 
   return RET_OK;
+}
+
+ret_t canvas_get_text_metrics(canvas_t* c, float_t* ascent, float_t* descent, float_t* line_hight) {
+  return_value_if_fail(c != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(ascent != NULL && descent != NULL && line_hight != NULL, RET_BAD_PARAMS);
+
+  if (c->lcd != NULL && c->lcd->get_text_metrics != NULL) {
+    return c->lcd->get_text_metrics(c->lcd, ascent, descent, line_hight);
+  } else if (c->font != NULL) {
+    font_vmetrics_t vmetrics = font_get_vmetrics(c->font, c->font_size);
+
+    *ascent = vmetrics.ascent;
+    *descent = vmetrics.descent;
+    *line_hight = vmetrics.line_gap + vmetrics.ascent + vmetrics.descent;
+    return RET_OK;
+  } else {
+    *ascent = 0;
+    *descent = 0;
+    *line_hight = 0;
+    return RET_FAIL;
+  }
+}
+
+#include "ffr_draw_rounded_rect.inc"
+
+ret_t canvas_fill_rounded_rect(canvas_t* c, rect_t* r, rect_t* bg_r, color_t* color,
+                               uint32_t radius) {
+  return widget_draw_fill_rounded_rect_ex(c, r, bg_r, color, radius);
+}
+
+ret_t canvas_stroke_rounded_rect(canvas_t* c, rect_t* r, rect_t* bg_r, color_t* color,
+                                 uint32_t radius, uint32_t border_width) {
+  return widget_draw_stroke_rounded_rect_ex(c, r, bg_r, color, radius, border_width);
 }

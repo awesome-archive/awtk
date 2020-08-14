@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  rich_text_render_node
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is dirich_text_render_nodeibuted in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -44,6 +44,8 @@ typedef struct _rich_text_render_node_t {
   wchar_t* text;
   /*文本节点的文本的长度*/
   uint16_t size;
+  /*该行剩余空间水平对齐使用*/
+  int16_t align_h_w;
 
   /*该结点总共需要承担的多余空间*/
   uint16_t spacing;

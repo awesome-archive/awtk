@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  string
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -39,6 +39,7 @@ BEGIN_C_DECLS
  *
  *  str_append(&s, "abc");
  *  str_append(&s, "123");
+ *  log_debug("%s\n", s.str);
  *
  *  str_reset(&s);
  * ```
@@ -140,6 +141,28 @@ ret_t str_set_with_len(str_t* str, const char* text, uint32_t len);
 ret_t str_append(str_t* str, const char* text);
 
 /**
+ * @method str_append_more
+ * 追加多个字符串。以NULL结束。
+ *
+ * 示例：
+ *
+ * ```c
+ *  str_t s;
+ *  str_init(&s, 0);
+ *
+ *  str_append_more(&s, "abc", "123", NULL);
+ *  log_debug("%s\n", s.str);
+ *
+ *  str_reset(&s);
+ * ```
+ * @param {str_t*} str str对象。
+ * @param {char*} text 要追加的字符串。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_append_more(str_t* str, const char* text, ...);
+
+/**
  * @method str_append_with_len
  * 追加字符串。
  * @param {str_t*} str str对象。
@@ -193,6 +216,81 @@ ret_t str_remove(str_t* str, uint32_t offset, uint32_t len);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t str_append_char(str_t* str, char c);
+
+/**
+ * @method str_append_int
+ * 追加一个整数。
+ * @param {str_t*} str str对象。
+ * @param {int32_t} value 要追加的整数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_append_int(str_t* str, int32_t value);
+
+/**
+ * @method str_append_double
+ * 追加一个浮点数。
+ * @param {str_t*} str str对象。
+ * @param {const char*} format 格式。
+ * @param {double} value 要追加的浮点数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_append_double(str_t* str, const char* format, double value);
+
+/**
+ * @method str_append_json_str
+ * 追加一个字符串，字符串前后加英文双引号，字符串本身的双引号被转义为\"。
+ * @param {str_t*} str str对象。
+ * @param {const char*} json_str 待追加的字符串。 
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_append_json_str(str_t* str, const char* json_str);
+
+/**
+ * @method str_append_json_int_pair
+ * 追加int格式的json键值对。
+ * @param {str_t*} str str对象。
+ * @param {const char*} key 键。 
+ * @param {int32_t} value 值。 
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_append_json_int_pair(str_t* str, const char* key, int32_t value);
+
+/**
+ * @method str_append_json_str_pair
+ * 追加字符串格式的json键值对。
+ * @param {str_t*} str str对象。
+ * @param {const char*} key 键。 
+ * @param {const char*} value 值。 
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_append_json_str_pair(str_t* str, const char* key, const char* value);
+
+/**
+ * @method str_append_json_double_pair
+ * 追加doube格式的json键值对。
+ * @param {str_t*} str str对象。
+ * @param {const char*} key 键。 
+ * @param {double} value 值。 
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_append_json_double_pair(str_t* str, const char* key, double value);
+
+/**
+ * @method str_append_json_bool_pair
+ * 追加bool格式的json键值对。
+ * @param {str_t*} str str对象。
+ * @param {const char*} key 键。 
+ * @param {bool_t} value 值。 
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_append_json_bool_pair(str_t* str, const char* key, bool_t value);
 
 /**
  * @method str_pop
@@ -267,11 +365,22 @@ ret_t str_from_value(str_t* str, const value_t* v);
  * @method str_from_wstr
  * 用value初始化字符串。
  * @param {str_t*} str str对象。
- * @param {wchar_t*} wstr wstr。
+ * @param {wchar_t*} wstr Unicode字符串。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t str_from_wstr(str_t* str, const wchar_t* wstr);
+
+/**
+ * @method str_from_wstr_with_len
+ * 用value初始化字符串。
+ * @param {str_t*} str str对象。
+ * @param {wchar_t*} wstr Unicode字符串
+ * @param {uint32_t} len Unicode字符串的长度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t str_from_wstr_with_len(str_t* str, const wchar_t* wstr, uint32_t len);
 
 /**
  * @method str_to_int

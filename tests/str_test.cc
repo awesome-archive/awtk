@@ -87,10 +87,10 @@ TEST(Str, decode_xml_entity) {
   ASSERT_EQ(str_decode_xml_entity(s, "a&lt;b&gt;c"), RET_OK);
   ASSERT_EQ(str_eq(s, "a<b>c"), TRUE);
 
-  ASSERT_EQ(str_decode_xml_entity(s, "&quota;a&lt;b&gt;c&quota;"), RET_OK);
+  ASSERT_EQ(str_decode_xml_entity(s, "&quot;a&lt;b&gt;c&quot;"), RET_OK);
   ASSERT_EQ(str_eq(s, "\"a<b>c\""), TRUE);
 
-  ASSERT_EQ(str_decode_xml_entity(s, "&quota;a&lt;b&gt;c&quota;&amp;&amp;"), RET_OK);
+  ASSERT_EQ(str_decode_xml_entity(s, "&quot;a&lt;b&gt;c&quot;&amp;&amp;"), RET_OK);
   ASSERT_EQ(str_eq(s, "\"a<b>c\"&&"), TRUE);
 
   str_reset(s);
@@ -173,6 +173,10 @@ TEST(Str, unescap) {
   str_t str;
   str_t* s = str_init(&str, 0);
 
+  ASSERT_EQ(str_set(s, "\\"), RET_OK);
+  ASSERT_EQ(str_unescape(s), RET_OK);
+  ASSERT_EQ(string(s->str), "\\");
+
   ASSERT_EQ(str_set(s, "abc"), RET_OK);
   ASSERT_EQ(str_unescape(s), RET_OK);
   ASSERT_EQ(string(s->str), "abc");
@@ -251,5 +255,66 @@ TEST(Str, expand_vars) {
   ASSERT_STREQ(s->str, "123456");
 
   object_unref(vars);
+  str_reset(s);
+}
+
+TEST(Str, from_wstr) {
+  str_t str;
+  str_t* s = NULL;
+  s = str_init(&str, 0);
+
+  ASSERT_EQ(s->size, 0);
+  str_from_wstr(s, L"123456");
+  ASSERT_STREQ(s->str, "123456");
+
+  str_from_wstr_with_len(s, L"123456", 3);
+  ASSERT_STREQ(s->str, "123");
+
+  str_from_wstr_with_len(s, L"123456", 0);
+  ASSERT_STREQ(s->str, "");
+
+  str_reset(s);
+}
+
+TEST(Str, json) {
+  str_t str;
+  str_t* s = NULL;
+  s = str_init(&str, 100);
+
+  ASSERT_EQ(str_append_char(&str, '{'), RET_OK);
+  ASSERT_EQ(str_append_json_str_pair(&str, "name", "zhangshan"), RET_OK);
+  ASSERT_EQ(str_append_char(&str, ','), RET_OK);
+
+  ASSERT_EQ(str_append_json_int_pair(&str, "age", 100), RET_OK);
+  ASSERT_EQ(str_append_char(&str, ','), RET_OK);
+
+  ASSERT_EQ(str_append_json_double_pair(&str, "weight", 60.5), RET_OK);
+  ASSERT_EQ(str_append_char(&str, ','), RET_OK);
+
+  ASSERT_EQ(str_append_json_bool_pair(&str, "gender", TRUE), RET_OK);
+  ASSERT_EQ(str_append_char(&str, '}'), RET_OK);
+
+  ASSERT_STREQ(str.str, "{\"name\":\"zhangshan\",\"age\":100,\"weight\":60.5000,\"gender\":true}");
+
+  str_reset(s);
+}
+
+TEST(Str, append_more1) {
+  str_t str;
+  str_t* s = NULL;
+  s = str_init(&str, 100);
+  ASSERT_EQ(str_append_more(s, "123", NULL), RET_OK);
+  ASSERT_STREQ(s->str, "123");
+
+  str_reset(s);
+}
+
+TEST(Str, append_more2) {
+  str_t str;
+  str_t* s = NULL;
+  s = str_init(&str, 100);
+  ASSERT_EQ(str_append_more(s, "123", "abc", NULL), RET_OK);
+  ASSERT_STREQ(s->str, "123abc");
+
   str_reset(s);
 }

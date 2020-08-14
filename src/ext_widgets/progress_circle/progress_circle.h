@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  progress_circle
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -41,7 +41,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [progress_circle.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/progress_circle.xml)
+ * [progress_circle.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/progress_circle.xml)
  *
  * 在c代码中使用函数progress\_circle\_create创建进度圆环控件。如：
  *
@@ -65,7 +65,7 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme
- * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L467)
+ * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/styles/default.xml#L467)
  *
  */
 typedef struct _progress_circle_t {
@@ -105,6 +105,13 @@ typedef struct _progress_circle_t {
    * 单元(缺省无)。
    */
   char* unit;
+
+  /**
+   * @property {char*} line_cap
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 线帽类型(round:圆头，square:方头)。
+   */
+  char* line_cap;
 
   /**
    * @property {bool_t} counter_clock_wise
@@ -218,6 +225,18 @@ ret_t progress_circle_set_start_angle(widget_t* widget, int32_t start_angle);
 ret_t progress_circle_set_unit(widget_t* widget, const char* unit);
 
 /**
+ * @method progress_circle_set_line_cap
+ * 设置线帽类型。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*}  line_cap 线帽类型(round:圆头，square:方头)。。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t progress_circle_set_line_cap(widget_t* widget, const char* line_cap);
+
+/**
  * @method progress_circle_set_show_text
  * 设置是否显示文本。
  *
@@ -242,6 +261,7 @@ ret_t progress_circle_set_show_text(widget_t* widget, bool_t show_text);
 ret_t progress_circle_set_counter_clock_wise(widget_t* widget, bool_t counter_clock_wise);
 
 #define PROGRESS_CIRCLE_PROP_UNIT "unit"
+#define PROGRESS_CIRCLE_PROP_LINE_CAP "line_cap"
 #define PROGRESS_CIRCLE_PROP_LINE_WIDTH "line_width"
 #define PROGRESS_CIRCLE_PROP_START_ANGLE "start_angle"
 #define PROGRESS_CIRCLE_PROP_COUNTER_CLOCK_WISE "counter_clock_wise"

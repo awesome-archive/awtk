@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   window_animator_center_scale.c
  * Author: AWTK Develop Team
  * Brief:  center_scale window animator
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,6 +24,9 @@
 static ret_t window_animator_center_scale_update_percent(window_animator_t* wa) {
   if (wa->open) {
     wa->percent = 0.9f + 0.1f * wa->easing(wa->time_percent);
+    if (wa->easing(wa->time_percent) == 0) {
+      wa->percent = 0;
+    }
   } else {
     wa->percent = 1.0f - 0.1f * wa->easing(wa->time_percent);
   }

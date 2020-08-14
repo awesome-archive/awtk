@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  style interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -73,6 +73,24 @@ BEGIN_C_DECLS
  * 文本颜色。
  */
 #define STYLE_ID_TEXT_COLOR "text_color"
+
+/**
+ * @const STYLE_ID_HIGHLIGHT_FONT_NAME
+ * 高亮文本的字体名称。
+ */
+#define STYLE_ID_HIGHLIGHT_FONT_NAME "highlight_font_name"
+
+/**
+ * @const STYLE_ID_HIGHLIGHT_FONT_SIZE
+ * 高亮文本的字体大小。
+ */
+#define STYLE_ID_HIGHLIGHT_FONT_SIZE "highlight_font_size"
+
+/**
+ * @const STYLE_ID_HIGHLIGHT_TEXT_COLOR
+ * 高亮文本的文本颜色。
+ */
+#define STYLE_ID_HIGHLIGHT_TEXT_COLOR "highlight_text_color"
 
 /**
  * @const STYLE_ID_TIPS_TEXT_COLOR
@@ -224,6 +242,18 @@ BEGIN_C_DECLS
  */
 #define STYLE_ID_ROUND_RADIUS "round_radius"
 
+/**
+ * @const STYLE_ID_CHILDREN_LAYOUT
+ * 子控件布局参数。
+ */
+#define STYLE_ID_CHILDREN_LAYOUT "children_layout"
+
+/**
+ * @const STYLE_ID_SELF_LAYOUT
+ * 控件布局参数。
+ */
+#define STYLE_ID_SELF_LAYOUT "self_layout"
+
 struct _style_t;
 typedef struct _style_t style_t;
 
@@ -358,6 +388,18 @@ bool_t style_is_mutable(style_t* s);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t style_destroy(style_t* s);
+
+/*helper functions*/
+/**
+ * @method style_normalize_value
+ * 对值进行正规化。
+ * @param {const char*} name 名称。
+ * @param {const char*} value 值。
+ * @param {value_t*} out 返回的值。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t style_normalize_value(const char* name, const char* value, value_t* out);
 
 END_C_DECLS
 

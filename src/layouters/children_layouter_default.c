@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   children_layouter_default_default.c
  * Author: AWTK Develop Team
  * Brief:  children layouter default
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -276,19 +276,19 @@ static ret_t children_layouter_default_layout(children_layouter_t* layouter, wid
   spacing = layout->spacing;
 
   if (layout->rows_is_height) {
-    rows = tk_roundi((layout_h - 2.0f * y_margin) / (layout->rows + spacing));
+    rows = tk_roundi((layout_h - 2.0f * y_margin + spacing) / (layout->rows + spacing));
   } else {
     rows = layout->rows;
   }
 
   if (layout->cols_is_width) {
-    cols = tk_roundi((layout_w - 2.0f * x_margin) / (layout->cols + spacing));
+    cols = tk_roundi((layout_w - 2.0f * x_margin + spacing) / (layout->cols + spacing));
   } else {
     cols = layout->cols;
   }
 
   if (rows == 1 && cols == 0) { /*hbox*/
-    uint32_t xoffset = 0;
+    uint32_t xoffset = x;
     uint32_t children_w = 0;
     h = layout_h - 2 * y_margin;
     w = layout_w - 2 * x_margin - (n - 1) * spacing;
@@ -306,14 +306,12 @@ static ret_t children_layouter_default_layout(children_layouter_t* layouter, wid
     for (i = 0; i < n; i++) {
       iter = children[i];
       children_w += iter->w + spacing;
-      if (x > layout_w) {
-        break;
-      }
     }
+    children_w -= spacing;
 
     switch (layout->align_h) {
       case ALIGN_H_RIGHT: {
-        xoffset = layout_w - children_w;
+        xoffset = layout_w - x_margin - children_w;
         break;
       }
       case ALIGN_H_CENTER: {
@@ -329,7 +327,6 @@ static ret_t children_layouter_default_layout(children_layouter_t* layouter, wid
       iter = children[i];
       widget_move_resize(iter, x, y, iter->w, h);
       x += iter->w + spacing;
-      return_value_if_fail(x <= layout_w, RET_BAD_PARAMS);
     }
 
     for (i = 0; i < n; i++) {
@@ -350,7 +347,6 @@ static ret_t children_layouter_default_layout(children_layouter_t* layouter, wid
 
     for (i = 0; i < n; i++) {
       iter = children[i];
-      return_value_if_fail(y <= layout_h, RET_BAD_PARAMS);
       widget_move_resize(iter, x, y, w, iter->h);
       y += iter->h + spacing;
     }
@@ -386,6 +382,14 @@ static ret_t children_layouter_default_layout(children_layouter_t* layouter, wid
       area = rect_init(x, y, item_w, item_h);
       widget_move_resize(iter, x, y, item_w, item_h);
       if (self_layouter_default_is_valid(iter->self_layout)) {
+        if (self_layouter_get_param_int(iter->self_layout, "x_attr", 0) == X_ATTR_UNDEF) {
+          self_layouter_set_param_str(iter->self_layout, "x", "0");
+        }
+
+        if (self_layouter_get_param_int(iter->self_layout, "y_attr", 0) == Y_ATTR_UNDEF) {
+          self_layouter_set_param_str(iter->self_layout, "y", "0");
+        }
+
         widget_layout_self_with_rect(iter->self_layout, iter, &area);
       }
 
@@ -424,8 +428,19 @@ static ret_t children_layouter_default_destroy(children_layouter_t* layouter) {
   return RET_OK;
 }
 
+static children_layouter_t* children_layouter_default_clone(children_layouter_t* layouter) {
+  children_layouter_default_t* l = TKMEM_ZALLOC(children_layouter_default_t);
+
+  memcpy(l, layouter, sizeof(*l));
+  str_init(&(l->layouter.params), 0);
+  str_set(&(l->layouter.params), layouter->params.str);
+
+  return (children_layouter_t*)l;
+}
+
 static const children_layouter_vtable_t s_children_layouter_default_vtable = {
     .type = "default",
+    .clone = children_layouter_default_clone,
     .to_string = children_layouter_default_to_string,
     .get_param = children_layouter_default_get_param,
     .set_param = children_layouter_default_set_param,

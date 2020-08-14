@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  svg path_parser
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -58,10 +58,11 @@ static char svg_path_parser_get_cmd(svg_path_parser_t* parser) {
   return c;
 }
 
-static float_t svg_path_parser_get_number(svg_path_parser_t* parser) {
+static float svg_path_parser_get_number(svg_path_parser_t* parser) {
   uint32_t i = 0;
   const char* p = NULL;
   char token[TK_NUM_MAX_LEN + 1];
+  memset(token, 0x00, sizeof(token));
 
   return_value_if_fail(svg_path_parser_next_token_type(parser) == TOKEN_NUMBER, 0);
 
@@ -70,6 +71,7 @@ static float_t svg_path_parser_get_number(svg_path_parser_t* parser) {
     token[i++] = *p++;
   }
   while (*p == '.' || (*p >= '0' && *p <= '9')) {
+    if (*p == '.' && strrchr(token, '.') != NULL) break;
     token[i++] = *p++;
   }
   token[i] = '\0';
@@ -79,12 +81,12 @@ static float_t svg_path_parser_get_number(svg_path_parser_t* parser) {
 }
 
 static ret_t svg_path_parser_parse_cmd(svg_path_parser_t* parser, char c) {
-  float_t x = 0;
-  float_t y = 0;
-  float_t x1 = 0;
-  float_t y1 = 0;
-  float_t x2 = 0;
-  float_t y2 = 0;
+  float x = 0;
+  float y = 0;
+  float x1 = 0;
+  float y1 = 0;
+  float x2 = 0;
+  float y2 = 0;
 
   switch (c) {
     case 'M':
@@ -231,11 +233,11 @@ static ret_t svg_path_parser_parse_cmd(svg_path_parser_t* parser, char c) {
     case 'a': {
       svg_path_arc_t path;
       while (svg_path_parser_next_token_type(parser) == TOKEN_NUMBER) {
-        float_t rx = svg_path_parser_get_number(parser);
-        float_t ry = svg_path_parser_get_number(parser);
-        float_t rotation = svg_path_parser_get_number(parser);
-        float_t large_arc = svg_path_parser_get_number(parser);
-        float_t sweep = svg_path_parser_get_number(parser);
+        float rx = svg_path_parser_get_number(parser);
+        float ry = svg_path_parser_get_number(parser);
+        float rotation = svg_path_parser_get_number(parser);
+        float large_arc = svg_path_parser_get_number(parser);
+        float sweep = svg_path_parser_get_number(parser);
         x = svg_path_parser_get_number(parser);
         y = svg_path_parser_get_number(parser);
 

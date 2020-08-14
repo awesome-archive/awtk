@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  bgr888 mem lcd.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -29,6 +29,7 @@
 #define pixel_bpp pixel_bgr888_BPP
 #define pixel_to_rgba pixel_bgr888_to_rgba
 #define pixel_from_rgb pixel_bgr888_from_rgb
+#define pixel_from_rgba pixel_bgr888_from_rgba
 
 #include "blend/pixel_ops.inc"
 #include "lcd/lcd_mem.inc"

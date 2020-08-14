@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   window_animator_common.c
  * Author: AWTK Develop Team
  * Brief:  window animator common used functions.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,7 +26,7 @@
 #include "base/window_manager.h"
 #include "base/window_animator.h"
 #include "base/dialog_highlighter_factory.h"
-
+#include "window_manager/window_manager_default.h"
 #include "window_animators/window_animator_common.h"
 
 ret_t window_animator_to_bottom_draw_curr(window_animator_t* wa) {
@@ -50,8 +50,8 @@ ret_t window_animator_to_top_draw_curr(window_animator_t* wa) {
   canvas_t* c = wa->canvas;
   widget_t* win = wa->curr_win;
   float_t percent = wa->percent;
-  int32_t h = tk_roundi(win->h * percent);
   int32_t y = win->y + tk_roundi(win->h * (1 - percent));
+  int32_t h = win->y + win->h - y;
 
   rect_t src = rect_init(win->x, win->y, win->w, h);
   rect_t dst = rect_init(win->x, y, win->w, h);
@@ -67,8 +67,8 @@ ret_t window_animator_to_left_draw_curr(window_animator_t* wa) {
   canvas_t* c = wa->canvas;
   widget_t* win = wa->curr_win;
   float_t percent = wa->percent;
-  int32_t w = tk_roundi(win->w * percent);
   int32_t x = win->x + tk_roundi(win->w * (1 - percent));
+  int32_t w = win->x + win->w - x;
 
   rect_t src = rect_init(win->x, win->y, w, win->h);
   rect_t dst = rect_init(x, win->y, w, win->h);
@@ -173,6 +173,9 @@ ret_t window_animator_destroy(window_animator_t* wa) {
 static ret_t window_animator_paint_system_bar(window_animator_t* wa) {
   widget_t* wm = wa->curr_win->parent;
   widget_t* system_bar = widget_lookup_by_type(wm, WIDGET_TYPE_SYSTEM_BAR, TRUE);
+  if (system_bar == NULL) {
+    system_bar = widget_lookup_by_type(wm, WIDGET_TYPE_SYSTEM_BAR_BOTTOM, TRUE);
+  }
 
   if (system_bar != NULL) {
 #ifdef AWTK_WEB
@@ -180,16 +183,13 @@ static ret_t window_animator_paint_system_bar(window_animator_t* wa) {
     rect_t dst = rect_init(system_bar->x, system_bar->y, system_bar->w, system_bar->h);
     canvas_draw_image(wa->canvas, &(wa->prev_img), rect_scale(&src, wa->ratio), &dst);
 #else
-    if (!(wa->canvas->lcd->support_dirty_rect)) {
-      widget_paint(system_bar, wa->canvas);
-    }
+    window_manager_paint_system_bar(wm, wa->canvas);
 #endif /*AWTK_WEB*/
   }
 
   return RET_OK;
 }
 
-#include <stdio.h>
 static ret_t window_animator_begin_frame_normal(window_animator_t* wa) {
 #ifdef WITH_NANOVG_GPU
   ENSURE(canvas_begin_frame(wa->canvas, NULL, LCD_DRAW_ANIMATION) == RET_OK);

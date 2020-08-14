@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  color_component
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -33,6 +33,7 @@ typedef ret_t (*color_component_update_t)(widget_t* widget);
 /**
  * @class color_component_t
  * @parent widget_t
+ * @annotation ["scriptable","design","widget"]
  * 颜色选择器的颜色分量。
  * 控件的名称有严格规定：
  * COLOR_PICKER_CHILD_SV: 水平为Value/Brightness(递增)，垂直为Saturation(递减)。
@@ -76,6 +77,18 @@ widget_t* color_component_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t 
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t color_component_set_color(widget_t* widget, color_t c);
+
+/**
+ * @method color_component_set_hsv
+ * 设置颜色。
+ * @param {widget_t*} widget 控件对象。
+ * @param {float}  h 色调。
+ * @param {float}  s 饱和度。
+ * @param {float}  v 明度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t color_component_set_hsv(widget_t* widget, float h, float s, float v);
 
 /**
  * @method color_component_get_h

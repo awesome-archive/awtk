@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  self layouter factory
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -66,7 +66,7 @@ self_layouter_factory_t* self_layouter_factory_create(void);
 /**
  * @method self_layouter_factory_register
  * 注册控件自身布局算法创建函数。
- * @param {self_layouter_factory_t*} factory highlighter工厂对象。
+ * @param {self_layouter_factory_t*} factory layouter工厂对象。
  * @param {const char*} type 控件自身布局算法类型。
  * @param {self_layouter_create_t} create 控件自身布局算法创建函数。
  *
@@ -81,7 +81,7 @@ ret_t self_layouter_factory_register(self_layouter_factory_t* factory, const cha
  * @param {self_layouter_factory_t*} factory 控件自身布局算法工厂对象。
  * @param {const char*} type 类型。
  *
- * @return {self_layouter_t*} 返回窗口动画对象。
+ * @return {self_layouter_t*} 返回控件自身布局算法对象。
  */
 self_layouter_t* self_layouter_factory_create_layouter(self_layouter_factory_t* factory,
                                                        const char* type);

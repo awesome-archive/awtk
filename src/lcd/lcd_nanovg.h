@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  nanovg implemented lcd interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,11 +23,11 @@
 #define LCD_NANOVG_H
 
 #include "base/lcd.h"
-#include <SDL.h>
+#include "base/native_window.h"
 
 BEGIN_C_DECLS
 
-lcd_t* lcd_nanovg_init(SDL_Window* window);
+lcd_t* lcd_nanovg_init(native_window_t* window);
 
 END_C_DECLS
 

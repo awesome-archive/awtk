@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  bsvg_dump
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -47,7 +47,7 @@ static ret_t bsvg_dump(const char* input_file) {
 }
 
 int main(int argc, char* argv[]) {
-  TKMEM_INIT(4 * 1024 * 1024)
+  platform_prepare();
 
   if (argc < 2) {
     printf("Usage: %s bsvg_filename\n", argv[0]);

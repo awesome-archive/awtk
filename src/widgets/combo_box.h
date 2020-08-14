@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  combo_box
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -32,9 +32,11 @@ typedef struct _combo_box_option_t {
   struct _combo_box_option_t* next;
 } combo_box_option_t;
 
+typedef widget_t* (*combo_box_custom_open_popup_t)(widget_t* combobox);
+
 /**
  * @class combo_box_t
- * @parent widget_t
+ * @parent edit_t
  * @annotation ["scriptable","design","widget"]
  * 下拉列表控件。
  *
@@ -72,9 +74,26 @@ typedef struct _combo_box_option_t {
  * </popup>
  * ```
  *
- * >
- * 更多用法请参考：[combo_box.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/combo_box.xml)
+ * > 更多用法请参考：[combo_box.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/combo_box.xml)
  *
+ * 
+ *
+ * 如果在文本比较长时，希望在获得焦点时文本自动滚动，可以放入一个hscroll_label为子控件，并命名为"value"。如：
+ * 
+ * ```xml
+ *   <combo_box left_margin="6" readonly="true" x="10" y="50" w="80" h="30" options="leftttttttttt;centerrrrrrrrrrrrrrrr;rightttttttttt;"
+ *   selected_index="1">
+ *   <hscroll_label x="0" y="0" w="-30" h="100%"
+ *     name="value"
+ *     lull="1000"
+ *     loop="true"
+ *     yoyo="true"
+ *     ellipses="true"
+ *     only_parent_focus="true"/> 
+ *   <button style="combobox_down" x="right:5" y="middle" w="20" h="20"/>
+ * </combo_box>
+ * ```
+ * 
  * 在c代码中使用函数combo\_box\_create创建下拉列表控件。如：
  *
  * ```c
@@ -105,8 +124,30 @@ typedef struct _combo_box_option_t {
  * </combo_box>
  * ```
  *
+ * * 1.combobox的下拉按钮的style名称为combobox_down，可以在主题文件中设置。
+ * 
+ * ```xml
+ * <button>
+ *  <style name="combobox_down" border_color="#a0a0a0">
+ *   <normal     bg_color="#f0f0f0" icon="arrow_down_n"/>
+ *   <pressed    bg_color="#c0c0c0" icon="arrow_down_p"/>
+ *   <over       bg_color="#e0e0e0" icon="arrow_down_o"/>
+ * </style>
+ * </button>
+ * ```
+ *
+ *  * 2.combobox的弹出popup窗口的style名称为combobox_popup，可以在主题文件中设置。
+ * 
+ * ```xml
+ * <popup>
+ * <style name="combobox_popup" border_color="red">
+ *   <normal bg_color="#808080"/>
+ * </style>
+ * </popup>
+ * ```
+ * 
  * > 更多用法请参考：[theme
- *default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L422)
+ *default](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/styles/default.xml#L422)
  *
  */
 typedef struct _combo_box_t {
@@ -134,15 +175,31 @@ typedef struct _combo_box_t {
   int32_t value;
 
   /**
+   * @property {bool_t} localize_options
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否本地化(翻译)选项(缺省为TRUE)。
+   */
+  bool_t localize_options;
+
+  /**
    * @property {char*} options
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 设置可选项(冒号分隔值和文本，分号分隔选项，如:1:red;2:green;3:blue)。
    */
   char* options;
 
+  /**
+   * @property {int32_t} item_height
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 下拉选项的高度。如果open_window为空，则使用缺省高度。
+   */
+  int32_t item_height;
+
   /*private*/
   str_t text;
+  bool_t pressed;
   combo_box_option_t* option_items;
+  combo_box_custom_open_popup_t open_popup;
 } combo_box_t;
 
 /**
@@ -222,6 +279,17 @@ int32_t combo_box_count_options(widget_t* widget);
 ret_t combo_box_set_selected_index(widget_t* widget, uint32_t index);
 
 /**
+ * @method combo_box_set_localize_options
+ * 设置是否本地化(翻译)选项。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget combo_box对象。
+ * @param {bool_t} localize_options 是否本地化(翻译)选项。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t combo_box_set_localize_options(widget_t* widget, bool_t localize_options);
+
+/**
  * @method combo_box_set_value
  * 设置值。
  * @annotation ["scriptable"]
@@ -231,6 +299,17 @@ ret_t combo_box_set_selected_index(widget_t* widget, uint32_t index);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t combo_box_set_value(widget_t* widget, int32_t value);
+
+/**
+ * @method combo_box_set_item_height
+ * 设置item高度。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget combo_box对象。
+ * @param {uint32_t} item_height item的高度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t combo_box_set_item_height(widget_t* widget, uint32_t item_height);
 
 /**
  * @method combo_box_append_option
@@ -256,6 +335,16 @@ ret_t combo_box_append_option(widget_t* widget, int32_t value, const char* text)
 ret_t combo_box_set_options(widget_t* widget, const char* options);
 
 /**
+ * @method combo_box_set_custom_open_popup
+ * 设置自定义的打开弹出窗口的函数。
+ * @param {widget_t*} widget combo_box对象。
+ * @param {combo_box_custom_open_popup_t} open_popup 回调函数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t combo_box_set_custom_open_popup(widget_t* widget, combo_box_custom_open_popup_t open_popup);
+
+/**
  * @method combo_box_get_option
  * 获取第index个选项。
  * @param {widget_t*} widget combo_box对象。
@@ -279,6 +368,7 @@ int32_t combo_box_get_value(widget_t* widget);
  * @method combo_box_get_text
  * 获取combo_box的文本。
  * @annotation ["scriptable"]
+ * @alias combo_box_get_text_value
  * @param {widget_t*} widget combo_box对象。
  *
  * @return {const char*} 返回文本。

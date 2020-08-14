@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  native window raw
  *
- * Copyright (c) 2019 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2019 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,6 +19,7 @@
  *
  */
 
+#include "base/widget.h"
 #include "native_window/native_window_raw.h"
 
 typedef struct _native_window_raw_t {
@@ -36,6 +37,8 @@ static ret_t native_window_raw_move(native_window_t* win, xy_t x, xy_t y) {
 }
 
 static ret_t native_window_raw_resize(native_window_t* win, wh_t w, wh_t h) {
+  win->rect.w = w;
+  win->rect.h = h;
   return RET_OK;
 }
 
@@ -45,9 +48,24 @@ static canvas_t* native_window_raw_get_canvas(native_window_t* win) {
   return &(raw->canvas);
 }
 
+static ret_t native_window_raw_get_info(native_window_t* win, native_window_info_t* info) {
+  native_window_raw_t* raw = NATIVE_WINDOW_RAW(win);
+
+  info->x = 0;
+  info->y = 0;
+  info->ratio = raw->canvas.lcd->ratio;
+  info->w = lcd_get_width(raw->canvas.lcd);
+  info->h = lcd_get_height(raw->canvas.lcd);
+
+  log_debug("ratio=%f %d %d\n", info->ratio, info->w, info->h);
+
+  return RET_OK;
+}
+
 static const native_window_vtable_t s_native_window_vtable = {
     .type = "native_window_raw",
     .move = native_window_raw_move,
+    .get_info = native_window_raw_get_info,
     .resize = native_window_raw_resize,
     .get_canvas = native_window_raw_get_canvas};
 
@@ -61,8 +79,10 @@ static ret_t native_window_raw_get_prop(object_t* obj, const char* name, value_t
 
 static ret_t native_window_raw_on_destroy(object_t* obj) {
   native_window_raw_t* raw = NATIVE_WINDOW_RAW(obj);
+  lcd_t* lcd = raw->canvas.lcd;
 
   canvas_reset(&(raw->canvas));
+  lcd_destroy(lcd);
 
   return RET_OK;
 }

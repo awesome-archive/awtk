@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  string
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -79,6 +79,7 @@ ret_t str_set_with_len(str_t* str, const char* text, uint32_t len) {
 
   tk_strncpy(str->str, text, size);
   str->size = size;
+  str->str[str->size] = '\0';
 
   return RET_OK;
 }
@@ -99,6 +100,35 @@ ret_t str_append(str_t* str, const char* text) {
   return_value_if_fail(str != NULL && text != NULL, RET_BAD_PARAMS);
 
   return str_append_with_len(str, text, strlen(text));
+}
+
+ret_t str_append_more(str_t* str, const char* text, ...) {
+  va_list va;
+  const char* p = NULL;
+  return_value_if_fail(str != NULL && text != NULL, RET_BAD_PARAMS);
+
+  return_value_if_fail(str_append(str, text) == RET_OK, RET_OOM);
+
+  va_start(va, text);
+  do {
+    p = va_arg(va, char*);
+    if (p != NULL) {
+      return_value_if_fail(str_append(str, p) == RET_OK, RET_OOM);
+    } else {
+      break;
+    }
+  } while (p != NULL);
+
+  va_end(va);
+
+  return RET_OK;
+}
+
+ret_t str_append_int(str_t* str, int32_t value) {
+  char num[32];
+  tk_snprintf(num, sizeof(num), "%d", value);
+
+  return str_append(str, num);
 }
 
 ret_t str_append_char(str_t* str, char c) {
@@ -132,9 +162,9 @@ ret_t str_decode_xml_entity_with_len(str_t* str, const char* text, uint32_t len)
       } else if (strncmp(s, "amp;", 4) == 0) {
         c = '&';
         s += 4;
-      } else if (strncmp(s, "quota;", 6) == 0) {
+      } else if (strncmp(s, "quot;", 5) == 0) {
         c = '\"';
-        s += 6;
+        s += 5;
       } else if (strncmp(s, "nbsp;", 5) == 0) {
         c = ' ';
         s += 5;
@@ -190,8 +220,11 @@ ret_t str_unescape(str_t* str) {
           c = '\\';
           break;
         }
+        case '\0': {
+          break;
+        }
         default: {
-          log_warn("not support char\n");
+          log_warn("not support char: %s [%c]\n", str->str, *s);
           break;
         }
       }
@@ -251,7 +284,7 @@ ret_t str_from_value(str_t* str, const value_t* v) {
   }
 }
 
-ret_t str_from_wstr(str_t* str, const wchar_t* wstr) {
+ret_t str_from_wstr_with_len(str_t* str, const wchar_t* wstr, uint32_t len) {
   return_value_if_fail(str != NULL, RET_BAD_PARAMS);
 
   str->size = 0;
@@ -260,11 +293,11 @@ ret_t str_from_wstr(str_t* str, const wchar_t* wstr) {
   }
 
   if (wstr != NULL) {
-    uint32_t size = wcslen(wstr) * 4 + 1;
+    uint32_t size = len * 4 + 1;
     return_value_if_fail(str_extend(str, size + 1) == RET_OK, RET_OOM);
 
     if (size > 0) {
-      utf8_from_utf16(wstr, str->str, size);
+      tk_utf8_from_utf16_ex(wstr, len, str->str, size);
       str->size = strlen(str->str);
     } else {
       str_set(str, "");
@@ -272,6 +305,12 @@ ret_t str_from_wstr(str_t* str, const wchar_t* wstr) {
   }
 
   return RET_OK;
+}
+
+ret_t str_from_wstr(str_t* str, const wchar_t* wstr) {
+  return_value_if_fail(str != NULL && wstr != NULL, RET_BAD_PARAMS);
+
+  return str_from_wstr_with_len(str, wstr, wcslen(wstr));
 }
 
 ret_t str_to_int(str_t* str, int32_t* v) {
@@ -386,6 +425,10 @@ static uint32_t str_count_sub_str(str_t* s, const char* str) {
   char* p = s->str;
   uint32_t count = 0;
   uint32_t size = strlen(str);
+
+  if (size == 0) {
+    return 0;
+  }
 
   do {
     p = strstr(p, str);
@@ -541,8 +584,9 @@ ret_t str_expand_vars(str_t* str, const char* src, const object_t* obj) {
     if (c == '$') {
       if (p[1] && p[2]) {
         p = expand_var(str, p + 2, obj);
+      } else {
+        return RET_BAD_PARAMS;
       }
-      continue;
     } else {
       str_append_char(str, c);
       p++;
@@ -557,6 +601,73 @@ ret_t str_pop(str_t* str) {
 
   str->size--;
   str->str[str->size] = '\0';
+
+  return RET_OK;
+}
+
+ret_t str_append_double(str_t* str, const char* format, double value) {
+  char buff[64];
+  const char* fmt = format != NULL ? format : "%.4lf";
+  return_value_if_fail(str != NULL, RET_BAD_PARAMS);
+
+  tk_snprintf(buff, sizeof(buff), fmt, value);
+
+  return str_append(str, buff);
+}
+
+ret_t str_append_json_str(str_t* str, const char* json_str) {
+  const char* p = json_str;
+  return_value_if_fail(str != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(str_append_char(str, '\"') == RET_OK, RET_OOM);
+  if (p != NULL) {
+    while (*p) {
+      if (*p == '\"') {
+        return_value_if_fail(str_append_char(str, '\\') == RET_OK, RET_OOM);
+      }
+      return_value_if_fail(str_append_char(str, *p) == RET_OK, RET_OOM);
+      p++;
+    }
+  }
+  return_value_if_fail(str_append_char(str, '\"') == RET_OK, RET_OOM);
+
+  return RET_OK;
+}
+
+ret_t str_append_json_int_pair(str_t* str, const char* key, int32_t value) {
+  return_value_if_fail(str != NULL && key != NULL, RET_BAD_PARAMS);
+
+  return_value_if_fail(str_append_json_str(str, key) == RET_OK, RET_OOM);
+  return_value_if_fail(str_append_char(str, ':') == RET_OK, RET_OOM);
+  return_value_if_fail(str_append_int(str, value) == RET_OK, RET_OOM);
+
+  return RET_OK;
+}
+
+ret_t str_append_json_str_pair(str_t* str, const char* key, const char* value) {
+  return_value_if_fail(str != NULL && key != NULL && value != NULL, RET_BAD_PARAMS);
+
+  return_value_if_fail(str_append_json_str(str, key) == RET_OK, RET_OOM);
+  return_value_if_fail(str_append_char(str, ':') == RET_OK, RET_OOM);
+  return_value_if_fail(str_append_json_str(str, value) == RET_OK, RET_OOM);
+
+  return RET_OK;
+}
+
+ret_t str_append_json_double_pair(str_t* str, const char* key, double value) {
+  return_value_if_fail(str != NULL && key != NULL, RET_BAD_PARAMS);
+
+  return_value_if_fail(str_append_json_str(str, key) == RET_OK, RET_OOM);
+  return_value_if_fail(str_append_char(str, ':') == RET_OK, RET_OOM);
+  return_value_if_fail(str_append_double(str, NULL, value) == RET_OK, RET_OOM);
+
+  return RET_OK;
+}
+ret_t str_append_json_bool_pair(str_t* str, const char* key, bool_t value) {
+  return_value_if_fail(str != NULL && key != NULL, RET_BAD_PARAMS);
+
+  return_value_if_fail(str_append_json_str(str, key) == RET_OK, RET_OOM);
+  return_value_if_fail(str_append_char(str, ':') == RET_OK, RET_OOM);
+  return_value_if_fail(str_append(str, value ? "true" : "false") == RET_OK, RET_OOM);
 
   return RET_OK;
 }

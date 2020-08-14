@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  idle manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,7 +22,7 @@
 #ifndef TK_IDLE_H
 #define TK_IDLE_H
 
-#include "base/idle_manager.h"
+#include "tkc/idle_manager.h"
 
 BEGIN_C_DECLS
 
@@ -109,7 +109,6 @@ ret_t idle_set_on_destroy(uint32_t idle_id, tk_destroy_t on_destroy, void* on_de
 /**
  * @method idle_dispatch
  * 调用全部idle的函数。
- * @annotation ["private"]
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -123,6 +122,9 @@ ret_t idle_dispatch(void);
  * @return {uint32_t} 返回idle的个数。
  */
 uint32_t idle_count(void);
+
+/*internal use*/
+bool_t idle_exist(idle_func_t on_idle, void* ctx);
 
 END_C_DECLS
 

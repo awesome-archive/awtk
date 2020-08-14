@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   widget_vtable.c
  * Author: AWTK Develop Team
  * Brief:  widget vtable default impl
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,37 +23,52 @@
 #include "tkc/mem.h"
 
 ret_t widget_invalidate_default(widget_t* widget, rect_t* r) {
+  if (widget->vt->scrollable) {
+    int32_t ox = widget_get_prop_int(widget, WIDGET_PROP_XOFFSET, 0);
+    int32_t oy = widget_get_prop_int(widget, WIDGET_PROP_YOFFSET, 0);
+    rect_t r_self = rect_init(0, 0, widget->w, widget->h);
+
+    if (ox > 0) {
+      r->x -= ox;
+      r->w += ox + 1;
+    }
+    if (oy > 0) {
+      r->y -= oy;
+      r->h += oy + 1;
+    }
+
+    *r = rect_intersect(r, &r_self);
+  }
+
   if (r->w <= 0 || r->h <= 0) {
     return RET_OK;
   }
 
   r->x += widget->x;
   r->y += widget->y;
+
   if (widget->astyle != NULL) {
-    int32_t ox = tk_abs(style_get_int(widget->astyle, STYLE_ID_X_OFFSET, 0));
-    int32_t oy = tk_abs(style_get_int(widget->astyle, STYLE_ID_Y_OFFSET, 0));
-    int32_t br = tk_abs(style_get_int(widget->astyle, STYLE_ID_ROUND_RADIUS, 0));
-    int32_t bw = tk_abs(style_get_int(widget->astyle, STYLE_ID_BORDER_WIDTH, 1)) >> 1;
+    int32_t tolerance = widget->dirty_rect_tolerance;
 
-    if (br > 0) {
-      ox++;
-      oy++;
-    }
-
-    if (bw > 0) {
-      ox += bw;
-      oy += bw;
-    }
-
-    if (ox > 0) {
-      r->x -= ox;
-      r->w += ox + ox + 1;
-    }
-    if (oy > 0) {
-      r->y -= oy;
-      r->h += oy + oy + 1;
+    if (tolerance > 0) {
+      r->x -= tolerance;
+      r->y -= tolerance;
+      r->w += 2 * tolerance + 1;
+      r->h += 2 * tolerance + 1;
     }
   }
+
+  if (r->x < 0) {
+    r->w = r->w + r->x;
+  }
+  if (r->y < 0) {
+    r->h = r->h + r->y;
+  }
+
+  r->x = tk_max(0, r->x);
+  r->y = tk_max(0, r->y);
+  r->w = tk_max(0, r->w);
+  r->h = tk_max(0, r->h);
 
   if (widget->parent) {
     widget_t* parent = widget->parent;
@@ -84,21 +99,21 @@ ret_t widget_on_paint_children_default(widget_t* widget, canvas_t* c) {
   return_value_if_fail(widget != NULL && c != NULL, RET_BAD_PARAMS);
 
   WIDGET_FOR_EACH_CHILD_BEGIN(widget, iter, i)
-  int32_t left = c->ox + iter->x;
-  int32_t top = c->oy + iter->y;
-  int32_t bottom = top + iter->h;
-  int32_t right = left + iter->w;
 
   if (!iter->visible) {
     iter->dirty = FALSE;
     continue;
   }
 
+  /* int32_t left = c->ox + iter->x;
+  int32_t top = c->oy + iter->y;
+  int32_t bottom = top + iter->h;
+  int32_t right = left + iter->w;
   if (left > c->clip_right || right < c->clip_left || top > c->clip_bottom ||
       bottom < c->clip_top) {
     iter->dirty = FALSE;
     continue;
-  }
+  }*/
 
   widget_paint(iter, c);
   WIDGET_FOR_EACH_CHILD_END();
@@ -149,6 +164,8 @@ ret_t widget_set_prop_default(widget_t* widget, const char* name, const value_t*
 }
 
 widget_t* widget_find_target_default(widget_t* widget, xy_t x, xy_t y) {
+  xy_t xx = 0;
+  xy_t yy = 0;
   point_t p = {x, y};
   return_value_if_fail(widget != NULL, NULL);
 
@@ -157,18 +174,51 @@ widget_t* widget_find_target_default(widget_t* widget, xy_t x, xy_t y) {
   }
 
   widget_to_local(widget, &p);
+  xx = p.x;
+  yy = p.y;
   WIDGET_FOR_EACH_CHILD_BEGIN_R(widget, iter, i)
-  xy_t xx = p.x;
-  xy_t yy = p.y;
-  xy_t r = iter->x + iter->w;
-  xy_t b = iter->y + iter->h;
-
-  if (iter->sensitive && iter->enable && xx >= iter->x && yy >= iter->y && xx <= r && yy <= b) {
-    return iter;
+  if (yy < iter->y || yy >= (iter->y + iter->h)) {
+    continue;
   }
+
+  if (xx < iter->x || xx >= (iter->x + iter->w)) {
+    continue;
+  }
+
+  if (!iter->sensitive || !iter->enable) {
+    continue;
+  }
+
+  return iter;
   WIDGET_FOR_EACH_CHILD_END();
 
   return NULL;
+}
+
+static ret_t widget_copy_props(widget_t* clone, widget_t* widget, const char* const* properties) {
+  if (properties != NULL) {
+    value_t v;
+    value_t defval;
+    uint32_t i = 0;
+    for (i = 0; properties[i] != NULL; i++) {
+      const char* prop = properties[i];
+      if (widget_get_prop(widget, prop, &v) == RET_OK) {
+        if (widget_get_prop_default_value(widget, prop, &defval) == RET_OK) {
+          if (!value_equal(&v, &defval)) {
+            widget_set_prop(clone, prop, &v);
+          }
+        } else {
+          widget_set_prop(clone, prop, &v);
+        }
+      }
+    }
+  }
+
+  return RET_OK;
+}
+
+ret_t widget_on_copy_default(widget_t* widget, widget_t* other) {
+  return widget_copy_props(widget, other, widget->vt->clone_properties);
 }
 
 ret_t widget_on_destroy_default(widget_t* widget) {
@@ -185,6 +235,7 @@ ret_t widget_on_paint_null(widget_t* widget, canvas_t* c) {
 TK_DECL_VTABLE(widget) = {.size = sizeof(widget_t),
                           .type = WIDGET_TYPE_NONE,
                           .parent = NULL,
+                          .on_copy = widget_on_copy_default,
                           .invalidate = widget_invalidate_default,
                           .on_event = widget_on_event_default,
                           .on_paint_self = widget_on_paint_self_default,

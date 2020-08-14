@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  vector graphics canvas base on cairo
  *
- * Copyright (c) 2018 - 2018  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,12 +19,11 @@
  *
  */
 
-#include "base/assets_manager.h"
 #include "base/image_manager.h"
 #include "tkc/utf8.h"
 
 #include "base/vgcanvas.h"
-#include "cairo.h"
+#include "cairo/cairo.h"
 #include "tkc/mem.h"
 #include "tkc/darray.h"
 
@@ -458,8 +457,9 @@ static cairo_surface_t* vgcanvas_cairo_ensure_image(vgcanvas_cairo_t* vg, bitmap
 
   surface = (cairo_surface_t*)(cairo_img->specific);
   if (surface == NULL) {
-    surface =
-        create_surface(cairo_img->w, cairo_img->h, cairo_img->format, (void*)(cairo_img->data));
+    uint8_t* cairo_img_data = bitmap_lock_buffer_for_read(cairo_img);
+    surface = create_surface(cairo_img->w, cairo_img->h, cairo_img->format, cairo_img_data);
+    bitmap_unlock_buffer(cairo_img);
 
     if (surface != NULL) {
       cairo_img->specific = surface;
@@ -593,7 +593,8 @@ static ret_t vgcanvas_cairo_restore(vgcanvas_t* vgcanvas) {
   return RET_OK;
 }
 
-static ret_t vgcanvas_cairo_create_fbo(vgcanvas_t* vgcanvas, framebuffer_object_t* fbo) {
+static ret_t vgcanvas_cairo_create_fbo(vgcanvas_t* vgcanvas, uint32_t w, uint32_t h,
+                                       framebuffer_object_t* fbo) {
   (void)vgcanvas;
   (void)fbo;
   return RET_NOT_IMPL;
@@ -735,6 +736,7 @@ static ret_t vgcanvas_cairo_reinit(vgcanvas_t* vgcanvas, uint32_t w, uint32_t h,
   vgcanvas->w = w;
   vgcanvas->h = h;
   vgcanvas->ratio = 1;
+  vgcanvas->stride = stride;
   vgcanvas->format = format;
   vgcanvas->buff = (uint32_t*)data;
 
@@ -881,6 +883,7 @@ vgcanvas_t* vgcanvas_create(uint32_t w, uint32_t h, uint32_t stride, bitmap_form
   cairo->base.h = h;
   cairo->base.vt = &vt;
   cairo->base.ratio = 1;
+  cairo->base.stride = stride;
   cairo->base.format = format;
   cairo->base.buff = (uint32_t*)data;
 

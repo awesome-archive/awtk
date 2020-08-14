@@ -1,4 +1,4 @@
-/*-------------------------------------------------------------------------
+﻿/*-------------------------------------------------------------------------
  *
  * dirent.c
  *	  opendir/readdir/closedir for win32/msvc
@@ -13,37 +13,44 @@
  *-------------------------------------------------------------------------
  */
 
-#define DT_DIR 1
-#define DT_REG 2
+#define DT_DIR 4
+#define DT_REG 8
+#define DT_LNK 16
 
 #include "tkc/types_def.h"
+
+#ifdef __GNUC__
+
+#include "errno.h"
+
+#endif
 
 struct dirent {
   long d_ino;
   uint8_t d_type;
   unsigned short d_reclen;
   unsigned short d_namlen;
-  char d_name[MAX_PATH];
+  wchar_t d_name[MAX_PATH];
 };
 
 typedef struct DIR DIR;
 
-DIR* opendir(const char*);
+DIR* opendir(const wchar_t*);
 struct dirent* readdir(DIR*);
 int closedir(DIR*);
 
 struct DIR {
-  char* dirname;
+  wchar_t* dirname;
   struct dirent ret; /* Used to return to caller */
   HANDLE handle;
 };
 
-DIR* opendir(const char* dirname) {
+DIR* opendir(const wchar_t* dirname) {
   DWORD attr;
   DIR* d;
 
   /* Make sure it is a directory */
-  attr = GetFileAttributes(dirname);
+  attr = GetFileAttributesW(dirname);
   if (attr == INVALID_FILE_ATTRIBUTES) {
     errno = ENOENT;
     return NULL;
@@ -58,17 +65,17 @@ DIR* opendir(const char* dirname) {
     errno = ENOMEM;
     return NULL;
   }
-  d->dirname = malloc(strlen(dirname) + 4);
+  d->dirname = malloc(wcslen(dirname) * sizeof(wchar_t) + 8);
   if (!d->dirname) {
     errno = ENOMEM;
     free(d);
     return NULL;
   }
-  strcpy(d->dirname, dirname);
-  if (d->dirname[strlen(d->dirname) - 1] != '/' && d->dirname[strlen(d->dirname) - 1] != '\\')
-    strcat(d->dirname, "\\"); /* Append backslash if not already
-                               * there */
-  strcat(d->dirname, "*");    /* Search for entries named anything */
+  wcscpy(d->dirname, dirname);
+  if (d->dirname[wcslen(d->dirname) - 1] != '/' && d->dirname[wcslen(d->dirname) - 1] != '\\')
+    wcscat(d->dirname, L"\\"); /* Append backslash if not already
+                                * there */
+  wcscat(d->dirname, L"*");    /* Search for entries named anything */
   d->handle = INVALID_HANDLE_VALUE;
   d->ret.d_ino = 0;    /* no inodes on win32 */
   d->ret.d_reclen = 0; /* not used on win32 */
@@ -80,16 +87,16 @@ void rewinddir(DIR* d) {
 }
 
 struct dirent* readdir(DIR* d) {
-  WIN32_FIND_DATA fd;
+  WIN32_FIND_DATAW fd;
 
   if (d->handle == INVALID_HANDLE_VALUE) {
-    d->handle = FindFirstFile(d->dirname, &fd);
+    d->handle = FindFirstFileW(d->dirname, &fd);
     if (d->handle == INVALID_HANDLE_VALUE) {
       errno = ENOENT;
       return NULL;
     }
   } else {
-    if (!FindNextFile(d->handle, &fd)) {
+    if (!FindNextFileW(d->handle, &fd)) {
       if (GetLastError() == ERROR_NO_MORE_FILES) {
         /* No more files, force errno=0 (unlike mingw) */
         errno = 0;
@@ -98,12 +105,13 @@ struct dirent* readdir(DIR* d) {
       return NULL;
     }
   }
-  strcpy(d->ret.d_name, fd.cFileName); /* Both strings are MAX_PATH
+  wcscpy(d->ret.d_name, fd.cFileName); /* Both strings are MAX_PATH
                                         * long */
-  d->ret.d_namlen = strlen(d->ret.d_name);
+  d->ret.d_namlen = wcslen(d->ret.d_name);
 
   d->ret.d_type = 0;
-  if (fd.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) {
+  if ((fd.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) ||
+      (fd.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE)) {
     d->ret.d_type |= DT_REG;
   }
 

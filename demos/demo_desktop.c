@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  demo main
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,34 +21,31 @@
 
 #include "awtk.h"
 #include "assets.h"
-#include "ext_widgets.h"
 
-ret_t application_init(void) {
-  tk_ext_widgets_init();
-  window_open("edit");
+static ret_t on_click_close(void* ctx, event_t* e) {
+  tk_quit();
 
   return RET_OK;
 }
 
-#if defined(WIN32)
-#include <windows.h>
-int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE hprevinstance, LPSTR lpcmdline, int ncmdshow) {
-#else
-int main(void) {
-#endif
-  char res_root[MAX_PATH + 1];
-  char app_root[MAX_PATH + 1];
-  path_app_root(app_root);
-  memset(res_root, 0x00, sizeof(res_root));
+ret_t application_init(void) {
+  widget_t* win = window_open("edit");
+  widget_child_on(win, "close", EVT_CLICK, on_click_close, NULL);
 
-  path_build(res_root, MAX_PATH, app_root, "demos", NULL);
-  tk_init(800, 480, APP_DESKTOP, "AWTK Demo", res_root);
-  system_info_set_default_font(system_info(), "default_full");
-
-  assets_init();
-  application_init();
-
-  tk_run();
-
-  return 0;
+  return RET_OK;
 }
+
+ret_t application_exit() {
+  log_debug("application_exit\n");
+  return RET_OK;
+}
+
+#define LCD_WIDTH 800
+#define LCD_HEGHT 600
+#define APP_TYPE APP_DESKTOP
+
+#ifdef WITH_FS_RES
+#define APP_DEFAULT_FONT "default_full"
+#endif /*WITH_FS_RES*/
+
+#include "awtk_main.inc"

@@ -5,8 +5,9 @@
 #include "gtest/gtest.h"
 #include <stdlib.h>
 #include "widgets/edit.h"
-#include "widgets/window.h"
+#include "base/window.h"
 #include "widgets/group_box.h"
+#include "common.h"
 
 TEST(Edit, int) {
   value_t v1;
@@ -44,6 +45,18 @@ TEST(Edit, int) {
   widget_destroy(b);
 }
 
+TEST(Edit, tips) {
+  widget_t* b = edit_create(NULL, 10, 20, 30, 40);
+
+  ASSERT_EQ(widget_set_prop_str(b, WIDGET_PROP_TIPS, "tips"), RET_OK);
+  ASSERT_STREQ(EDIT(b)->tips, "tips");
+
+  ASSERT_EQ(widget_set_prop_str(b, WIDGET_PROP_TR_TIPS, "tr_tips"), RET_OK);
+  ASSERT_STREQ(EDIT(b)->tr_tips, "tr_tips");
+
+  widget_destroy(b);
+}
+
 TEST(Edit, set_text) {
   text_edit_state_t state;
   widget_t* b = edit_create(NULL, 10, 20, 30, 40);
@@ -51,6 +64,25 @@ TEST(Edit, set_text) {
 
   ASSERT_EQ(text_edit_get_state(EDIT(b)->model, &state), RET_OK);
   ASSERT_EQ(state.cursor, 5);
+
+  widget_destroy(b);
+}
+
+TEST(Edit, set_int) {
+  widget_t* b = edit_create(NULL, 10, 20, 30, 40);
+  ASSERT_EQ(edit_set_int(b, -10), RET_OK);
+  ASSERT_EQ(edit_get_int(b), -10);
+
+  widget_destroy(b);
+}
+
+TEST(Edit, action_text) {
+  widget_t* b = edit_create(NULL, 10, 20, 30, 40);
+
+  ASSERT_STREQ(EDIT(b)->action_text, "done");
+  ASSERT_EQ(widget_set_prop_str(b, WIDGET_PROP_ACTION_TEXT, "next"), RET_OK);
+  ASSERT_STREQ(EDIT(b)->action_text, "next");
+  ASSERT_STREQ(widget_get_prop_str(b, WIDGET_PROP_ACTION_TEXT, ""), "next");
 
   widget_destroy(b);
 }
@@ -200,7 +232,7 @@ TEST(Edit, focus_next) {
   ASSERT_EQ(g->key_target, e1);
   ASSERT_EQ(widget_focus_next(e1), RET_OK);
   ASSERT_EQ(g->key_target, e2);
-  ASSERT_EQ(widget_focus_next(e1), RET_BAD_PARAMS);
+  ASSERT_EQ(widget_focus_next(e1), RET_FAIL);
 
   ASSERT_EQ(widget_focus_next(e2), RET_OK);
   ASSERT_EQ(g->key_target, e3);
@@ -223,7 +255,7 @@ TEST(Edit, focus_prev) {
 
   ASSERT_EQ(widget_focus_prev(e1), RET_OK);
   ASSERT_EQ(g->key_target, e3);
-  ASSERT_EQ(widget_focus_prev(e1), RET_BAD_PARAMS);
+  ASSERT_EQ(widget_focus_prev(e1), RET_FAIL);
 
   ASSERT_EQ(widget_focus_prev(e3), RET_OK);
   ASSERT_EQ(g->key_target, e2);
@@ -401,4 +433,99 @@ TEST(Edit, is_valid_chr_4_custom) {
   ASSERT_EQ(edit_input_char(e, L'a'), RET_OK);
 
   widget_destroy(e);
+}
+
+TEST(Edit, events) {
+  string event_log;
+  widget_t* b = edit_create(NULL, 10, 20, 30, 40);
+
+  widget_on(b, EVT_VALUE_CHANGING, widget_log_events, &event_log);
+  widget_on(b, EVT_VALUE_CHANGED, widget_log_events, &event_log);
+
+  event_log = "";
+  widget_set_text(b, L"a");
+  ASSERT_EQ(event_log, "value_changed");
+  ASSERT_EQ(wcscmp(b->text.str, L"a"), 0);
+
+  event_log = "";
+  widget_set_text(b, L"a");
+  ASSERT_EQ(event_log, "");
+  ASSERT_EQ(wcscmp(b->text.str, L"a"), 0);
+
+  event_log = "";
+  widget_set_text(b, L"1");
+  ASSERT_EQ(event_log, "value_changed");
+  ASSERT_EQ(wcscmp(b->text.str, L"1"), 0);
+
+  event_log = "";
+  edit_input_char(b, 'a');
+  ASSERT_EQ(event_log, "value_changing");
+  ASSERT_EQ(wcscmp(b->text.str, L"1a"), 0);
+
+  widget_destroy(b);
+}
+
+TEST(Edit, clone) {
+  widget_t* w1 = edit_create(NULL, 10, 20, 30, 40);
+  widget_t* w2 = widget_clone(w1, NULL);
+
+  ASSERT_EQ(widget_equal(w1, w2), TRUE);
+
+  widget_destroy(w1);
+  widget_destroy(w2);
+}
+
+TEST(Edit, value) {
+  value_t v;
+  widget_t* w1 = edit_create(NULL, 10, 20, 30, 40);
+  widget_set_text(w1, L"123");
+  edit_set_input_type(w1, INPUT_INT);
+  ASSERT_EQ(widget_get_prop(w1, WIDGET_PROP_VALUE, &v), RET_OK);
+  ASSERT_EQ(v.type, VALUE_TYPE_INT32);
+  ASSERT_EQ(value_int(&v), 123);
+
+  edit_set_input_type(w1, INPUT_UINT);
+  ASSERT_EQ(widget_get_prop(w1, WIDGET_PROP_VALUE, &v), RET_OK);
+  ASSERT_EQ(v.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_int(&v), 123);
+
+  edit_set_input_type(w1, INPUT_FLOAT);
+  ASSERT_EQ(widget_get_prop(w1, WIDGET_PROP_VALUE, &v), RET_OK);
+  ASSERT_EQ(v.type, VALUE_TYPE_DOUBLE);
+  ASSERT_EQ(value_int(&v), 123);
+
+  edit_set_input_type(w1, INPUT_UFLOAT);
+  ASSERT_EQ(widget_get_prop(w1, WIDGET_PROP_VALUE, &v), RET_OK);
+  ASSERT_EQ(v.type, VALUE_TYPE_DOUBLE);
+  ASSERT_EQ(value_int(&v), 123);
+
+  widget_destroy(w1);
+}
+
+TEST(Edit, intputing2) {
+  value_t v;
+  key_event_t evt;
+  widget_t* w1 = edit_create(NULL, 10, 20, 30, 40);
+  key_event_init(&evt, EVT_KEY_DOWN, w1, 0);
+  ASSERT_EQ(widget_get_prop_bool(w1, WIDGET_PROP_INPUTING, TRUE), FALSE);
+
+  widget_dispatch(w1, (event_t*)&evt);
+  widget_set_focused(w1, TRUE);
+  ASSERT_EQ(widget_get_prop_bool(w1, WIDGET_PROP_INPUTING, TRUE), TRUE);
+
+  widget_destroy(w1);
+}
+
+TEST(Edit, intputing3) {
+  value_t v;
+  wheel_event_t evt;
+  widget_t* w1 = edit_create(NULL, 10, 20, 30, 40);
+  wheel_event_init(&evt, EVT_WHEEL, w1, 0);
+  ASSERT_EQ(widget_get_prop_bool(w1, WIDGET_PROP_INPUTING, TRUE), FALSE);
+
+  widget_set_focused(w1, TRUE);
+  widget_dispatch(w1, (event_t*)&evt);
+  ASSERT_EQ(widget_get_prop_bool(w1, WIDGET_PROP_INPUTING, TRUE), TRUE);
+
+  widget_destroy(w1);
 }

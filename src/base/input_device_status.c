@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  input device status
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -53,7 +53,7 @@ static ret_t input_device_status_update_key_status(input_device_status_t* ids, u
     ids->rctrl = down;
   } else if (key == TK_KEY_MENU) {
     ids->menu = down;
-  } else if (key == TK_KEY_COMMAND) {
+  } else if (key == TK_KEY_LCOMMAND || key == TK_KEY_RCOMMAND) {
     ids->cmd = down;
   }
 
@@ -74,8 +74,7 @@ typedef struct _key_shift_t {
 static const key_shift_t key_shift[] = {
     {'`', '~'}, {'1', '!'}, {'2', '@'}, {'3', '#'},  {'4', '$'}, {'5', '%'}, {'6', '^'},
     {'7', '&'}, {'8', '*'}, {'9', '('}, {'0', ')'},  {'-', '_'}, {'=', '+'}, {'[', '{'},
-    {']', '}'}, {',', '<'}, {'.', '>'}, {'\\', '|'}, {'/', '?'},
-};
+    {']', '}'}, {',', '<'}, {'.', '>'}, {'\\', '|'}, {'/', '?'}, {';', ':'}, {'\'', '\"'}};
 
 static ret_t input_device_status_shift_key(input_device_status_t* ids, key_event_t* e) {
   char c = (char)e->key;
@@ -188,6 +187,15 @@ ret_t input_device_status_on_input_event(input_device_status_t* ids, widget_t* w
       ids->pressed = FALSE;
       break;
     }
+    case EVT_CONTEXT_MENU: {
+      pointer_event_t* evt = (pointer_event_t*)e;
+      pointer_event_rotate(evt, system_info());
+
+      input_device_status_init_pointer_event(ids, evt);
+      widget_on_context_menu(widget, evt);
+
+      break;
+    }
     case EVT_KEY_DOWN: {
       key_event_t* evt = (key_event_t*)e;
 
@@ -207,19 +215,11 @@ ret_t input_device_status_on_input_event(input_device_status_t* ids, widget_t* w
       input_device_status_update_key_status(ids, evt->key, FALSE);
       break;
     }
-    case EVT_CONTEXT_MENU: {
-      pointer_event_t* evt = (pointer_event_t*)e;
-      pointer_event_rotate(evt, system_info());
-
-      input_device_status_init_pointer_event(ids, evt);
-      widget_dispatch_to_target(widget, e);
-      break;
-    }
     case EVT_WHEEL: {
       wheel_event_t* evt = (wheel_event_t*)e;
 
       input_device_status_init_wheel_event(ids, evt);
-      widget_dispatch_to_key_target(widget, e);
+      widget_on_wheel(widget, evt);
       break;
     }
     default:

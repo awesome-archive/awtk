@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  generic value type
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -116,11 +116,42 @@ typedef enum _value_type_t {
    * @const VALUE_TYPE_OBJECT
    * object_t*类型。
    */
-  VALUE_TYPE_OBJECT
+  VALUE_TYPE_OBJECT,
+  /**
+   * @const VALUE_TYPE_SIZED_STRING
+   * 带长度的字符串。
+   */
+  VALUE_TYPE_SIZED_STRING,
+  /**
+   * @const VALUE_TYPE_BINARY
+   * 二进制数据。
+   */
+  VALUE_TYPE_BINARY,
+  /**
+   * @const VALUE_TYPE_UBJSON
+   * 二进制数据(UBJSON)。
+   */
+  VALUE_TYPE_UBJSON,
+  /**
+   * @const VALUE_TYPE_TOKEN
+   * 特殊用途。
+   */
+  VALUE_TYPE_TOKEN,
 } value_type_t;
+
+typedef struct _binary_data_t {
+  uint32_t size;
+  void* data;
+} binary_data_t;
+
+typedef struct _sized_str_t {
+  uint32_t size;
+  char* str;
+} sized_str_t;
 
 /**
  * @class value_t
+ * @order -9
  * @annotation ["scriptable"]
  * 一个通用数据类型，用来存放整数、浮点数、字符串和其它对象。
  *
@@ -147,14 +178,17 @@ struct _value_t {
     uint32_t u32;
     int64_t i64;
     uint64_t u64;
+    uint32_t token;
     float f;
     float f32;
     double f64;
     bool_t b;
-    pointer_t ptr;
+    void* ptr;
     const char* str;
     const wchar_t* wstr;
     object_t* object;
+    binary_data_t binary_data;
+    sized_str_t sized_str;
   } value;
 };
 
@@ -350,11 +384,11 @@ uint64_t value_uint64(const value_t* v);
  * @method value_set_pointer
  * 设置类型为pointer的值。
  * @param {value_t*}  v       value对象。
- * @param {pointer_t}     value   待设置的值。
+ * @param {void*}     value   待设置的值。
  *
  * @return {value_t*} value对象本身。
  */
-value_t* value_set_pointer(value_t* v, pointer_t value);
+value_t* value_set_pointer(value_t* v, void* value);
 
 /**
  * @method value_pointer
@@ -363,7 +397,7 @@ value_t* value_set_pointer(value_t* v, pointer_t value);
  *
  * @return {void*} 值。
  */
-pointer_t value_pointer(const value_t* v);
+void* value_pointer(const value_t* v);
 
 /**
  * @method value_set_float
@@ -379,7 +413,6 @@ value_t* value_set_float(value_t* v, float_t value);
 /**
  * @method value_float
  * 获取类型为float\_t的值。
- * @annotation ["scriptable"]
  * @param {value_t*} v value对象。
  *
  * @return {float_t} 值。
@@ -389,7 +422,6 @@ float_t value_float(const value_t* v);
 /**
  * @method value_set_float32
  * 设置类型为float的值。
- * @annotation ["scriptable"]
  * @param {value_t*} v     value对象。
  * @param {float}    value 待设置的值。
  *
@@ -411,6 +443,7 @@ float value_float32(const value_t* v);
  * @method value_set_double
  * 设置类型为double的值。
  * @annotation ["scriptable"]
+ * @alias value_set_float64
  * @param {value_t*} v     value对象。
  * @param {double}   value 待设置的值。
  *
@@ -422,6 +455,7 @@ value_t* value_set_double(value_t* v, double value);
  * @method value_double
  * 获取类型为double的值。
  * @annotation ["scriptable"]
+ * @alias value_float64
  * @param {value_t*} v value对象。
  *
  * @return {double} 值。
@@ -475,7 +509,6 @@ const char* value_str(const value_t* v);
 /**
  * @method value_wstr
  * 获取类型为宽字符串的值。
- * @annotation ["scriptable"]
  * @param {value_t*} v value对象。
  *
  * @return {const wchar_t*} 值。
@@ -505,7 +538,6 @@ bool_t value_equal(const value_t* value, const value_t* other);
 /**
  * @method value_int
  * 转换为int的值。
- * @annotation ["scriptable"]
  * @param {value_t*} v value对象。
  *
  * @return {int} 值。
@@ -543,6 +575,87 @@ value_t* value_set_object(value_t* v, object_t* value);
  * @return {object_t*} 值。
  */
 object_t* value_object(const value_t* v);
+
+/**
+ * @method value_set_token
+ * 设置类型为token的值。
+ * @annotation ["scriptable"]
+ * @param {value_t*} v  value对象。
+ * @param {uint32_t}  value 待设置的值。
+ *
+ * @return {value_t*} value对象本身。
+ */
+value_t* value_set_token(value_t* v, uint32_t value);
+
+/**
+ * @method value_token
+ * 获取token的值。
+ * @annotation ["scriptable"]
+ * @param {value_t*} v value对象。
+ *
+ * @return {uint32_t} 值。
+ */
+uint32_t value_token(const value_t* v);
+
+/**
+ * @method value_set_sized_str
+ * 设置类型为带长度的字符串的值。
+ * @param {value_t*} v  value对象。
+ * @param {char*}  str 待设置的值。
+ * @param {uint32_t}  size 长度。
+ *
+ * @return {value_t*} value对象本身。
+ */
+value_t* value_set_sized_str(value_t* v, char* str, uint32_t size);
+
+/**
+ * @method value_sized_str
+ * 获取为sized_str的值。
+ * @param {value_t*} v value对象。
+ *
+ * @return {sized_str_t*} 值。
+ */
+sized_str_t* value_sized_str(const value_t* v);
+
+/**
+ * @method value_set_binary_data
+ * 设置类型为binary_data的值。
+ * @param {value_t*} v  value对象。
+ * @param {void*}  value 待设置的值。
+ * @param {uint32_t}  size 长度。
+ *
+ * @return {value_t*} value对象本身。
+ */
+value_t* value_set_binary_data(value_t* v, void* data, uint32_t size);
+
+/**
+ * @method value_binary_data
+ * 获取为binary_data的值。
+ * @param {value_t*} v value对象。
+ *
+ * @return {binary_data_t*} 值。
+ */
+binary_data_t* value_binary_data(const value_t* v);
+
+/**
+ * @method value_set_ubjson
+ * 设置类型为ubjson的值。
+ * @param {value_t*} v  value对象。
+ * @param {void*}  value 待设置的值。
+ * @param {uint32_t}  size 长度。
+ *
+ * @return {value_t*} value对象本身。
+ */
+value_t* value_set_ubjson(value_t* v, void* data, uint32_t size);
+
+/**
+ * @method value_ubjson
+ * 获取为ubjson的值。
+ * @param {value_t*} v value对象。
+ *
+ * @return {binary_data_t*} 值。
+ */
+binary_data_t* value_ubjson(const value_t* v);
 
 /**
  * @method value_copy

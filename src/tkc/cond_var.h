@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  cond_var
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,10 +19,10 @@
  *
  */
 
-#ifndef TK_COND_VAR_H
-#define TK_COND_VAR_H
+#ifndef TK_COND_VAR_SIMPLE_H
+#define TK_COND_VAR_SIMPLE_H
 
-#include "tkc/types_def.h"
+#include "tkc/cond.h"
 
 BEGIN_C_DECLS
 
@@ -71,4 +71,4 @@ ret_t tk_cond_var_destroy(tk_cond_var_t* cond_var);
 
 END_C_DECLS
 
-#endif /*TK_COND_VAR_H*/
+#endif /*TK_COND_VAR_SIMPLE_H*/

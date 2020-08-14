@@ -13,6 +13,7 @@ class nanovg_image_blender {
 
  public:
   nanovg_image_blender(BitmapT* bitmap, float* matrix);
+  nanovg_image_blender(BitmapT* bitmap, float* matrix, float alpha);
 
   bool get_pixel(float x, float y, pixel32_rgba& ref) const;
   void operator()(pixel* pixels, int x, int y, count_t n) const;
@@ -21,13 +22,21 @@ class nanovg_image_blender {
  private:
   BitmapT* _bitmap;
   float* _matrix;
+  float _alpha;
   int w;
   int h;
 };
 
 template <typename PixelT, typename BitmapT>
 inline nanovg_image_blender<PixelT, BitmapT>::nanovg_image_blender(BitmapT* bitmap, float* matrix)
-    : _bitmap(bitmap), _matrix(matrix) {
+    : _bitmap(bitmap), _matrix(matrix), _alpha(1.0f) {
+  this->w = bitmap->width();
+  this->h = bitmap->height();
+}
+
+template <typename PixelT, typename BitmapT>
+inline nanovg_image_blender<PixelT, BitmapT>::nanovg_image_blender(BitmapT* bitmap, float* matrix, float alpha)
+    : _bitmap(bitmap), _matrix(matrix), _alpha(alpha) {
   this->w = bitmap->width();
   this->h = bitmap->height();
 }
@@ -80,6 +89,14 @@ inline bool nanovg_image_blender<PixelT, BitmapT>::get_pixel(float x, float y,
   pixel_linear(p[0], p[2], oy - y1);
   ref = p[0];
 
+  ref.a *= _alpha;
+
+  if (_bitmap->flags() & NVG_IMAGE_PREMULTIPLIED) {
+    ref.r = ref.r * _alpha;
+    ref.g = ref.g * _alpha;
+    ref.b = ref.b * _alpha;
+  }
+
   return true;
 }
 
@@ -92,7 +109,11 @@ inline void nanovg_image_blender<PixelT, BitmapT>::operator()(pixel* pixels, int
       continue;
     }
 
-    pixel_blend<PixelT, pixel32_rgba>(*pixels, p, p.a);
+    if (_bitmap->flags() & NVG_IMAGE_PREMULTIPLIED) {
+      pixel_blend_premulti_alpha<PixelT, pixel32_rgba>(*pixels, p, p.a, 1);
+    } else {
+      pixel_blend<PixelT, pixel32_rgba>(*pixels, p, p.a);
+    }
   }
 }
 
@@ -107,7 +128,11 @@ inline void nanovg_image_blender<PixelT, BitmapT>::operator()(pixel* pixels, int
     }
 
     uint8_t a = pixel_a(p, covers[0]);
-    pixel_blend<PixelT, pixel32_rgba>(*pixels, p, a);
+    if (_bitmap->flags() & NVG_IMAGE_PREMULTIPLIED) {
+      pixel_blend_premulti_alpha<PixelT, pixel32_rgba>(*pixels, p, a, covers[0]);
+    } else {
+      pixel_blend<PixelT, pixel32_rgba>(*pixels, p, a);
+    }
   }
 }
 }  // namespace agge

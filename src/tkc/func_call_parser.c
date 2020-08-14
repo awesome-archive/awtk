@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  func_call_parser
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is difunc_call_parseributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -27,7 +27,7 @@ func_call_parser_t* func_call_parser_init(func_call_parser_t* parser, const char
                                           uint32_t size) {
   return_value_if_fail(parser != NULL && str != NULL, NULL);
 
-  tokenizer_init(&(parser->tokenizer), str, size, "(=,) ");
+  tokenizer_init(&(parser->tokenizer), str, size, "(=,)\r\n\t ");
 
   return parser;
 }
@@ -94,7 +94,7 @@ static ret_t parser_on_name(func_call_parser_t* parser, const char* func_name) {
 
 object_t* func_call_parse(const char* str, uint32_t size) {
   object_parser_t parser;
-  return_value_if_fail(str != NULL, NULL);
+  return_value_if_fail(str != NULL && size > 0, NULL);
 
   memset(&parser, 0x00, sizeof(parser));
   func_call_parser_init(&(parser.base), str, size);

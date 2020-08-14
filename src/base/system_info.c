@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   system_info.h
  * Author: AWTK Develop Team
  * Brief:  system info
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -56,6 +56,34 @@ static ret_t system_info_set_app_root(system_info_t* info, const char* app_root)
   return RET_OK;
 }
 
+static ret_t system_info_normalize_app_root_try_default(system_info_t* info,
+                                                        const char* app_root_default) {
+  if (app_root_is_valid(app_root_default)) {
+    return system_info_set_app_root(info, app_root_default);
+  } else if (!path_is_abs(app_root_default)) {
+    char path[MAX_PATH + 1] = {0};
+
+    if (path_exe(path) == RET_OK) {
+      char app_root[MAX_PATH + 1] = {0};
+      char* last = NULL;
+
+      last = strrchr(path, TK_PATH_SEP);
+      if (last != NULL) {
+        *last = '\0';
+      }
+
+      path_build(app_root, MAX_PATH, path, app_root_default, NULL);
+      if (app_root_is_valid(app_root)) {
+        return system_info_set_app_root(info, app_root);
+      }
+    }
+
+    return RET_FAIL;
+  }
+
+  return RET_FAIL;
+}
+
 static ret_t system_info_normalize_app_root_try_path(system_info_t* info, char* path) {
   char* last = NULL;
   char app_root[MAX_PATH + 1] = {0};
@@ -69,11 +97,16 @@ static ret_t system_info_normalize_app_root_try_path(system_info_t* info, char* 
   }
 
   if (!app_root_is_valid(path)) {
-    path_build(app_root, MAX_PATH, path, "demos", NULL);
+    path_build(app_root, MAX_PATH, path, "res", NULL);
     if (app_root_is_valid(app_root)) {
       return system_info_set_app_root(info, app_root);
     } else {
-      return RET_FAIL;
+      path_build(app_root, MAX_PATH, path, "demos", NULL);
+      if (app_root_is_valid(app_root)) {
+        return system_info_set_app_root(info, app_root);
+      } else {
+        return RET_FAIL;
+      }
     }
   } else {
     return system_info_set_app_root(info, path);
@@ -101,12 +134,14 @@ static ret_t system_info_normalize_app_root_try_exe(system_info_t* info) {
 }
 
 static ret_t system_info_normalize_app_root(system_info_t* info, const char* app_root_default) {
-  if (app_root_is_valid(app_root_default)) {
-    return system_info_set_app_root(info, app_root_default);
+  if (system_info_normalize_app_root_try_default(info, app_root_default) == RET_OK) {
+    return RET_OK;
   } else if (system_info_normalize_app_root_try_cwd(info) == RET_OK) {
     return RET_OK;
   } else if (system_info_normalize_app_root_try_exe(info) == RET_OK) {
     return RET_OK;
+  } else {
+    system_info_set_app_root(info, "");
   }
 
   log_debug("Not found valid assets folder!\n");
@@ -278,13 +313,19 @@ ret_t system_info_set_device_pixel_ratio(system_info_t* info, float_t device_pix
 
 static ret_t system_info_eval_one(system_info_t* info, str_t* str, const char* expr,
                                   tk_visit_t on_expr_result, void* ctx) {
-  if (strchr(expr, '$') != NULL) {
+  bool_t not_schema = strstr(expr, STR_SCHEMA_FILE) == NULL &&
+                      strstr(expr, STR_SCHEMA_HTTP) == NULL &&
+                      strstr(expr, STR_SCHEMA_HTTPS) == NULL;
+
+  if (not_schema && strchr(expr, '$') != NULL) {
     str_set(str, "");
-    ENSURE(str_expand_vars(str, expr, OBJECT(info)) == RET_OK);
-  } else {
-    ENSURE(str_set(str, expr) == RET_OK);
+
+    if (str_expand_vars(str, expr, OBJECT(info)) == RET_OK) {
+      return on_expr_result(ctx, str->str);
+    }
   }
 
+  ENSURE(str_set(str, expr) == RET_OK);
   return on_expr_result(ctx, str->str);
 }
 

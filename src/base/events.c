@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  events structs
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -46,7 +46,8 @@ pointer_event_t* pointer_event_cast(event_t* event) {
 
 key_event_t* key_event_cast(event_t* event) {
   return_value_if_fail(event != NULL, NULL);
-  return_value_if_fail(event->type >= EVT_KEY_DOWN && event->type <= EVT_KEY_UP, NULL);
+  return_value_if_fail(event->type >= EVT_KEY_DOWN && event->type <= EVT_KEY_UP_BEFORE_CHILDREN,
+                       NULL);
 
   return (key_event_t*)event;
 }
@@ -76,8 +77,28 @@ ret_t pointer_event_rotate(pointer_event_t* evt, system_info_t* info) {
 
   switch (info->lcd_orientation) {
     case LCD_ORIENTATION_90: {
+#if WITH_NANOVG_GPU
+      evt->y = info->lcd_w - x - 1;
+      evt->x = y;
+#else
       evt->y = x;
       evt->x = info->lcd_h - y - 1;
+#endif
+      break;
+    }
+    case LCD_ORIENTATION_180: {
+      evt->y = info->lcd_h - y - 1;
+      evt->x = info->lcd_w - x - 1;
+      break;
+    }
+    case LCD_ORIENTATION_270: {
+#if WITH_NANOVG_GPU
+      evt->y = x;
+      evt->x = info->lcd_h - y - 1;
+#else
+      evt->y = info->lcd_w - x - 1;
+      evt->x = y;
+#endif
       break;
     }
     default:

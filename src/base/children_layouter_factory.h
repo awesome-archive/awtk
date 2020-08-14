@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  children layouter factory
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -66,7 +66,7 @@ children_layouter_factory_t* children_layouter_factory_create(void);
 /**
  * @method children_layouter_factory_register
  * 注册子控件布局算法创建函数。
- * @param {children_layouter_factory_t*} factory highlighter工厂对象。
+ * @param {children_layouter_factory_t*} factory layouter工厂对象。
  * @param {const char*} type 子控件布局算法类型。
  * @param {children_layouter_create_t} create 子控件布局算法创建函数。
  *
@@ -81,7 +81,7 @@ ret_t children_layouter_factory_register(children_layouter_factory_t* factory, c
  * @param {children_layouter_factory_t*} factory 子控件布局算法工厂对象。
  * @param {const char*} type 类型。
  *
- * @return {children_layouter_t*} 返回窗口动画对象。
+ * @return {children_layouter_t*} 返回子控件布局算法对象。
  */
 children_layouter_t* children_layouter_factory_create_layouter(children_layouter_factory_t* factory,
                                                                const char* type);

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  key code constants
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,11 +21,11 @@
 
 #ifndef TK_KEYS_H
 #define TK_KEYS_H
+#include "base/types_def.h"
 
 #ifdef WITH_SDL
 #include <SDL_keycode.h>
 #endif
-#include "base/types_def.h"
 
 BEGIN_C_DECLS
 
@@ -711,41 +711,195 @@ typedef enum _key_code_t {
   TK_KEY_SLEEP = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_SLEEP),
   TK_KEY_APP1 = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_APP1),
   TK_KEY_APP2 = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_APP2),
-  TK_KEY_COMMAND = TK_KEY_RGUI,
+  TK_KEY_COMMAND = TK_KEY_LGUI,
+  TK_KEY_LCOMMAND = TK_KEY_LGUI,
+  TK_KEY_RCOMMAND = TK_KEY_RGUI,
+  TK_KEY_BACK = TK_KEY_AC_BACK,
 #else
+  /**
+   * @const TK_KEY_LSHIFT
+   * TK_KEY_LSHIFT
+   */
   TK_KEY_LSHIFT = 0x20 + 127,
+  /**
+   * @const TK_KEY_RSHIFT
+   * TK_KEY_RSHIFT
+   */
   TK_KEY_RSHIFT = 0x20 + 128,
+  /**
+   * @const TK_KEY_LCTRL
+   * TK_KEY_LCTRL
+   */
   TK_KEY_LCTRL = 0x20 + 129,
+  /**
+   * @const TK_KEY_RCTRL
+   * TK_KEY_RCTRL
+   */
   TK_KEY_RCTRL = 0x20 + 130,
+  /**
+   * @const TK_KEY_LALT
+   * TK_KEY_LALT
+   */
   TK_KEY_LALT = 0x20 + 131,
+  /**
+   * @const TK_KEY_RALT
+   * TK_KEY_RALT
+   */
   TK_KEY_RALT = 0x20 + 132,
+  /**
+   * @const TK_KEY_CAPSLOCK
+   * TK_KEY_CAPSLOCK
+   */
   TK_KEY_CAPSLOCK = 0x20 + 133,
+  /**
+   * @const TK_KEY_HOME
+   * TK_KEY_HOME
+   */
   TK_KEY_HOME = 0x20 + 134,
+  /**
+   * @const TK_KEY_END
+   * TK_KEY_END
+   */
   TK_KEY_END = 0x20 + 135,
+  /**
+   * @const TK_KEY_INSERT
+   * TK_KEY_INSERT
+   */
   TK_KEY_INSERT = 0x20 + 137,
+  /**
+   * @const TK_KEY_UP
+   * TK_KEY_UP
+   */
   TK_KEY_UP = 0x20 + 138,
+  /**
+   * @const TK_KEY_DOWN
+   * TK_KEY_DOWN
+   */
   TK_KEY_DOWN = 0x20 + 139,
+  /**
+   * @const TK_KEY_LEFT
+   * TK_KEY_LEFT
+   */
   TK_KEY_LEFT = 0x20 + 140,
+  /**
+   * @const TK_KEY_RIGHT
+   * TK_KEY_RIGHT
+   */
   TK_KEY_RIGHT = 0x20 + 141,
+  /**
+   * @const TK_KEY_PAGEUP
+   * TK_KEY_PAGEUP
+   */
   TK_KEY_PAGEUP = 0x20 + 142,
+  /**
+   * @const TK_KEY_PAGEDOWN
+   * TK_KEY_PAGEDOWN
+   */
   TK_KEY_PAGEDOWN = 0x20 + 143,
+  /**
+   * @const TK_KEY_F1
+   * TK_KEY_F1
+   */
   TK_KEY_F1 = 0x20 + 151,
+  /**
+   * @const TK_KEY_F2
+   * TK_KEY_F2
+   */
   TK_KEY_F2 = 0x20 + 152,
+  /**
+   * @const TK_KEY_F3
+   * TK_KEY_F3
+   */
   TK_KEY_F3 = 0x20 + 153,
+  /**
+   * @const TK_KEY_F4
+   * TK_KEY_F4
+   */
   TK_KEY_F4 = 0x20 + 154,
+  /**
+   * @const TK_KEY_F5
+   * TK_KEY_F5
+   */
   TK_KEY_F5 = 0x20 + 155,
+  /**
+   * @const TK_KEY_F6
+   * TK_KEY_F6
+   */
   TK_KEY_F6 = 0x20 + 156,
+  /**
+   * @const TK_KEY_F7
+   * TK_KEY_F7
+   */
   TK_KEY_F7 = 0x20 + 157,
+  /**
+   * @const TK_KEY_F8
+   * TK_KEY_F8
+   */
   TK_KEY_F8 = 0x20 + 158,
+  /**
+   * @const TK_KEY_F9
+   * TK_KEY_F9
+   */
   TK_KEY_F9 = 0x20 + 159,
+  /**
+   * @const TK_KEY_F10
+   * TK_KEY_F10
+   */
   TK_KEY_F10 = 0x20 + 160,
+  /**
+   * @const TK_KEY_F11
+   * TK_KEY_F11
+   */
   TK_KEY_F11 = 0x20 + 161,
+  /**
+   * @const TK_KEY_F12
+   * TK_KEY_F12
+   */
   TK_KEY_F12 = 0x20 + 162,
+  /**
+   * @const TK_KEY_MENU
+   * TK_KEY_MENU
+   */
   TK_KEY_MENU = 0x20 + 163,
+  /**
+   * @const TK_KEY_COMMAND
+   * TK_KEY_COMMAND
+   */
   TK_KEY_COMMAND = 0x20 + 164,
+  TK_KEY_LCOMMAND = 0x20 + 164,
+  TK_KEY_RCOMMAND = 0x20 + 165,
+  /**
+   * @const TK_KEY_BACK
+   * TK_KEY_BACK
+   */
+  TK_KEY_BACK = 0x20 + 166,
+  /**
+   * @const TK_KEY_CANCEL
+   * TK_KEY_CANCEL
+   */
+  TK_KEY_CANCEL = 0x20 + 167,
 #endif
-
 } key_code_t;
+
+#ifndef TK_KEY_CLOSE_INPUT_METHOD
+#define TK_KEY_CLOSE_INPUT_METHOD TK_KEY_F7
+#endif /*TK_KEY_CLOSE_INPUT_METHOD*/
+
+#ifndef TK_KEY_OPEN_INPUT_METHOD
+#define TK_KEY_OPEN_INPUT_METHOD TK_KEY_F8
+#endif /*TK_KEY_OPEN_INPUT_METHOD*/
+
+#ifndef TK_KEY_TOGGLE_INPUT_METHOD
+#define TK_KEY_TOGGLE_INPUT_METHOD TK_KEY_F9
+#endif /*TK_KEY_TOGGLE_INPUT_METHOD*/
+
+static inline bool_t key_code_is_enter(int key) {
+#ifdef SDL2
+  return (key == TK_KEY_RETURN || key == TK_KEY_KP_ENTER);
+#else
+  return key == TK_KEY_RETURN;
+#endif /*SDL2*/
+}
 
 END_C_DECLS
 

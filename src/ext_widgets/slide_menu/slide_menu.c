@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   slide_menu.h
  * Author: AWTK Develop Team
  * Brief:  slide_menu
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -55,7 +55,7 @@ int32_t slide_menu_fix_index(widget_t* widget, int32_t index) {
 
 static widget_t* slide_menu_get_child(widget_t* widget, int32_t index) {
   widget_t** children = NULL;
-  return_value_if_fail(widget != NULL, NULL);
+  return_value_if_fail(widget != NULL && widget->children, NULL);
 
   children = (widget_t**)(widget->children->elms);
   return_value_if_fail(children != NULL, NULL);
@@ -79,6 +79,8 @@ static widget_t* slide_menu_find_target(widget_t* widget, xy_t x, xy_t y) {
 
   widget_to_local(widget, &p);
   current = slide_menu_get_child(widget, slide_menu->value);
+  return_value_if_fail(current != NULL, NULL);
+
   r = current->x + current->w;
   b = current->y + current->h;
   xx = p.x;
@@ -92,13 +94,14 @@ static widget_t* slide_menu_find_target(widget_t* widget, xy_t x, xy_t y) {
 }
 
 static int32_t slide_menu_get_visible_nr(widget_t* widget) {
+  if (widget->w == 0 || widget->h == 0) return 0;
   slide_menu_t* slide_menu = SLIDE_MENU(widget);
   int32_t n = (widget->w - widget->h) / (slide_menu->min_scale * widget->h) + 1;
 
   n = tk_min(n, MAX_VISIBLE_NR);
   n = tk_min(n, widget_count_children(widget));
 
-  return n;
+  return n > 0 ? n : 0;
 }
 
 static rect_t slide_menu_get_clip_r(widget_t* widget) {
@@ -109,12 +112,12 @@ static rect_t slide_menu_get_clip_r(widget_t* widget) {
   slide_menu_t* slide_menu = SLIDE_MENU(widget);
 
   nr = tk_max(1, nr);
-  if (nr > 3 && (nr % 2) == 0) {
+  if (nr > 0 && (nr % 2) != 0) {
     nr--;
     /*keep nr is odd*/
   }
 
-  w = h + h * (nr - 1) * slide_menu->min_scale;
+  w = h + h * nr * slide_menu->min_scale;
   x = tk_roundi((widget->w - w) / 2.0f);
 
   return rect_init(x, 0, w, h);
@@ -176,6 +179,7 @@ static ret_t slide_menu_on_paint_children(widget_t* widget, canvas_t* c) {
     rect_t r;
     rect_t save_r;
     rect_t clip_r = slide_menu_get_clip_r(widget);
+    vgcanvas_t* vg = canvas_get_vgcanvas(c);
 
     clip_r.x += c->ox;
     clip_r.y += c->oy;
@@ -183,9 +187,20 @@ static ret_t slide_menu_on_paint_children(widget_t* widget, canvas_t* c) {
     r = rect_intersect(&save_r, &clip_r);
 
     canvas_save(c);
+    if (vg != NULL) {
+      vgcanvas_save(vg);
+      vgcanvas_clip_rect(vg, (float_t)r.x, (float_t)r.y, (float_t)r.w, (float_t)r.h);
+    }
+
     canvas_set_clip_rect(c, &r);
     slide_menu_paint_children(widget, c);
     canvas_set_clip_rect(c, &save_r);
+
+    if (vg != NULL) {
+      vgcanvas_clip_rect(vg, (float_t)save_r.x, (float_t)save_r.y, (float_t)save_r.w,
+                         (float_t)save_r.h);
+      vgcanvas_restore(vg);
+    }
     canvas_restore(c);
 
     slide_menu_paint_mask(widget, c, &clip_r);
@@ -222,6 +237,7 @@ static uint32_t slide_menu_get_visible_children(widget_t* widget,
   }
 
   nr = slide_menu_get_visible_nr(widget);
+  if (nr == 0) return 0;
 
   if (xoffset >= 0) {
     curr = MAX_VISIBLE_NR / 2;
@@ -440,7 +456,8 @@ static ret_t slide_menu_on_scroll_done(void* ctx, event_t* e) {
   int32_t delta_index = 0;
   widget_t* widget = WIDGET(ctx);
   slide_menu_t* slide_menu = SLIDE_MENU(ctx);
-  return_value_if_fail(widget != NULL && slide_menu != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(widget != NULL && slide_menu != NULL && widget->children != NULL,
+                       RET_BAD_PARAMS);
 
   delta_index = slide_menu_get_delta_index(widget);
   index = slide_menu_fix_index(widget, slide_menu->value - delta_index);

@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   switch.c
  * Author: AWTK Develop Team
  * Brief:  switch
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -125,22 +125,28 @@ static ret_t switch_on_pointer_up(switch_t* aswitch, pointer_event_t* e) {
 static ret_t switch_on_event(widget_t* widget, event_t* e) {
   uint16_t type = e->type;
   switch_t* aswitch = SWITCH(widget);
+  ret_t ret = RET_OK;
   return_value_if_fail(widget != NULL && aswitch != NULL, RET_BAD_PARAMS);
 
   switch (type) {
     case EVT_POINTER_DOWN: {
+      aswitch->pressed = TRUE;
       aswitch->point_down_aborted = FALSE;
       widget_grab(widget->parent, widget);
       switch_on_pointer_down(aswitch, (pointer_event_t*)e);
       break;
     }
     case EVT_POINTER_DOWN_ABORT: {
-      aswitch->point_down_aborted = TRUE;
-      aswitch->xoffset = aswitch->xoffset_save;
-      widget_ungrab(widget->parent, widget);
+      if (aswitch->pressed) {
+        aswitch->pressed = FALSE;
+        aswitch->point_down_aborted = TRUE;
+        aswitch->xoffset = aswitch->xoffset_save;
+        widget_ungrab(widget->parent, widget);
+      }
       break;
     }
     case EVT_POINTER_UP: {
+      aswitch->pressed = FALSE;
       if (!aswitch->point_down_aborted) {
         switch_on_pointer_up(aswitch, (pointer_event_t*)e);
         widget_ungrab(widget->parent, widget);
@@ -151,16 +157,27 @@ static ret_t switch_on_event(widget_t* widget, event_t* e) {
     }
     case EVT_POINTER_MOVE: {
       pointer_event_t* evt = (pointer_event_t*)e;
-      if (evt->pressed && !aswitch->point_down_aborted) {
+      if (aswitch->pressed && !aswitch->point_down_aborted) {
         switch_on_pointer_move(aswitch, evt);
         widget_invalidate(widget, NULL);
+        ret = RET_STOP;
       }
+      break;
+    }
+    case EVT_RESIZE:
+    case EVT_MOVE_RESIZE: {
+      if (aswitch->value) {
+        aswitch->xoffset = 0;
+      } else {
+        aswitch->xoffset = aswitch->max_xoffset_ratio * widget->w;
+      }
+      break;
     }
     default:
       break;
   }
 
-  return RET_OK;
+  return ret;
 }
 
 ret_t switch_fill_rect_color(widget_t* widget, canvas_t* c, rect_t* r, bool_t bg) {
@@ -226,8 +243,7 @@ static ret_t switch_on_paint_background_img(widget_t* widget, canvas_t* c, bitma
   w = iw * (1 - aswitch->max_xoffset_ratio);
   wscale = (float_t)(widget->w) / (float_t)w;
 
-#ifdef WITH_NANOVG_SOFT
-  if (round_radius < 5) {
+  if (vg == NULL || (round_radius < 5 && hscale == 1 && wscale == 1)) {
     int32_t x = (widget->w - w) >> 1;
     int32_t y = (widget->h - ih) >> 1;
     rect_t src = rect_init(xoffset, 0, w, ih);
@@ -238,15 +254,16 @@ static ret_t switch_on_paint_background_img(widget_t* widget, canvas_t* c, bitma
 
     return canvas_draw_image(c, img, &src, &dst);
   }
-#endif /*WITH_NANOVG_SOFT*/
 
-  vgcanvas_save(vg);
-  vgcanvas_translate(vg, c->ox, c->oy);
-  vgcanvas_scale(vg, wscale, hscale);
-  vgcanvas_translate(vg, -xoffset, 0);
-  vgcanvas_rounded_rect(vg, xoffset, 0, w, h, round_radius);
-  vgcanvas_paint(vg, FALSE, img);
-  vgcanvas_restore(vg);
+  if (vg != NULL) {
+    vgcanvas_save(vg);
+    vgcanvas_translate(vg, c->ox, c->oy);
+    vgcanvas_scale(vg, wscale, hscale);
+    vgcanvas_translate(vg, -xoffset, 0);
+    vgcanvas_rounded_rect(vg, xoffset, 0, w, h, round_radius);
+    vgcanvas_paint(vg, FALSE, img);
+    vgcanvas_restore(vg);
+  }
 
   return RET_OK;
 }
@@ -260,13 +277,13 @@ static ret_t switch_on_paint_background(widget_t* widget, canvas_t* c) {
   style = widget->astyle;
   image_name = style_get_str(style, STYLE_ID_BG_IMAGE, NULL);
 
-  if (image_name != NULL) {
+  if (image_name != NULL && *image_name) {
     bitmap_t img;
     if (widget_load_image(widget, image_name, &img) == RET_OK) {
       return switch_on_paint_background_img(widget, c, &img);
     }
   } else {
-    int32_t w = tk_roundi(widget->w * 1.5 * (1 - aswitch->max_xoffset_ratio));
+    int32_t w = widget->w;  //tk_roundi(widget->w * 1.5 * (1 - aswitch->max_xoffset_ratio));
     rect_t r = rect_init((widget->w - w) / 2.0f, 0, w, widget->h);
     return switch_fill_rect_color(widget, c, &r, TRUE);
   }
@@ -310,7 +327,7 @@ static ret_t switch_on_paint_self(widget_t* widget, canvas_t* c) {
   r.w = bar_size - margin_left - margin_right;
   r.h = widget->h - margin_top - margin_bottom;
 
-  if (image_name == NULL) {
+  if (image_name == NULL || *image_name == 0) {
     switch_fill_rect_color(widget, c, &r, FALSE);
   } else {
     bitmap_t img;
@@ -381,6 +398,11 @@ static ret_t switch_set_prop(widget_t* widget, const char* name, const value_t* 
     return RET_OK;
   } else if (tk_str_eq(name, SWITCH_PROP_MAX_XOFFSET_RATIO)) {
     aswitch->max_xoffset_ratio = value_float(v);
+    if (aswitch->value) {
+      aswitch->xoffset = 0;
+    } else {
+      aswitch->xoffset = aswitch->max_xoffset_ratio * widget->w;
+    }
     return RET_OK;
   }
 
@@ -411,13 +433,14 @@ widget_t* switch_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {
   return_value_if_fail(aswitch != NULL, NULL);
 
   aswitch->value = TRUE;
+  aswitch->pressed = FALSE;
   aswitch->max_xoffset_ratio = 0.34f;
 
   return widget;
 }
 
 widget_t* switch_cast(widget_t* widget) {
-  return_value_if_fail(widget != NULL && (widget->vt == TK_REF_VTABLE(switch)), NULL);
+  return_value_if_fail(WIDGET_IS_INSTANCE_OF(widget, switch), NULL);
 
   return widget;
 }

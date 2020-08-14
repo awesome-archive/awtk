@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  path
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -126,6 +126,37 @@ ret_t path_app_root(char path[MAX_PATH + 1]) {
   return RET_FAIL;
 }
 
+static char* path_up(char* path) {
+  uint32_t len = strlen(path);
+  if (len > 0) {
+    char* p = path + strlen(path) - 1;
+    if (IS_PATH_SEP(*p)) {
+      *p = '\0';
+      p--;
+    }
+
+    while (p > path && *p != '/' && *p != '\\') {
+      p--;
+    }
+
+    if (path == p) {
+      if (*p != '/' && *p != '\\') {
+        p[0] = '\0';
+        return p;
+      } else {
+        p[0] = TK_PATH_SEP;
+      }
+    } else {
+      p[0] = TK_PATH_SEP;
+    }
+    p[1] = '\0';
+
+    return p + 1;
+  } else {
+    return path;
+  }
+}
+
 ret_t path_normalize(const char* path, char* result, int32_t size) {
   const char* s = path;
   char* d = result;
@@ -136,7 +167,9 @@ ret_t path_normalize(const char* path, char* result, int32_t size) {
     switch (*s) {
       case '/':
       case '\\': {
-        *d++ = TK_PATH_SEP;
+        if (d == result || !IS_PATH_SEP(d[-1])) {
+          *d++ = TK_PATH_SEP;
+        }
         while (IS_PATH_SEP(*s)) {
           s++;
         }
@@ -146,18 +179,13 @@ ret_t path_normalize(const char* path, char* result, int32_t size) {
         if (IS_PATH_SEP(s[1])) {
           s += 2;
         } else if (s[1] == '.') {
-          char* p = NULL;
-          return_value_if_fail(IS_PATH_SEP(s[2]), RET_FAIL);
+          return_value_if_fail(IS_PATH_SEP(s[2]) || s[2] == '\0', RET_FAIL);
 
-          d--;
-          *d = '\0';
-          p = strrchr(result, TK_PATH_SEP);
-          if (p != NULL) {
-            d = p + 1;
-          } else {
-            d = result;
+          d = path_up(result);
+          s += 2;
+          if (IS_PATH_SEP(s[0])) {
+            s++;
           }
-          s += 3;
         } else {
           *d++ = *s++;
         }
@@ -170,8 +198,22 @@ ret_t path_normalize(const char* path, char* result, int32_t size) {
   return RET_OK;
 }
 
+bool_t path_is_abs(const char* path) {
+  return_value_if_fail(path != NULL && *path, FALSE);
+
+  return path[0] == '/' || path[1] == ':';
+}
+
 ret_t path_abs(const char* path, char* result, int32_t size) {
   char cwd[MAX_PATH + 1];
+  return_value_if_fail(path != NULL && result != NULL && strlen(path) < size, RET_BAD_PARAMS);
+
+  if (path_is_abs(path)) {
+    tk_strncpy(result, path, size);
+
+    return RET_OK;
+  }
+
   if (path_cwd(cwd) == RET_OK) {
     return path_build(result, size, cwd, path, NULL);
   }
@@ -195,7 +237,9 @@ ret_t path_build(char* result, int32_t size, ...) {
       return_value_if_fail(((new_size + 1) < avail_size), RET_FAIL);
 
       if (d != result) {
-        *d++ = TK_PATH_SEP;
+        if (d[-1] != TK_PATH_SEP) {
+          *d++ = TK_PATH_SEP;
+        }
       }
 
       memcpy(d, p, new_size);
@@ -223,12 +267,20 @@ ret_t path_replace_basename(char* result, int32_t size, const char* filename,
   return path_build(result, size, dirname, basename, NULL);
 }
 
-ret_t path_create(const char* path) {
-  /*TODO*/
-  return RET_FAIL;
-}
+ret_t path_replace_extname(char* result, int32_t size, const char* filename, const char* extname) {
+  char* p = NULL;
+  return_value_if_fail(result != NULL && filename != NULL && extname != NULL, RET_BAD_PARAMS);
 
-ret_t path_remove(const char* path) {
-  /*TODO*/
-  return RET_FAIL;
+  memset(result, 0x00, size);
+  path_normalize(filename, result, size);
+  p = strrchr(result, '.');
+  if (p != NULL) {
+    uint32_t n = 0;
+    p++;
+    *p = '\0';
+    n = size - strlen(result) - 1;
+    strncpy(p, extname, n);
+  }
+
+  return RET_OK;
 }

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  svg_image
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -35,14 +35,14 @@ BEGIN_C_DECLS
  *
  * svg\_image\_t是[image\_base\_t](image_base_t.md)的子类控件，image\_base\_t的函数均适用于svg\_image\_t控件。
  *
- * 在xml中使用"svg\_image"标签创建SVG图片控件。如：
+ * 在xml中使用"svg"标签创建SVG图片控件。如：
  *
  * ```xml
- * <svg_image image="girl"/>
+ * <svg image="girl"/>
  * ```
  *
  * >更多用法请参考：[svg image](
- * https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/svg_image.xml)
+ * https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/svg_image.xml)
  *
  * 在c代码中使用函数svg\_image\_create创建SVG图片控件。如：
  *
@@ -59,13 +59,15 @@ BEGIN_C_DECLS
  * 可用通过style来设置控件的显示风格，如背景和边框等。如：
  *
  * ```xml
+ * <svg>
  * <style name="default">
  *   <normal border_color="green" fg_color="red" />
  * </style>
+ * </svg>
  * ```
  *
  * > 更多用法请参考：[theme default](
- * https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml)
+ * https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/styles/default.xml)
  *
  */
 typedef struct _svg_image_t {
@@ -88,6 +90,20 @@ typedef struct _svg_image_t {
  * @return {widget_t*} 对象。
  */
 widget_t* svg_image_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
+
+/**
+ * @method svg_image_set_image
+ * 设置控件的图片名称。
+ *
+ *> 如果需要显示文件系统中的图片，只需将图片名称换成实际的文件名，并加上"file://"前缀即可。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget image对象。
+ * @param {char*}  name 图片名称，该图片必须存在于资源管理器。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t svg_image_set_image(widget_t* widget, const char* name);
 
 /**
  * @method svg_image_cast

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  sdl2 implemented main_loop interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * this program is distributed in the hope that it will be useful,
  * but without any warranty; without even the implied warranty of
@@ -28,9 +28,11 @@
 #include "base/idle.h"
 #include "base/events.h"
 #include "base/timer.h"
+#include "base/system_info.h"
 #include <SDL.h>
 
 #include <stdio.h>
+#include "awtk_global.h"
 #include "tkc/time_now.h"
 #include "base/input_method.h"
 
@@ -100,26 +102,37 @@ static ret_t main_loop_sdl2_dispatch_mouse_event(main_loop_simple_t* loop, SDL_E
   memset(&event, 0x00, sizeof(event));
   switch (type) {
     case SDL_MOUSEBUTTONDOWN: {
-      loop->pressed = 1;
-      pointer_event_init(&event, EVT_POINTER_DOWN, widget, sdl_event->button.x,
-                         sdl_event->button.y);
-      event.button = sdl_event->button.button;
-      event.pressed = loop->pressed;
-      event.e.native_window_handle = SDL_GetWindowFromID(sdl_event->button.windowID);
+      if (sdl_event->button.button == 1) {
+        loop->pressed = 1;
+        pointer_event_init(&event, EVT_POINTER_DOWN, widget, sdl_event->button.x,
+                           sdl_event->button.y);
+        event.button = sdl_event->button.button;
+        event.pressed = loop->pressed;
+        event.e.native_window_handle = SDL_GetWindowFromID(sdl_event->button.windowID);
 
-      SDL_CaptureMouse(TRUE);
-      window_manager_dispatch_input_event(widget, (event_t*)&event);
+        SDL_CaptureMouse(TRUE);
+        window_manager_dispatch_input_event(widget, (event_t*)&event);
+      }
       break;
     }
     case SDL_MOUSEBUTTONUP: {
-      pointer_event_init(&event, EVT_POINTER_UP, widget, sdl_event->button.x, sdl_event->button.y);
-      event.button = sdl_event->button.button;
-      event.pressed = loop->pressed;
-      event.e.native_window_handle = SDL_GetWindowFromID(sdl_event->button.windowID);
+      if (sdl_event->button.button == 1) {
+        pointer_event_init(&event, EVT_POINTER_UP, widget, sdl_event->button.x,
+                           sdl_event->button.y);
+        event.button = sdl_event->button.button;
+        event.pressed = loop->pressed;
+        event.e.native_window_handle = SDL_GetWindowFromID(sdl_event->button.windowID);
 
-      window_manager_dispatch_input_event(widget, (event_t*)&event);
-      loop->pressed = 0;
-      SDL_CaptureMouse(FALSE);
+        window_manager_dispatch_input_event(widget, (event_t*)&event);
+        loop->pressed = 0;
+        SDL_CaptureMouse(FALSE);
+      } else if (sdl_event->button.button == 3) {
+        pointer_event_init(&event, EVT_CONTEXT_MENU, widget, sdl_event->button.x,
+                           sdl_event->button.y);
+        event.button = sdl_event->button.button;
+        event.e.native_window_handle = SDL_GetWindowFromID(sdl_event->button.windowID);
+        window_manager_dispatch_input_event(widget, (event_t*)&event);
+      }
       break;
     }
     case SDL_MOUSEMOTION: {
@@ -151,6 +164,7 @@ static ret_t main_loop_sdl2_dispatch_window_event(main_loop_simple_t* loop, SDL_
       break;
     case SDL_WINDOWEVENT_EXPOSED:
       log_debug("Window %d exposed\n", event->window.windowID);
+      widget_invalidate_force(l->wm, NULL);
       break;
     case SDL_WINDOWEVENT_MOVED:
       log_debug("Window %d moved to %d,%d\n", event->window.windowID, event->window.data1,
@@ -163,6 +177,11 @@ static ret_t main_loop_sdl2_dispatch_window_event(main_loop_simple_t* loop, SDL_
     case SDL_WINDOWEVENT_SIZE_CHANGED: {
       event_t e = event_init(EVT_NATIVE_WINDOW_RESIZED, NULL);
       SDL_Window* win = SDL_GetWindowFromID(event->window.windowID);
+      int ww = 0;
+      int wh = 0;
+      SDL_GetWindowSize(win, &ww, &wh);
+      system_info_set_lcd_w(system_info(), ww);
+      system_info_set_lcd_h(system_info(), wh);
       window_manager_dispatch_native_window_event(l->wm, &e, win);
       break;
     }
@@ -171,9 +190,11 @@ static ret_t main_loop_sdl2_dispatch_window_event(main_loop_simple_t* loop, SDL_
       break;
     case SDL_WINDOWEVENT_MAXIMIZED:
       log_debug("Window %d maximized\n", event->window.windowID);
+      widget_invalidate_force(l->wm, NULL);
       break;
     case SDL_WINDOWEVENT_RESTORED:
       log_debug("Window %d restored\n", event->window.windowID);
+      widget_invalidate_force(l->wm, NULL);
       break;
     case SDL_WINDOWEVENT_ENTER:
       log_debug("Mouse entered window %d\n", event->window.windowID);
@@ -187,11 +208,6 @@ static ret_t main_loop_sdl2_dispatch_window_event(main_loop_simple_t* loop, SDL_
     case SDL_WINDOWEVENT_FOCUS_LOST:
       log_debug("Window %d lost keyboard focus\n", event->window.windowID);
       break;
-    case SDL_WINDOWEVENT_CLOSE: {
-      event_t e = event_init(EVT_NATIVE_WINDOW_DESTROY, NULL);
-      SDL_Window* win = SDL_GetWindowFromID(event->window.windowID);
-      window_manager_dispatch_native_window_event(l->wm, &e, win);
-    } break;
 #if SDL_VERSION_ATLEAST(2, 0, 5)
     case SDL_WINDOWEVENT_TAKE_FOCUS:
       log_debug("Window %d is offered a focus\n", event->window.windowID);
@@ -204,8 +220,6 @@ static ret_t main_loop_sdl2_dispatch_window_event(main_loop_simple_t* loop, SDL_
       log_debug("Window %d got unknown event %d\n", event->window.windowID, event->window.event);
       break;
   }
-
-  //  widget_invalidate_force(loop->base.wm, NULL);
 
   return RET_OK;
 }
@@ -235,16 +249,19 @@ static ret_t main_loop_sdl2_dispatch(main_loop_simple_t* loop) {
         ret = main_loop_sdl2_dispatch_text_editing(loop, &event);
         break;
       }
-      case SDL_QUIT: {
-        ret = main_loop_quit(&(loop->base));
-        break;
-      }
       case SDL_MOUSEWHEEL: {
         ret = main_loop_sdl2_dispatch_wheel_event(loop, &event);
         break;
       }
       case SDL_WINDOWEVENT: {
         main_loop_sdl2_dispatch_window_event(loop, &event);
+        break;
+      }
+      case SDL_QUIT: {
+        event_t e = event_init(EVT_REQUEST_QUIT_APP, NULL);
+        if (widget_dispatch(window_manager(), &e) == RET_OK) {
+          main_loop_quit((main_loop_t*)loop);
+        }
         break;
       }
     }
@@ -269,7 +286,7 @@ main_loop_t* main_loop_init(int w, int h) {
 #else
   native_window_sdl_init(TRUE, w, h);
 #endif /*MULTI_NATIVE_WINDOW*/
-  loop = main_loop_simple_init(w, h);
+  loop = main_loop_simple_init(w, h, NULL, NULL);
   loop->base.destroy = main_loop_sdl2_destroy;
   loop->dispatch_input = main_loop_sdl2_dispatch;
 

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  generate theme date from xml
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,11 +22,13 @@
 #include "theme_gen.h"
 #include "base/enums.h"
 #include "base/theme.h"
+#include "base/style.h"
 #include "base/widget.h"
 #include "common/utils.h"
 #include "xml_theme_gen.h"
 #include "xml/xml_parser.h"
 #include "tkc/color_parser.h"
+#include "tkc/buffer.h"
 #include "base/assets_manager.h"
 
 typedef struct _xml_builder_t {
@@ -40,82 +42,23 @@ typedef struct _xml_builder_t {
   string widget_type;
 } xml_builder_t;
 
-static color_t parse_color(const char* name) {
-  color_t c = color_parse(name);
-
-  return c;
-}
-
-static uint32_t to_border(const char* value) {
-  uint32_t border = 0;
-  if (strstr(value, "left")) {
-    border |= BORDER_LEFT;
-  }
-  if (strstr(value, "right")) {
-    border |= BORDER_RIGHT;
-  }
-  if (strstr(value, "top")) {
-    border |= BORDER_TOP;
-  }
-  if (strstr(value, "bottom")) {
-    border |= BORDER_BOTTOM;
-  }
-  if (strstr(value, "all")) {
-    border |= BORDER_ALL;
-  }
-
-  return border;
-}
-
-static uint32_t to_icon_at(const char* value) {
-  uint32_t icon_at = ICON_AT_AUTO;
-
-  if (strstr(value, "left")) {
-    icon_at = ICON_AT_LEFT;
-  }
-  if (strstr(value, "right")) {
-    icon_at = ICON_AT_RIGHT;
-  }
-  if (strstr(value, "top")) {
-    icon_at = ICON_AT_TOP;
-  }
-  if (strstr(value, "bottom")) {
-    icon_at = ICON_AT_BOTTOM;
-  }
-
-  return icon_at;
-}
-
 static void xml_gen_style(xml_builder_t* b, Style& s, const char** attrs) {
+  value_t v;
   uint32_t i = 0;
 
+  value_set_int(&v, 0);
   while (attrs[i]) {
     const char* name = attrs[i];
     const char* value = attrs[i + 1];
+    ENSURE(style_normalize_value(name, value, &v) == RET_OK);
 
-    if (strcmp(name, "name") == 0) {
-    } else if (strcmp(name, "bg_image_draw_type") == 0 || strcmp(name, "fg_image_draw_type") == 0) {
-      const key_type_value_t* dt = image_draw_type_find(value);
-      s.AddInt(name, dt->value);
-    } else if (strcmp(name, "text_align_h") == 0) {
-      const key_type_value_t* dt = align_h_type_find(value);
-      s.AddInt(name, dt->value);
-    } else if (strcmp(name, "text_align_v") == 0) {
-      const key_type_value_t* dt = align_v_type_find(value);
-      s.AddInt(name, dt->value);
-    } else if (strcmp(name, "border") == 0) {
-      uint32_t border = to_border(value);
-      s.AddInt(name, border);
-    } else if (strcmp(name, "icon_at") == 0) {
-      uint32_t icon_at = to_icon_at(value);
-      s.AddInt(name, icon_at);
-    } else if (strstr(name, "color") != NULL) {
-      s.AddInt(name, parse_color(value).color);
-    } else if (strstr(name, "image") != NULL || strstr(name, "name") != NULL ||
-               strstr(name, "icon") != NULL) {
-      s.AddString(name, value);
-    } else {
-      s.AddInt(name, tk_atoi(value));
+    if (strcmp(name, "name") != 0) {
+      if (v.type == VALUE_TYPE_STRING) {
+        s.AddString(name, value_str(&v));
+      } else {
+        s.AddInt(name, value_int(&v));
+      }
+      value_reset(&v);
     }
 
     i += 2;
@@ -240,38 +183,39 @@ uint32_t xml_gen_buff(const char* xml, uint8_t* output, uint32_t max_size) {
   XmlParser* parser = xml_parser_create();
   xml_parser_set_builder(parser, builder_init(b));
   xml_parser_parse(parser, xml, strlen(xml));
+  wbuffer_t wbuffer;
+  wbuffer_init(&wbuffer, output, max_size);
 
-  uint8_t* end = b.gen.Output(output, max_size);
-  return_value_if_fail(end != NULL, 0);
+  return_value_if_fail(b.gen.Output(&wbuffer) != RET_OK, 0);
 
-  uint32_t size = end - output;
+  uint32_t size = wbuffer.cursor;
+  wbuffer_deinit(&wbuffer);
 
   xml_parser_destroy(parser);
 
-  return size;
+  return 0;
 }
 
-bool xml_gen(const char* input_file, const char* output_file, bool_t output_bin) {
+bool xml_gen(const char* input_file, const char* output_file, const char* theme,
+             bool_t output_bin) {
   xml_builder_t b;
-  uint8_t buff[500 * 1024];
-
+  wbuffer_t wbuffer;
   return_value_if_fail(input_file != NULL && output_file != NULL, false);
 
+  wbuffer_init_extendable(&wbuffer);
   XmlParser* parser = xml_parser_create();
   xml_parser_set_builder(parser, builder_init(b));
   xml_parser_parse_file(parser, input_file);
 
-  uint8_t* end = b.gen.Output(buff, sizeof(buff));
-  return_value_if_fail(end != NULL, false);
-
-  uint32_t size = end - buff;
-
-  if (output_bin) {
-    write_file(output_file, buff, size);
-  } else {
-    output_res_c_source(output_file, ASSET_TYPE_STYLE, 0, buff, size);
+  if (b.gen.Output(&wbuffer) == RET_OK) {
+    if (output_bin) {
+      write_file(output_file, wbuffer.data, wbuffer.cursor);
+    } else {
+      output_res_c_source(output_file, theme, ASSET_TYPE_STYLE, 0, wbuffer.data, wbuffer.cursor);
+    }
   }
 
+  wbuffer_deinit(&wbuffer);
   xml_parser_destroy(parser);
 
   return true;

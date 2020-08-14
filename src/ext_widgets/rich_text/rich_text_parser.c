@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  rich_text_parser
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is dirich_text_parseributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -191,6 +191,7 @@ rich_text_node_t* rich_text_parse(const char* str, uint32_t size) {
 
   parser = xml_parser_create();
   xml_parser_set_builder(parser, builder_init(&b));
+  xml_parser_set_trim_text(parser, FALSE);
   xml_parser_parse(parser, str, size);
 
   node = b.node;

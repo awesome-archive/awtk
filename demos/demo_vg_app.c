@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  demo paint
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,7 +20,7 @@
  */
 
 #include "base/timer.h"
-#include "widgets/window.h"
+#include "base/window.h"
 #include "base/image_manager.h"
 #include "canvas_widget/canvas_widget.h"
 
@@ -31,10 +31,15 @@ ret_t application_init() {
   widget_t* canvas = canvas_widget_create(win, 0, 0, win->w, win->h);
 
   widget_on(canvas, EVT_PAINT, on_paint_vg, NULL);
-  // widget_on(canvas, EVT_PAINT, on_paint_vg_simple, NULL);
-  // widget_on(canvas, EVT_PAINT, on_paint_global_alpha, NULL);
 
   timer_add(on_timer, win, 500);
 
   return RET_OK;
 }
+
+ret_t application_exit() {
+  log_debug("application_exit\n");
+  return RET_OK;
+}
+
+#include "awtk_main.inc"

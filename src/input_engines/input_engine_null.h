@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  input_engine_null
  *
- * Copyright (c) 2019 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2019 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -40,6 +40,7 @@ BEGIN_C_DECLS
 
 /**
  * @method input_engine_create
+ * @export none
  * @annotation ["constructor"]
  *
  * 创建空输入法引擎对象。

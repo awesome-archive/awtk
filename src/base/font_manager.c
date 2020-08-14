@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  font manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,6 +20,7 @@
  */
 
 #include "tkc/mem.h"
+#include "tkc/utils.h"
 #include "base/system_info.h"
 #include "base/font_manager.h"
 
@@ -77,9 +78,33 @@ ret_t font_manager_add_font(font_manager_t* fm, font_t* font) {
   return darray_push(&(fm->fonts), font);
 }
 
+#if WITH_BITMAP_FONT
+static const char* font_manager_fix_bitmap_font_name(char str[MAX_PATH], const char* name,
+                                                     font_size_t size) {
+  memset(str, 0, MAX_PATH);
+  tk_snprintf(str, MAX_PATH, "%s_%d", name, size);
+  return str;
+}
+#endif
+
 font_t* font_manager_lookup(font_manager_t* fm, const char* name, font_size_t size) {
+#if WITH_BITMAP_FONT
+  font_t* font = NULL;
+  char font_name[MAX_PATH];
+  font_cmp_info_t info_bitmap;
+#endif
+
   font_cmp_info_t info = {name, size};
   return_value_if_fail(fm != NULL, NULL);
+
+#if WITH_BITMAP_FONT
+  info_bitmap.name = font_manager_fix_bitmap_font_name(font_name, name, size);
+  info_bitmap.size = size;
+  font = darray_find(&(fm->fonts), &info_bitmap);
+  if (font != NULL) {
+    return font;
+  }
+#endif
 
   return darray_find(&(fm->fonts), &info);
 }
@@ -87,7 +112,20 @@ font_t* font_manager_lookup(font_manager_t* fm, const char* name, font_size_t si
 font_t* font_manager_load(font_manager_t* fm, const char* name, uint32_t size) {
   font_t* font = NULL;
   if (fm->loader != NULL) {
-    const asset_info_t* info = assets_manager_ref(assets_manager(), ASSET_TYPE_FONT, name);
+    const asset_info_t* info = NULL;
+
+#if WITH_BITMAP_FONT
+    char font_name[MAX_PATH];
+    font_manager_fix_bitmap_font_name(font_name, name, size);
+    info = assets_manager_ref(assets_manager(), ASSET_TYPE_FONT, font_name);
+    if (info != NULL) {
+      name = font_name;
+    }
+#endif
+
+    if (info == NULL) {
+      info = assets_manager_ref(assets_manager(), ASSET_TYPE_FONT, name);
+    }
 
     if (info != NULL) {
       if (info->subtype == fm->loader->type) {
@@ -114,7 +152,7 @@ font_t* font_manager_get_font(font_manager_t* fm, const char* name, font_size_t 
     }
   }
 
-  if (font == NULL) {
+  if (font == NULL && fm->fonts.size > 0) {
     font_t** fonts = (font_t**)fm->fonts.elms;
     font = fonts[0];
   }
@@ -126,13 +164,32 @@ ret_t font_manager_unload_font(font_manager_t* fm, const char* name, font_size_t
   font_t* font = NULL;
   font_cmp_info_t info = {name, size};
 
+#if WITH_BITMAP_FONT
+  char font_name[MAX_PATH];
+  font_cmp_info_t info_bitmap;
+#endif
+
   name = system_info_fix_font_name(name);
   return_value_if_fail(fm != NULL, RET_FAIL);
 
   font = font_manager_lookup(fm, name, size);
   return_value_if_fail(font != NULL, RET_NOT_FOUND);
 
+#if WITH_BITMAP_FONT
+  info_bitmap.name = font_manager_fix_bitmap_font_name(font_name, name, size);
+  info_bitmap.size = size;
+  if (darray_remove(&(fm->fonts), &info_bitmap) == RET_OK) {
+    return RET_OK;
+  }
+#endif
+
   return darray_remove(&(fm->fonts), &info);
+}
+
+ret_t font_manager_unload_all(font_manager_t* fm) {
+  return_value_if_fail(fm != NULL, RET_FAIL);
+
+  return darray_clear(&(fm->fonts));
 }
 
 ret_t font_manager_deinit(font_manager_t* fm) {
@@ -145,6 +202,19 @@ ret_t font_manager_destroy(font_manager_t* fm) {
   return_value_if_fail(fm != NULL, RET_BAD_PARAMS);
   font_manager_deinit(fm);
   TKMEM_FREE(fm);
+
+  return RET_OK;
+}
+
+ret_t font_manager_shrink_cache(font_manager_t* fm, uint32_t cache_size) {
+  uint32_t i = 0;
+  font_t* font = NULL;
+  return_value_if_fail(fm != NULL, RET_FAIL);
+
+  for (i = 0; i < fm->fonts.size; i++) {
+    font = (font_t*)darray_get(&(fm->fonts), i);
+    font_shrink_cache(font, cache_size);
+  }
 
   return RET_OK;
 }

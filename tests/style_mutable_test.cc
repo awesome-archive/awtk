@@ -1,6 +1,6 @@
 ﻿#include "gtest/gtest.h"
 #include "widgets/button.h"
-#include "widgets/window.h"
+#include "base/window.h"
 #include "base/style_mutable.h"
 
 #include <string>
@@ -39,7 +39,7 @@ TEST(StyleMutable, basic) {
     char name[32];
     snprintf(name, sizeof(name), "name%d", k);
     ASSERT_EQ(style_mutable_set_name(style, name), RET_OK);
-    ASSERT_EQ(string(style_mutable_get_name(style)), string(name));
+    ASSERT_EQ(string(STYLE_MUTABLE(style)->name), string(name));
     widget_set_state(b, (const char*)state_names[k]);
     style_notify_widget_state_changed(style, b);
     const char* state = (const char*)widget_get_prop_str(b, WIDGET_PROP_STATE_FOR_STYLE, 0);
@@ -70,7 +70,7 @@ TEST(StyleMutable, basic) {
     }
   }
 
-  string str = string(style_mutable_get_name(style)) + string(":");
+  string str = string(STYLE_MUTABLE(style)->name) + string(":");
   style_mutable_foreach(style, on_style_item, &str);
   ASSERT_EQ(str,
             "name2:normal,font_size,100;normal,fg_color,65536;normal,font_name,\"font99\";pressed,"
@@ -100,11 +100,11 @@ TEST(StyleMutable, copy) {
   style_t* m2 = style_mutable_create(NULL, NULL);
 
   style_mutable_set_int(m1, "normal", "font_size", 123);
-  style_mutable_set_str(m1, "normal", "font", "foo");
+  style_mutable_set_str(m1, "normal", "font_name", "foo");
   style_mutable_set_color(m1, "normal", "text_color", c1);
 
   style_mutable_set_int(m1, "focused", "font_size", 321);
-  style_mutable_set_str(m1, "focused", "font", "foo2");
+  style_mutable_set_str(m1, "focused", "font_name", "foo2");
   style_mutable_set_color(m1, "focused", "text_color", c2);
   style_mutable_copy(m2, m1);
 
@@ -114,9 +114,10 @@ TEST(StyleMutable, copy) {
   style_mutable_foreach(m2, on_style_item, &str2);
 
   ASSERT_EQ(str1, str2);
-  ASSERT_EQ(str1,
-            string("normal,font_size,123;normal,font,\"foo\";normal,text_color,67305985;focused,"
-                   "font_size,321;focused,font,\"foo2\";focused,text_color,67305986;"));
+  ASSERT_EQ(
+      str1,
+      string("normal,font_size,123;normal,font_name,\"foo\";normal,text_color,67305985;focused,"
+             "font_size,321;focused,font_name,\"foo2\";focused,text_color,67305986;"));
 
   style_destroy(m1);
   style_destroy(m2);

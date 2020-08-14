@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   children_layouter.c
  * Author: AWTK Develop Team
  * Brief:  children layouter
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -112,3 +112,17 @@ ret_t children_layouter_destroy(children_layouter_t* layouter) {
 
   return layouter->vt->destroy(layouter);
 }
+
+children_layouter_t* children_layouter_clone(children_layouter_t* layouter) {
+  if (layouter != NULL && layouter->vt != NULL && layouter->vt->clone != NULL) {
+    return layouter->vt->clone(layouter);
+  }
+
+  return NULL;
+}
+
+#ifdef WITHOUT_LAYOUTER
+children_layouter_t* children_layouter_create(const char* params) {
+  return NULL;
+}
+#endif /*WITHOUT_LAYOUTER*/

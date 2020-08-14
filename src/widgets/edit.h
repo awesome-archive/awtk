@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  edit
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -29,26 +29,11 @@
 
 BEGIN_C_DECLS
 
-typedef struct _input_limit_t {
-  input_type_t type;
-  union {
-    struct {
-      uint32_t min;
-      uint32_t max;
-    } t;
-    struct {
-      int32_t min;
-      int32_t max;
-      uint32_t step;
-    } i;
-    struct {
-      double min;
-      double max;
-      double step;
-    } f;
-  } u;
-} input_limit_t;
-
+typedef ret_t (*edit_fix_value_t)(widget_t* widget);
+typedef ret_t (*edit_inc_value_t)(widget_t* widget);
+typedef ret_t (*edit_dec_value_t)(widget_t* widget);
+typedef bool_t (*edit_is_valid_value_t)(widget_t* widget);
+typedef ret_t (*edit_pre_input_t)(widget_t* widget, uint32_t key);
 typedef bool_t (*edit_is_valid_char_t)(widget_t* widget, wchar_t c);
 
 /**
@@ -80,7 +65,7 @@ typedef bool_t (*edit_is_valid_char_t)(widget_t* widget, wchar_t c);
  * > XXX：需要在min/max/step之前设置input\_type。
  *
  * >更多用法请参考：
- * [edit.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/edit.xml)
+ * [edit.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/edit.xml)
  *
  * 在c代码中使用函数edit\_create创建编辑器控件。如：
  *
@@ -108,7 +93,7 @@ typedef bool_t (*edit_is_valid_char_t)(widget_t* widget, wchar_t c);
  *
  * > 更多用法请参考：
  * [theme
- *default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L104)
+ *default](https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/styles/default.xml#L104)
  *
  */
 typedef struct _edit_t {
@@ -132,6 +117,22 @@ typedef struct _edit_t {
    * 输入无效时，是否自动改正。
    */
   bool_t auto_fix;
+  /**
+   * @property {bool_t} select_none_when_focused
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 获得焦点时不选中文本。
+   *
+   * > 主要用于没有指针设备的情况，否则软键盘无法取消选中文本。
+   */
+  bool_t select_none_when_focused;
+  /**
+   * @property {bool_t} open_im_when_focused
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 获得焦点时打开输入法。
+   *
+   * > 主要用于没有指针设备的情况，否则每次切换焦点时都打开输入法。
+   */
+  bool_t open_im_when_focused;
   /**
    * @property {uint8_t} top_margin
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
@@ -165,44 +166,73 @@ typedef struct _edit_t {
   char* tips;
 
   /**
-   * @property {bool_t} focus
+   * @property {char*} tr_tips
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 设置为焦点(通常用于在XML中缺省设置为焦点控件)。
+   * 保存用于翻译的提示信息。
    */
-  bool_t focus;
+  char* tr_tips;
+
+  /**
+   * @property {char*} action_text
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 软键盘上action按钮的文本。内置取值有：
+   * 
+   * * next 将焦点切换到下一个控件。
+   * * done 完成，关闭软键盘。
+   * 
+   * 也可以使用其它文本，比如send表示发送。这个需要自己实现相应的功能，处理EVT\_IM\_ACTION事件即可。
+   * 
+   */
+  char* action_text;
+
+  /**
+   * @property {char*} keyboard
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 自定义软键盘名称。AWTK优先查找keyboard属性设置的键盘文件名（该键盘的XML文件需要在default\raw\ui目录下存在），如果keyboard为空就找input_type设置的键盘类型
+   */
+  char* keyboard;
 
   /**
    * @property {input_type_t} input_type
-   * @annotation ["set_prop","get_prop","persitent","design"]
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 输入类型。
-   * XXX：需要在min/max/step之前设置。
    */
+  input_type_t input_type;
 
   /**
-   * @property {float_t} min
-   * @annotation ["set_prop","get_prop","persitent","design"]
+   * @property {double} min
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 最小值或最小长度。
    */
+  double min;
 
   /**
-   * @property {float_t} max
-   * @annotation ["set_prop","get_prop","persitent","design"]
+   * @property {double} max
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 最大值或最大长度。
    */
+  double max;
 
   /**
-   * @property {float_t} step
-   * @annotation ["set_prop","get_prop","persitent","design"]
+   * @property {double} step
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 步长。
    * 作为数值型编辑器时，一次增加和减少时的数值。
    */
+  double step;
 
   /*private*/
   uint32_t idle_id;
   uint32_t timer_id;
-  input_limit_t limit;
   text_edit_t* model;
+
+  edit_inc_value_t inc_value;
+  edit_dec_value_t dec_value;
+  edit_fix_value_t fix_value;
+  edit_pre_input_t pre_input;
   edit_is_valid_char_t is_valid_char;
+  edit_is_valid_value_t is_valid_value;
+  uint64_t last_user_action_time;
 } edit_t;
 
 /**
@@ -300,7 +330,7 @@ ret_t edit_set_text_limit(widget_t* widget, uint32_t min, uint32_t max);
  * @param {widget_t*} widget widget对象。
  * @param {int32_t} min 最小值。
  * @param {int32_t} max 最大值。
- * @param {int32_t} step 步长。
+ * @param {uint32_t} step 步长。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -342,6 +372,28 @@ ret_t edit_set_readonly(widget_t* widget, bool_t readonly);
 ret_t edit_set_auto_fix(widget_t* widget, bool_t auto_fix);
 
 /**
+ * @method edit_set_select_none_when_focused
+ * 设置编辑器是否在获得焦点时不选中文本。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} select_none_when_focused 是否在获得焦点时不选中文本。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_select_none_when_focused(widget_t* widget, bool_t select_none_when_focused);
+
+/**
+ * @method edit_set_open_im_when_focused
+ * 设置编辑器是否在获得焦点时打开输入法。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} open_im_when_focused 是否在获得焦点时打开输入法。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_open_im_when_focused(widget_t* widget, bool_t open_im_when_focused);
+
+/**
  * @method edit_set_input_type
  * 设置编辑器的输入类型。
  * @annotation ["scriptable"]
@@ -353,7 +405,18 @@ ret_t edit_set_auto_fix(widget_t* widget, bool_t auto_fix);
 ret_t edit_set_input_type(widget_t* widget, input_type_t type);
 
 /**
- * @method edit_set_input_tips
+ * @method edit_set_action_text
+ * 设置软键盘上action按钮的文本。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {char*} action_text 软键盘上action按钮的文本。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_action_text(widget_t* widget, const char* action_text);
+
+/**
+ * @method edit_set_tips
  * 设置编辑器的输入提示。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
@@ -361,7 +424,30 @@ ret_t edit_set_input_type(widget_t* widget, input_type_t type);
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t edit_set_input_tips(widget_t* widget, const char* tips);
+ret_t edit_set_tips(widget_t* widget, const char* tips);
+
+/**
+ * @method edit_set_tr_tips
+ * 获取翻译之后的文本，然后调用edit_set_tips。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*}  tr_tips 提示信息。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_tr_tips(widget_t* widget, const char* tr_tips);
+
+/**
+ * @method edit_set_keyboard
+ * 设置自定义软键盘名称。
+ * 
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {char*} keyboard 键盘名称(相应UI资源必须存在)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_keyboard(widget_t* widget, const char* keyboard);
 
 /**
  * @method edit_set_password_visible
@@ -386,9 +472,20 @@ ret_t edit_set_password_visible(widget_t* widget, bool_t password_visible);
 ret_t edit_set_focus(widget_t* widget, bool_t focus);
 
 /**
+ * @method edit_set_cursor
+ * 设置输入框的光标坐标。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} cursor 是否为焦点。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_cursor(widget_t* widget, uint32_t cursor);
+
+/**
  * @method edit_set_is_valid_char
  * 设置输入字符检查函数。
- *> 如果内置检查函数不能满足需求时，可以设置自定义的检查函数。
+ *> 如果内置函数不能满足需求时，可以设置自定义的检查函数。
  *
  * @param {widget_t*} widget widget对象。
  * @param {edit_is_valid_char_t} is_valid_char 检查输入字符是否有效的回调函数。
@@ -397,12 +494,73 @@ ret_t edit_set_focus(widget_t* widget, bool_t focus);
  */
 ret_t edit_set_is_valid_char(widget_t* widget, edit_is_valid_char_t is_valid_char);
 
+/**
+ * @method edit_set_is_valid_value
+ * 设置输入内容检查函数。
+ *> 如果内置函数不能满足需求时，可以设置自定义的检查函数。
+ *
+ * @param {widget_t*} widget widget对象。
+ * @param {edit_is_valid_value_t} is_valid_value 检查输入内容是否有效的回调函数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_is_valid_value(widget_t* widget, edit_is_valid_value_t is_valid_value);
+
+/**
+ * @method edit_set_fix_value
+ * 设置修正输入内容的回调函数。
+ *> 如果内置函数不能满足需求时，可以设置自定义的检查函数。
+ *
+ * @param {widget_t*} widget widget对象。
+ * @param {edit_fix_value_t} fix_value 修正输入内容的回调函数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_fix_value(widget_t* widget, edit_fix_value_t fix_value);
+
+/**
+ * @method edit_set_inc_value
+ * 设置增加值的回调函数。
+ *> 如果内置函数不能满足需求时，可以设置自定义的检查函数。
+ *
+ * @param {widget_t*} widget widget对象。
+ * @param {edit_inc_value_t} inc_value 增加值的回调函数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_inc_value(widget_t* widget, edit_inc_value_t inc_value);
+
+/**
+ * @method edit_set_dec_value
+ * 设置减少值的回调函数。
+ *> 如果内置函数不能满足需求时，可以设置自定义的检查函数。
+ *
+ * @param {widget_t*} widget widget对象。
+ * @param {edit_dec_value_t} dec_value 减少值的回调函数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_dec_value(widget_t* widget, edit_dec_value_t dec_value);
+
+/**
+ * @method edit_set_pre_input
+ * 设置预输入处的回调函数。
+ *> 如果内置函数不能满足需求时，可以设置自定义的检查函数。
+ *
+ * @param {widget_t*} widget widget对象。
+ * @param {edit_pre_input_t} pre_input 预输入处理的回调函数(处理一些特殊的键)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t edit_set_pre_input(widget_t* widget, edit_pre_input_t pre_input);
+
 #define EDIT(widget) ((edit_t*)(edit_cast(WIDGET(widget))))
 
 /*public for subclass and runtime type check*/
 TK_EXTERN_VTABLE(edit);
 
 /*public for spinbox and other controls*/
+ret_t edit_on_copy(widget_t* widget, widget_t* other);
 ret_t edit_on_destroy(widget_t* widget);
 ret_t edit_on_paint_self(widget_t* widget, canvas_t* c);
 ret_t edit_on_event(widget_t* widget, event_t* e);
@@ -418,6 +576,13 @@ ret_t edit_clear(edit_t* edit);
 bool_t edit_is_valid_value(widget_t* widget);
 ret_t edit_input_char(widget_t* widget, wchar_t c);
 bool_t edit_is_valid_char(widget_t* widget, wchar_t c);
+
+/*common functions for edit_xxx*/
+ret_t edit_add_value_with_sep(widget_t* widget, int delta, char sep);
+ret_t edit_pre_input_with_sep(widget_t* widget, uint32_t key, char sep);
+
+/*for compatability*/
+#define edit_set_input_tips(w, t) edit_set_tips(w, t)
 
 END_C_DECLS
 

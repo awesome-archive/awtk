@@ -38,7 +38,7 @@ TEST(SpinBox, to_xml) {
       string(
           "<spin_box x=\"10\" y=\"20\" w=\"30\" h=\"40\" focusable=\"true\" min=\"0\" max=\"1024\" "
           "input_type=\"0\" readonly=\"false\" auto_fix=\"false\" left_margin=\"2\" "
-          "right_margin=\"21\" top_margin=\"2\" bottom_margin=\"2\" "
+          "right_margin=\"21\" top_margin=\"2\" bottom_margin=\"2\" action_text=\"done\" "
           "password_visible=\"false\">\n</spin_box>\n"));
 
   str_reset(&str);
@@ -50,6 +50,17 @@ TEST(SpinBox, cast) {
 
   ASSERT_EQ(w, spin_box_cast(w));
   ASSERT_EQ(w, edit_cast(w));
+
+  widget_destroy(w);
+}
+
+TEST(SpinBox, set_value) {
+  widget_t* w = spin_box_create(NULL, 10, 20, 30, 40);
+
+  edit_set_int_limit(w, -100, 100, 1);
+
+  ASSERT_EQ(widget_set_value(w, -50), RET_OK);
+  ASSERT_EQ(widget_get_value(w), -50);
 
   widget_destroy(w);
 }

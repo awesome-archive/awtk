@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  blend bgr565 on bgr565
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -27,7 +27,8 @@
 #define pixel_dst_format pixel_bgr565_format
 #define pixel_dst_to_rgba pixel_bgr565_to_rgba
 #define pixel_dst_from_rgb pixel_bgr565_from_rgb
-#define pixel_dst_from_rgba(r, g, b, a) pixel_bgr565_from_rgb(r, g, b)
+#define pixel_dst_from_rgba pixel_bgr565_from_rgba
+//#define pixel_dst_from_rgba(r, g, b, a) pixel_bgr565_from_rgb(r, g, b)
 
 #define pixel_src_t pixel_bgr565_t
 #define pixel_src_format pixel_bgr565_format
@@ -35,9 +36,11 @@
 
 #define pixel_t pixel_dst_t
 #define pixel_from_rgb pixel_dst_from_rgb
+#define pixel_from_rgba pixel_dst_from_rgba
 #define pixel_to_rgba pixel_dst_to_rgba
 
-static inline void blend_a_bgr565_bgra8888(uint8_t* dst, uint8_t* src, uint8_t a) {
+static inline void blend_a_bgr565_bgra8888(uint8_t* dst, uint8_t* src, uint8_t a,
+                                           bool_t premulti_alpha) {
   if (a > 0xf8) {
     *(uint16_t*)dst = *(uint16_t*)src;
   } else if (a > 8) {

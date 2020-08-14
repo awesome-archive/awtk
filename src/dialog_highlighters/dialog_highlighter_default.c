@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   dialog_highlighter.c
  * Author: AWTK Develop Team
  * Brief:  dialog_highlighter
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied highlighterrranty of
@@ -53,6 +53,8 @@ static ret_t dialog_highlighter_default_prepare(dialog_highlighter_t* h, canvas_
 }
 
 static ret_t dialog_highlighter_default_draw(dialog_highlighter_t* h, float_t percent) {
+  rect_t r;
+  rect_t save_r;
   canvas_t* c = h->canvas;
   bitmap_t* img = &(h->img);
   rect_t src = rect_init(0, 0, img->w, img->h);
@@ -64,7 +66,11 @@ static ret_t dialog_highlighter_default_draw(dialog_highlighter_t* h, float_t pe
     canvas_draw_image(c, img, &src, &dst);
     window_manager_paint_system_bar(window_manager(), c);
   } else {
-    lcd_draw_image(c->lcd, img, &src, &dst);
+    canvas_get_clip_rect(c, &save_r);
+    r = rect_intersect(&save_r, &h->clip_rect);
+    canvas_set_clip_rect(c, &r);
+    canvas_draw_image(c, img, &src, &dst);
+    canvas_set_clip_rect(c, &save_r);
   }
 
   /*

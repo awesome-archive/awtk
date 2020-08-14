@@ -30,6 +30,7 @@ TEST(WidgetAnimatorFactory, opacity) {
 
   widget_animator_destroy(wa);
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, opacity_default) {
@@ -49,6 +50,7 @@ TEST(WidgetAnimatorFactory, opacity_default) {
   widget_animator_destroy(wa);
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, rotation) {
@@ -67,6 +69,7 @@ TEST(WidgetAnimatorFactory, rotation) {
 
   widget_animator_destroy(wa);
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, rotation_default) {
@@ -82,6 +85,7 @@ TEST(WidgetAnimatorFactory, rotation_default) {
   ASSERT_EQ(rotation->to, 200);
   widget_animator_destroy(wa);
 
+  widget_set_prop(b, WIDGET_PROP_ROTATION, &v);
   wa = widget_animator_create(b, "rotation(to=1)");
   rotation = (widget_animator_prop_t*)wa;
   ASSERT_EQ(rotation->to, 1);
@@ -89,6 +93,7 @@ TEST(WidgetAnimatorFactory, rotation_default) {
   widget_animator_destroy(wa);
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, value) {
@@ -107,6 +112,7 @@ TEST(WidgetAnimatorFactory, value) {
 
   widget_animator_destroy(wa);
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, value_default) {
@@ -119,6 +125,7 @@ TEST(WidgetAnimatorFactory, value_default) {
   ASSERT_EQ(value->to, 20);
   widget_animator_destroy(wa);
 
+  widget_set_value(b, 20);
   wa = widget_animator_create(b, "value(to=10)");
   value = (widget_animator_prop_t*)wa;
   ASSERT_EQ(value->from, 20);
@@ -126,6 +133,7 @@ TEST(WidgetAnimatorFactory, value_default) {
   widget_animator_destroy(wa);
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, move) {
@@ -146,6 +154,7 @@ TEST(WidgetAnimatorFactory, move) {
 
   widget_animator_destroy(wa);
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, move_default) {
@@ -168,6 +177,7 @@ TEST(WidgetAnimatorFactory, move_default) {
   widget_animator_destroy(wa);
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, scale) {
@@ -189,6 +199,7 @@ TEST(WidgetAnimatorFactory, scale) {
 
   widget_animator_destroy(wa);
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, scale_default) {
@@ -203,6 +214,7 @@ TEST(WidgetAnimatorFactory, scale_default) {
   ASSERT_EQ(scale->to2, 4);
   widget_animator_destroy(wa);
 
+  image_set_scale(b, 2, 4);
   wa = widget_animator_create(b, "scale(y_from=1, y_to=200)");
   scale = (widget_animator_prop2_t*)wa;
   ASSERT_EQ(scale->from2, 1);
@@ -212,6 +224,7 @@ TEST(WidgetAnimatorFactory, scale_default) {
   widget_animator_destroy(wa);
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, yoyo_forever) {
@@ -226,6 +239,7 @@ TEST(WidgetAnimatorFactory, yoyo_forever) {
 
   widget_animator_destroy(wa);
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, repeat_forever) {
@@ -240,6 +254,7 @@ TEST(WidgetAnimatorFactory, repeat_forever) {
 
   widget_animator_destroy(wa);
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, auto_start) {
@@ -261,6 +276,7 @@ TEST(WidgetAnimatorFactory, auto_start) {
   widget_animator_destroy(wa);
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, auto_destroy) {
@@ -282,6 +298,7 @@ TEST(WidgetAnimatorFactory, auto_destroy) {
   widget_animator_destroy(wa);
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, name) {
@@ -297,6 +314,7 @@ TEST(WidgetAnimatorFactory, name) {
   ASSERT_EQ(string(wa->name), string("scale_1_200"));
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, time_scale) {
@@ -312,6 +330,7 @@ TEST(WidgetAnimatorFactory, time_scale) {
   ASSERT_EQ(wa->time_scale, 1.5);
 
   widget_destroy(b);
+  idle_dispatch();
 }
 
 TEST(WidgetAnimatorFactory, any_prop) {
@@ -331,4 +350,5 @@ TEST(WidgetAnimatorFactory, any_prop) {
 
   widget_animator_destroy(wa);
   widget_destroy(b);
+  idle_dispatch();
 }

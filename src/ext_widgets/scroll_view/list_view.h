@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  list_view
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -37,7 +37,7 @@ BEGIN_C_DECLS
  * 如果不需要滚动，可以用view控件配置适当的layout参数作为列表控件。
  *
  * 列表视图中的列表项可以固定高度，也可以使用不同高度。请参考[变高列表项](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/list_view_vh.xml)
+ *https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/list_view_vh.xml)
  *
  * 列表视图控件的中可以有滚动条，也可以没有滚动条。
  * 可以使用移动设备风格的滚动条，也可以使用桌面风格的滚动条。
@@ -64,7 +64,7 @@ BEGIN_C_DECLS
  *
  *
  * > 更多用法请参考：[list\_view\_m.xml](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/list_view_m.xml)
+ *https://github.com/zlgopen/awtk/blob/master/demos/assets/default/raw/ui/list_view_m.xml)
  *
  * 在c代码中使用函数list\_view\_create创建列表视图控件。如：
  *
@@ -160,6 +160,16 @@ ret_t list_view_set_auto_hide_scroll_bar(widget_t* widget, bool_t auto_hide_scro
  * @return {widget_t*} list_view对象。
  */
 widget_t* list_view_cast(widget_t* widget);
+
+/**
+ * @method list_view_reinit
+ * list_view重新初始化。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget list_view对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t list_view_reinit(widget_t* widget);
 
 #define LIST_VIEW(widget) ((list_view_t*)(list_view_cast(WIDGET(widget))))
 

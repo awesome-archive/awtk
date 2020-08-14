@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Eval - Simple numerical expression evaluator
  *
  * https://github.com/mattbucknall/eval
@@ -101,6 +101,11 @@ static int is_digit(char c) {
   return (c >= '0') && (c <= '9');
 }
 
+static int is_xdigit(char c) {
+  char lc = tolower(c);
+  return ((c >= '0') && (c <= '9')) || ((lc >= 'a') && (lc <= 'f')) || lc == 'x';
+}
+
 static int is_name_start(char c) {
   return ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')) || (c == '_');
 }
@@ -109,12 +114,12 @@ static int is_name(char c) {
   return is_name_start(c) || is_digit(c);
 }
 
-static int is_exp(char c) {
-  return (c == 'e') || (c == 'E');
-}
-
 static int is_dp(char c) {
   return (c == '.');
+}
+
+static int is_number(char c) {
+  return is_xdigit(c) || is_dp(c);
 }
 
 static char get_char(EvalContext* ctx) {
@@ -475,96 +480,35 @@ void expr_value_clear(ExprValue* v) {
 }
 
 static EvalResult get_number(EvalContext* ctx) {
-  char c;
-  double value;
-  long exp;
-  double power;
+  int i = 0;
+  char c = 0;
+  double value = 0;
+  bool_t has_dot = FALSE;
+  char snum[TK_NUM_MAX_LEN + 1];
 
-  value = 0.0f;
-  exp = 0;
-
-  c = get_char(ctx);
-
-  if (!is_dp(c)) {
-    if (!is_digit(c)) return EVAL_RESULT_INVALID_LITERAL;
-
-    do {
-      value = (value * 10.0f) + (c - '0');
-      c = get_char(ctx);
-
-    } while (is_digit(c));
-  }
-
-  if (is_dp(c)) {
+  for (i = 0; i < TK_NUM_MAX_LEN; i++) {
     c = get_char(ctx);
-    if (!is_digit(c)) return EVAL_RESULT_INVALID_LITERAL;
-
-    do {
-      value = (value * 10.0f) + (c - '0');
-      exp--;
-
-      c = get_char(ctx);
-
-    } while (is_digit(c));
-  }
-
-  if (is_exp(c)) {
-    int exp_neg;
-    int int_val;
-
-    exp_neg = 0;
-
-    c = get_char(ctx);
-
-    switch (c) {
-      case '-':
-        exp_neg = 1;
-        /* fall through */
-
-      case '+':
-        c = get_char(ctx);
-        /* fall through */
-
-      default:
-        break;
+    if (is_dp(c)) {
+      has_dot = TRUE;
     }
 
-    int_val = 0;
-
-    if (!is_digit(c)) return EVAL_RESULT_INVALID_LITERAL;
-
-    do {
-      int_val = (int_val * 10) + (c - '0');
-      c = get_char(ctx);
-
-    } while (is_digit(c));
-
-    if (exp_neg)
-      exp -= int_val;
-    else
-      exp += int_val;
+    if (is_number(c)) {
+      snum[i] = c;
+    } else {
+      snum[i] = '\0';
+      break;
+    }
   }
 
-  power = 10.0f;
-
-  if (exp < 0) {
-    exp = -exp;
-
-    while (exp) {
-      if (exp & 1) value /= power;
-      exp >>= 1;
-      power *= power;
-    }
+  if (has_dot) {
+    value = tk_atof(snum);
+  } else if (tolower(snum[1]) == 'x') {
+    value = strtoul(snum, NULL, 16);
   } else {
-    while (exp) {
-      if (exp & 1) value *= power;
-      exp >>= 1;
-      power *= power;
-    }
+    value = tk_atoi(snum);
   }
 
   put_char(ctx);
-
   ctx->token.type = EVAL_TOKEN_TYPE_NUMBER;
   ctx->token.value.number = value;
 
@@ -1252,6 +1196,46 @@ static EvalResult func_if(const ExprValue* input, void* user_data, ExprValue* ou
   return EVAL_RESULT_OK;
 }
 
+static EvalResult func_fformat(const ExprValue* input, void* user_data, ExprValue* output) {
+  (void)user_data;
+  if (args_count(input) != 2) {
+    return EVAL_RESULT_BAD_PARAMS;
+  }
+
+  if (input->type == EXPR_VALUE_TYPE_STRING) {
+    char buff[128];
+    const char* format = input->v.str.str;
+    double value = expr_value_get_number(input + 1);
+    return_value_if_fail(format != NULL, EVAL_RESULT_BAD_PARAMS);
+
+    tk_snprintf(buff, sizeof(buff), format, value);
+    expr_value_set_string(output, buff, strlen(buff));
+    return EVAL_RESULT_OK;
+  } else {
+    return EVAL_RESULT_BAD_PARAMS;
+  }
+}
+
+static EvalResult func_iformat(const ExprValue* input, void* user_data, ExprValue* output) {
+  (void)user_data;
+  if (args_count(input) != 2) {
+    return EVAL_RESULT_BAD_PARAMS;
+  }
+
+  if (input->type == EXPR_VALUE_TYPE_STRING) {
+    char buff[128];
+    const char* format = input->v.str.str;
+    int value = (int)expr_value_get_number(input + 1);
+    return_value_if_fail(format != NULL, EVAL_RESULT_BAD_PARAMS);
+
+    tk_snprintf(buff, sizeof(buff), format, value);
+    expr_value_set_string(output, buff, strlen(buff));
+    return EVAL_RESULT_OK;
+  } else {
+    return EVAL_RESULT_BAD_PARAMS;
+  }
+}
+
 static EvalResult func_ceil(const ExprValue* input, void* user_data, ExprValue* output) {
   (void)user_data;
   expr_value_set_number(output, ceil(expr_value_get_number(input)));
@@ -1272,13 +1256,14 @@ static EvalResult func_round(const ExprValue* input, void* user_data, ExprValue*
 
 static EvalFunc default_get_func(const char* name, void* user_data) {
   static const EvalFunctionEntry FUNCTIONS[] = {
-      {"number", func_number}, {"strlen", func_strlen},   {"path", func_path},
-      {"string", func_string}, {"toupper", func_toupper}, {"tolower", func_tolower},
-      {"cos", func_cos},       {"sin", func_sin},         {"tan", func_tan},
-      {"acos", func_acos},     {"asin", func_asin},       {"atan", func_atan},
-      {"exp", func_exp},       {"log", func_log},         {"log10", func_log10},
-      {"sqrt", func_sqrt},     {"ceil", func_ceil},       {"floor", func_floor},
-      {"int", func_floor},     {"round", func_round},     {"if", func_if}};
+      {"number", func_number},   {"strlen", func_strlen},   {"path", func_path},
+      {"string", func_string},   {"toupper", func_toupper}, {"tolower", func_tolower},
+      {"cos", func_cos},         {"sin", func_sin},         {"tan", func_tan},
+      {"acos", func_acos},       {"asin", func_asin},       {"atan", func_atan},
+      {"exp", func_exp},         {"log", func_log},         {"log10", func_log10},
+      {"sqrt", func_sqrt},       {"ceil", func_ceil},       {"floor", func_floor},
+      {"int", func_floor},       {"round", func_round},     {"if", func_if},
+      {"fformat", func_fformat}, {"iformat", func_iformat}};
 
   const EvalFunctionEntry* i = FUNCTIONS;
   const EvalFunctionEntry* e = i + (sizeof(FUNCTIONS) / sizeof(*FUNCTIONS));
@@ -1360,4 +1345,20 @@ double tk_expr_eval(const char* expr) {
   expr_value_clear(&v);
 
   return ret;
+}
+
+const char* tk_expr_eval_str(const char* expr, char* result, uint32_t max_size) {
+  ExprValue v;
+  EvalResult res;
+  const char* ret = NULL;
+  return_value_if_fail(result != NULL, NULL);
+
+  expr_value_init(&v);
+  res = eval_execute(expr, eval_default_hooks(), NULL, &v);
+
+  ret = res == EVAL_RESULT_OK ? expr_value_get_string(&v) : "";
+  strncpy(result, ret, max_size - 1);
+  expr_value_clear(&v);
+
+  return result;
 }

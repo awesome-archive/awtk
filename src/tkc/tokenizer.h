@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  tokenizer
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is ditokenizeributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -29,6 +29,18 @@ BEGIN_C_DECLS
 /**
  * @class tokenizer_t
  * 从字符串中解析出一个一个的token。
+ * 
+ * ```c
+ * tokenizer_t tokenizer;
+ * tokenizer_t* t = tokenizer_init(&tokenizer, "20,111.2,22.3,333.3,44,555.5", 0xffffff, ",");
+ *
+ * while(tokenizer_has_more(t)) {
+ *   double v = tokenizer_next_float(t, 0);
+ *   log_debug("%lf\n", v);
+ * }
+ *
+ * tokenizer_deinit(t);
+ * ```
  */
 typedef struct _tokenizer_t {
   /**
@@ -123,6 +135,16 @@ const char* tokenizer_next(tokenizer_t* tokenizer);
  * @return {char*} 成功返回token，失败返回NULL。
  */
 const char* tokenizer_next_until(tokenizer_t* tokenizer, const char* str);
+
+/**
+ * @method tokenizer_next_expr_until
+ * 获取下一个expr，该expr直到遇到指定的char。
+ * @param {tokenizer_t*} tokenizer tokenizer对象。
+ * @param {const char*} str 字符集。
+ *
+ * @return {char*} 成功返回token，失败返回NULL。
+ */
+const char* tokenizer_next_expr_until(tokenizer_t* tokenizer, const char* str);
 
 /**
  * @method tokenizer_next_int
