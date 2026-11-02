@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  color_component
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -25,21 +25,37 @@
 #include "color_picker/rgb_and_hsv.h"
 #include "color_picker/color_component.h"
 
+static ret_t color_component_init(widget_t* widget);
 static ret_t color_component_update_h(widget_t* widget);
 static ret_t color_component_update_sv(widget_t* widget);
+static ret_t color_component_ensure_image(widget_t* widget);
 static ret_t color_component_set_type(widget_t* widget, const char* type);
+
+static ret_t color_component_dispatch_change_event(widget_t* widget, uint32_t etype) {
+  uint32_t value = 0;
+  value_change_event_t evt;
+  value_change_event_init(&evt, etype, widget);
+  color_component_t* color_component = COLOR_COMPONENT(widget);
+  return_value_if_fail(color_component != NULL, RET_BAD_PARAMS);
+  value = (color_component->color_x & 0xffff) << 16;
+  value |= color_component->color_y;
+
+  value_set_uint32(&(evt.old_value), value);
+  value_set_uint32(&(evt.new_value), value);
+  widget_dispatch(widget, (event_t*)&evt);
+  widget_invalidate_force(widget, NULL);
+
+  return RET_OK;
+}
 
 static ret_t color_component_update_pressed(widget_t* widget, pointer_event_t* e) {
   point_t p = {e->x, e->y};
-  event_t evt = event_init(EVT_VALUE_CHANGING, widget);
   color_component_t* color_component = COLOR_COMPONENT(widget);
-
+  return_value_if_fail(color_component != NULL, RET_BAD_PARAMS);
   widget_to_local(widget, &p);
   color_component->color_x = tk_clampi(p.x, 0, widget->w);
   color_component->color_y = tk_clampi(p.y, 0, widget->h);
-  ;
-  widget_invalidate_force(widget, NULL);
-  widget_dispatch(widget, &evt);
+  color_component_dispatch_change_event(widget, EVT_VALUE_CHANGING);
 
   return RET_OK;
 }
@@ -60,14 +76,14 @@ static ret_t color_component_on_event(widget_t* widget, event_t* e) {
       pointer_event_t* evt = (pointer_event_t*)e;
       if (component->pressed) {
         color_component_update_pressed(widget, evt);
+        return RET_STOP;
       }
       break;
     }
     case EVT_POINTER_UP: {
       widget_ungrab(widget->parent, widget);
       if (component->pressed) {
-        event_t changed = event_init(EVT_VALUE_CHANGED, widget);
-        widget_dispatch(widget, &changed);
+        color_component_dispatch_change_event(widget, EVT_VALUE_CHANGING);
         component->pressed = FALSE;
       }
       break;
@@ -84,24 +100,18 @@ static ret_t color_component_on_paint_self(widget_t* widget, canvas_t* c) {
   rect_t dst;
   wh_t w = widget->w;
   wh_t h = widget->h;
+  bitmap_t* image = NULL;
   color_component_t* color_component = COLOR_COMPONENT(widget);
+  return_value_if_fail(color_component != NULL, RET_BAD_PARAMS);
   xy_t x = tk_max(0, tk_min(color_component->color_x, (w - 1)));
   xy_t y = tk_max(0, tk_min(color_component->color_y, (h - 1)));
-  bitmap_t* image = (color_component->image);
-
-  if (color_component->update == NULL) {
-    color_component_set_type(widget, widget->name);
-  }
-
-  if (color_component->need_update) {
-    color_component->update(widget);
-    image->flags |= BITMAP_FLAG_CHANGED;
-    color_component->need_update = FALSE;
-  }
 
   dst = rect_init(0, 0, w, h);
-  src = rect_init(0, 0, image->w, image->h);
-  canvas_draw_image(c, image, &src, &dst);
+  if (color_component_ensure_image(widget) == RET_OK) {
+    image = (color_component->image);
+    src = rect_init(0, 0, image->w, image->h);
+    canvas_draw_image(c, image, &src, &dst);
+  }
 
   if (color_component->update == color_component_update_sv) {
     canvas_set_stroke_color(c, color_init(0, 0, 0, 0xff));
@@ -133,8 +143,9 @@ static ret_t color_component_on_paint_self(widget_t* widget, canvas_t* c) {
 
 static ret_t color_component_on_destroy(widget_t* widget) {
   color_component_t* color_component = COLOR_COMPONENT(widget);
+  return_value_if_fail(color_component != NULL, RET_BAD_PARAMS);
 
-  bitmap_destroy((color_component->image));
+  BITMAP_DESTROY((color_component->image));
 
   return RET_OK;
 }
@@ -142,8 +153,9 @@ static ret_t color_component_on_destroy(widget_t* widget) {
 TK_DECL_VTABLE(color_component) = {.size = sizeof(color_component_t),
                                    .inputable = TRUE,
                                    .type = WIDGET_TYPE_COLOR_COMPONENT,
-                                   .parent = TK_PARENT_VTABLE(widget),
+                                   .get_parent_vt = TK_GET_PARENT_VTABLE(widget),
                                    .create = color_component_create,
+                                   .init = color_component_init,
                                    .on_destroy = color_component_on_destroy,
                                    .on_event = color_component_on_event,
                                    .on_paint_self = color_component_on_paint_self};
@@ -156,6 +168,42 @@ static bitmap_t* color_component_create_image(int32_t w, int32_t h) {
 #endif /*WITH_BITMAP_BGRA*/
 
   return bitmap_create_ex(w, h, 0, format);
+}
+
+static ret_t color_component_ensure_image(widget_t* widget) {
+  color_component_t* color_component = COLOR_COMPONENT(widget);
+  return_value_if_fail(color_component != NULL, RET_BAD_PARAMS);
+
+  if (widget->w < 1 || widget->h < 1) {
+    return RET_FAIL;
+  }
+
+  if (color_component->image != NULL) {
+    if (color_component->image->w != widget->w || color_component->image->h != widget->h) {
+      BITMAP_DESTROY(color_component->image);
+    }
+  }
+
+  if (color_component->image == NULL) {
+    color_component->need_update = TRUE;
+    color_component->image = color_component_create_image(widget->w, widget->h);
+  }
+
+  return_value_if_fail(color_component->image != NULL, RET_FAIL);
+
+  if (color_component->update == NULL) {
+    color_component_set_type(widget, widget->name);
+  }
+
+  if (color_component->need_update && color_component->update != NULL) {
+    bitmap_t* image = color_component->image;
+
+    color_component->update(widget);
+    bitmap_set_dirty(image, TRUE);
+    color_component->need_update = FALSE;
+  }
+
+  return RET_OK;
 }
 
 static ret_t color_component_update_sv(widget_t* widget) {
@@ -172,6 +220,7 @@ static ret_t color_component_update_sv(widget_t* widget) {
   int32_t h = 0;
   uint32_t* dst = NULL;
   bitmap_t* image = NULL;
+  uint8_t* image_data = NULL;
   color_component_t* color_component = COLOR_COMPONENT(widget);
   return_value_if_fail(widget != NULL && color_component != NULL, RET_BAD_PARAMS);
 
@@ -179,11 +228,18 @@ static ret_t color_component_update_sv(widget_t* widget) {
   image = color_component->image;
   w = image->w;
   h = image->h;
-  dst = (uint32_t*)(image->data);
+  image_data = bitmap_lock_buffer_for_write(image);
+  dst = (uint32_t*)(image_data);
 
-  convertRGBtoHSV(rgba.r, rgba.g, rgba.b, &H, &S, &V);
+  if (color_component->last_hue != -1) {
+    H = color_component->last_hue;
+  } else {
+    convertRGBtoHSV(rgba.r, rgba.g, rgba.b, &H, &S, &V);
+    color_component->last_hue = H;
+  }
 
   for (y = 0; y < h; y++) {
+    dst = (uint32_t*)(image_data + y * image->line_length);
     for (x = 0; x < w; x++) {
       V = (float)x / (float)w;
       S = 1 - (float)y / (float)h;
@@ -191,7 +247,8 @@ static ret_t color_component_update_sv(widget_t* widget) {
       *dst++ = rgb_to_image8888(r, g, b);
     }
   }
-  color_component->last_hue = H;
+
+  bitmap_unlock_buffer(image);
 
   return RET_OK;
 }
@@ -210,15 +267,18 @@ static ret_t color_component_update_h(widget_t* widget) {
   int32_t h = 0;
   uint32_t* dst = NULL;
   bitmap_t* image = NULL;
+  uint8_t* image_data = NULL;
   color_component_t* color_component = COLOR_COMPONENT(widget);
   return_value_if_fail(widget != NULL && color_component != NULL, RET_BAD_PARAMS);
 
   image = color_component->image;
   w = image->w;
   h = image->h;
-  dst = (uint32_t*)(image->data);
+  image_data = bitmap_lock_buffer_for_write(image);
+  dst = (uint32_t*)(image_data);
 
   for (y = 0; y < h; y++) {
+    dst = (uint32_t*)(image_data + y * image->line_length);
     H = (1 - (float)y / (float)h) * 360;
     convertHSVtoRGB(H, S, V, &r, &g, &b);
     v = rgb_to_image8888(r, g, b);
@@ -226,21 +286,23 @@ static ret_t color_component_update_h(widget_t* widget) {
       *dst++ = v;
     }
   }
+  bitmap_unlock_buffer(image);
 
+  return RET_OK;
+}
+
+static ret_t color_component_init(widget_t* widget) {
+  color_component_t* color_component = COLOR_COMPONENT(widget);
+  return_value_if_fail(color_component != NULL, RET_BAD_PARAMS);
+
+  color_component->c = color_init(0xff, 0xff, 0xff, 0xff);
+  color_component->last_hue = -1;
   return RET_OK;
 }
 
 widget_t* color_component_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {
   widget_t* widget = widget_create(parent, TK_REF_VTABLE(color_component), x, y, w, h);
-  color_component_t* color_component = COLOR_COMPONENT(widget);
-  return_value_if_fail(color_component != NULL, NULL);
-
-  color_component->image = color_component_create_image(w, h);
-  color_component->c = color_init(0xff, 0xff, 0xff, 0xff);
-  color_component->need_update = TRUE;
-  color_component->last_hue = -1;
-
-  ENSURE(color_component->image != NULL);
+  return_value_if_fail(color_component_init(widget) == RET_OK, NULL);
 
   return widget;
 }
@@ -252,17 +314,46 @@ ret_t color_component_set_color(widget_t* widget, color_t c) {
   color_component_t* color_component = COLOR_COMPONENT(widget);
   return_value_if_fail(color_component != NULL, RET_BAD_PARAMS);
 
+  color_component_ensure_image(widget);
+
   color_component->c = c;
   convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &H, &S, &V);
   if (color_component->update == color_component_update_sv) {
     if ((int32_t)H != color_component->last_hue) {
       color_component->need_update = TRUE;
       log_debug("hue changed(%d != %d)\n", color_component->last_hue, (int32_t)H);
+      color_component->last_hue = -1;
     }
     color_component->color_x = V * widget->w;
     color_component->color_y = (1 - S) * widget->h;
   } else {
     color_component->color_y = (1 - H / 360.0f) * widget->h;
+  }
+  widget_invalidate(widget, NULL);
+
+  return RET_OK;
+}
+
+ret_t color_component_set_hsv(widget_t* widget, float h, float s, float v) {
+  color_t* c;
+  color_component_t* color_component = COLOR_COMPONENT(widget);
+  return_value_if_fail(color_component != NULL, RET_BAD_PARAMS);
+
+  color_component_ensure_image(widget);
+
+  c = &(color_component->c);
+  convertHSVtoRGB(h, s, v, &(c->rgba.r), &(c->rgba.g), &(c->rgba.b));
+
+  if (color_component->update == color_component_update_sv) {
+    if ((int32_t)h != color_component->last_hue) {
+      color_component->need_update = TRUE;
+      log_debug("hue changed(%d != %d)\n", color_component->last_hue, (int32_t)h);
+      color_component->last_hue = h;
+    }
+    color_component->color_x = v * widget->w;
+    color_component->color_y = (1 - s) * widget->h;
+  } else {
+    color_component->color_y = (1 - h / 360.0f) * widget->h;
   }
   widget_invalidate(widget, NULL);
 

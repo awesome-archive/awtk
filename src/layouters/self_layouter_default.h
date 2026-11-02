@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  self layouter default
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -32,8 +32,8 @@ BEGIN_C_DECLS
  *
  * 缺省的控件自身布局算法实现。
  *
- *> 用法请参考：[缺省控件自身布局算法](
- *https://github.com/zlgopen/awtk/blob/master/docs/self_layouter_default.md)
+ * > 用法请参考：[缺省的控件自身布局器](
+ * https://github.com/zlgopen/awtk/blob/master/docs/self_layouter_default.md)
  *
  */
 typedef struct _self_layouter_default_t {
@@ -42,10 +42,10 @@ typedef struct _self_layouter_default_t {
   uint8_t y_attr;
   uint8_t w_attr;
   uint8_t h_attr;
-  xy_t x;
-  xy_t y;
-  wh_t w;
-  wh_t h;
+  double x;
+  double y;
+  double w;
+  double h;
 } self_layouter_default_t;
 
 /**
@@ -61,6 +61,7 @@ self_layouter_t* self_layouter_default_create(void);
 
 bool_t self_layouter_default_is_valid(self_layouter_t* layouter);
 ret_t widget_layout_self_with_rect(self_layouter_t* layouter, widget_t* widget, rect_t* area);
+const self_layouter_vtable_t* self_layouter_default_vtable(void);
 
 #define SELF_LAYOUTER_DEFAULT "default"
 

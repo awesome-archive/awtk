@@ -13,21 +13,33 @@ class nanovg_image_blender {
 
  public:
   nanovg_image_blender(BitmapT* bitmap, float* matrix);
+  nanovg_image_blender(BitmapT* bitmap, float* matrix, float alpha);
 
   bool get_pixel(float x, float y, pixel32_rgba& ref) const;
   void operator()(pixel* pixels, int x, int y, count_t n) const;
   void operator()(pixel* pixels, int x, int y, count_t n, const cover_type* covers) const;
+  
+ private:
+  void get_physical_image_point(int& x, int& y) const;
 
  private:
   BitmapT* _bitmap;
   float* _matrix;
+  float _alpha;
   int w;
   int h;
 };
 
 template <typename PixelT, typename BitmapT>
 inline nanovg_image_blender<PixelT, BitmapT>::nanovg_image_blender(BitmapT* bitmap, float* matrix)
-    : _bitmap(bitmap), _matrix(matrix) {
+    : _bitmap(bitmap), _matrix(matrix), _alpha(1.0f) {
+  this->w = bitmap->width();
+  this->h = bitmap->height();
+}
+
+template <typename PixelT, typename BitmapT>
+inline nanovg_image_blender<PixelT, BitmapT>::nanovg_image_blender(BitmapT* bitmap, float* matrix, float alpha)
+    : _bitmap(bitmap), _matrix(matrix), _alpha(alpha) {
   this->w = bitmap->width();
   this->h = bitmap->height();
 }
@@ -39,6 +51,31 @@ inline void pixel_linear(PixelTargetT& t, const PixelSrcT& s, float a) {
  t.g = s.g*a + t.g*ma;
  t.b = s.b*a + t.b*ma;
  t.a = s.a*a + t.a*ma;
+}
+
+template <typename PixelT, typename BitmapT>
+inline void nanovg_image_blender<PixelT, BitmapT>::get_physical_image_point(int& x, int& y) const {
+  int tmp_x = x;
+  int tmp_y = y;
+  unsigned int width = _bitmap->width();
+  unsigned int height = _bitmap->height();
+  switch (_bitmap->orientation())
+  {
+  case 90:
+    x = tmp_y;
+    y = width - tmp_x - 1;
+    break;  
+  case 180:
+    x = width - tmp_x - 1;
+    y = height - tmp_y - 1;
+    break;  
+  case 270:
+    y = tmp_x;
+    x = height - tmp_y - 1;
+    break;
+  default:
+    break;
+  }
 }
 
 template <typename PixelT, typename BitmapT>
@@ -56,22 +93,34 @@ inline bool nanovg_image_blender<PixelT, BitmapT>::get_pixel(float x, float y,
   int y2 = ceil(oy);
   if (x1 >= 0 && x1 < this->w){
    if (y1 >= 0 && y1 < this->h){
+    int px = x1;
+    int py = y1;
     p[0].a = 0xff;
-    pixel_convert<pixel32_rgba, typename BitmapT::pixel>(p[0], _bitmap->row_ptr(y1)[x1]);
+    get_physical_image_point(px, py);
+    pixel_convert<pixel32_rgba, typename BitmapT::pixel>(p[0], _bitmap->row_ptr(py)[px]);
    }
    if (y2 >= 0 && y2 < this->h) {
+    int px = x1;
+    int py = y2;
     p[2].a = 0xff;
-    pixel_convert<pixel32_rgba, typename BitmapT::pixel>(p[2], _bitmap->row_ptr(y2)[x1]);
+    get_physical_image_point(px, py);
+    pixel_convert<pixel32_rgba, typename BitmapT::pixel>(p[2], _bitmap->row_ptr(py)[px]);
    }
   }
   if (x2 >= 0 && x2 < this->w) {
    if (y1 >= 0 && y1 < this->h) {
+    int px = x2;
+    int py = y1;
     p[1].a = 0xff;
-    pixel_convert<pixel32_rgba, typename BitmapT::pixel>(p[1], _bitmap->row_ptr(y1)[x2]);
+    get_physical_image_point(px, py);
+    pixel_convert<pixel32_rgba, typename BitmapT::pixel>(p[1], _bitmap->row_ptr(py)[px]);
    }
    if (y2 >= 0 && y2 < this->h) {
+    int px = x2;
+    int py = y2;
     p[3].a = 0xff;
-    pixel_convert<pixel32_rgba, typename BitmapT::pixel>(p[3], _bitmap->row_ptr(y2)[x2]);
+    get_physical_image_point(px, py);
+    pixel_convert<pixel32_rgba, typename BitmapT::pixel>(p[3], _bitmap->row_ptr(py)[px]);
    }
   }
 
@@ -79,6 +128,14 @@ inline bool nanovg_image_blender<PixelT, BitmapT>::get_pixel(float x, float y,
   pixel_linear(p[2], p[3], ox - x1);
   pixel_linear(p[0], p[2], oy - y1);
   ref = p[0];
+
+  ref.a *= _alpha;
+
+  if (_bitmap->flags() & NVG_IMAGE_PREMULTIPLIED) {
+    ref.r = ref.r * _alpha;
+    ref.g = ref.g * _alpha;
+    ref.b = ref.b * _alpha;
+  }
 
   return true;
 }
@@ -92,7 +149,11 @@ inline void nanovg_image_blender<PixelT, BitmapT>::operator()(pixel* pixels, int
       continue;
     }
 
-    pixel_blend<PixelT, pixel32_rgba>(*pixels, p, p.a);
+    if (_bitmap->flags() & NVG_IMAGE_PREMULTIPLIED) {
+      pixel_blend_premulti_alpha<PixelT, pixel32_rgba>(*pixels, p, p.a, 1);
+    } else {
+      pixel_blend<PixelT, pixel32_rgba>(*pixels, p, p.a);
+    }
   }
 }
 
@@ -107,7 +168,11 @@ inline void nanovg_image_blender<PixelT, BitmapT>::operator()(pixel* pixels, int
     }
 
     uint8_t a = pixel_a(p, covers[0]);
-    pixel_blend<PixelT, pixel32_rgba>(*pixels, p, a);
+    if (_bitmap->flags() & NVG_IMAGE_PREMULTIPLIED) {
+      pixel_blend_premulti_alpha<PixelT, pixel32_rgba>(*pixels, p, a, covers[0]);
+    } else {
+      pixel_blend<PixelT, pixel32_rgba>(*pixels, p, a);
+    }
   }
 }
 }  // namespace agge

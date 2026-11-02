@@ -2,32 +2,30 @@
 ### 概述
 ![image](images/color_tile_t_0.png)
 
- 色块控件。
+色块控件。
 
- 用来显示一个颜色块，它通过属性而不是主题来设置颜色，方便在运行时动态改变颜色。
+用来显示一个颜色块，它通过属性而不是窗体样式来设置颜色，方便在运行时动态改变颜色。
 
- 可以使用value属性访问背景颜色的颜色值。
+可以使用value属性访问背景颜色的颜色值。
 
- color\_tile\_t是[widget\_t](widget_t.md)的子类控件，widget\_t的函数均适用于color\_tile\_t控件。
+color\_tile\_t是[widget\_t](widget_t.md)的子类控件，widget\_t的函数均适用于color\_tile\_t控件。
 
- 在xml中使用"color_tile"标签创建色块控件。如：
+在xml中使用"color_tile"标签创建色块控件。如：
 
- ```xml
- <color_tile x="c" y="m" w="80" h="30" bg_color="green" />
- ```
+```xml
+<color_tile x="c" y="m" w="80" h="30" bg_color="green" />
+```
 
- > 更多用法请参考：
- [color_tile](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/color_picker_rgb.xml)
+> 更多用法请参考：
+[color_tile](https://github.com/zlgopen/awtk/blob/master/design/default/ui/color_picker_rgb.xml)
 
- 在c代码中使用函数color_tile\_create创建色块控件。如：
+在c代码中使用函数color_tile\_create创建色块控件。如：
 
- ```c
-  widget_t* color_tile = color_tile_create(win, 10, 10, 128, 30);
-  color_tile_set_bg_color(color_tile, "red");
- ```
- > 创建之后，用color\_tile\_set\_bg\_color设置背景颜色。
-
-
+```c
+widget_t* color_tile = color_tile_create(win, 10, 10, 128, 30);
+color_tile_set_bg_color(color_tile, "red");
+```
+> 创建之后，用color\_tile\_set\_bg\_color设置背景颜色。
 ----------------------------------
 ### 函数
 <p id="color_tile_t_methods">
@@ -36,6 +34,9 @@
 | -------- | ------------ | 
 | <a href="#color_tile_t_color_tile_cast">color\_tile\_cast</a> | 转换为color_tile对象(供脚本语言使用)。 |
 | <a href="#color_tile_t_color_tile_create">color\_tile\_create</a> | 创建color_tile对象 |
+| <a href="#color_tile_t_color_tile_get_bg_color">color\_tile\_get\_bg\_color</a> | 获取背景颜色。 |
+| <a href="#color_tile_t_color_tile_get_border_color">color\_tile\_get\_border\_color</a> | 获取边框颜色。 |
+| <a href="#color_tile_t_color_tile_get_widget_vtable">color\_tile\_get\_widget\_vtable</a> | 获取 color_tile 虚表。 |
 | <a href="#color_tile_t_color_tile_set_bg_color">color\_tile\_set\_bg\_color</a> | 设置背景颜色。 |
 | <a href="#color_tile_t_color_tile_set_border_color">color\_tile\_set\_border\_color</a> | 设置边框颜色。 |
 | <a href="#color_tile_t_color_tile_set_value">color\_tile\_set\_value</a> | 设置背景颜色。 |
@@ -44,16 +45,21 @@
 
 | 属性名称 | 类型 | 说明 | 
 | -------- | ----- | ------------ | 
-| <a href="#color_tile_t_bg_color">bg\_color</a> | const char* | 背景颜色。 |
-| <a href="#color_tile_t_border_color">border\_color</a> | const char* | 边框颜色。 |
+| <a href="#color_tile_t_bg_color">bg\_color</a> | char* | 背景颜色。 |
+| <a href="#color_tile_t_border_color">border\_color</a> | char* | 边框颜色。 |
+### 事件
+<p id="color_tile_t_events">
+
+| 事件名称 | 类型  | 说明 | 
+| -------- | ----- | ------- | 
+| EVT\_VALUE\_WILL\_CHANGE | value\_change\_event\_t | 值(颜色)即将改变事件。 |
+| EVT\_VALUE\_CHANGED | value\_change\_event\_t | 值(颜色)改变事件。 |
 #### color\_tile\_cast 函数
 -----------------------
 
 * 函数功能：
 
-> <p id="color_tile_t_color_tile_cast"> 转换为color_tile对象(供脚本语言使用)。
-
-
+> <p id="color_tile_t_color_tile_cast">转换为color_tile对象(供脚本语言使用)。
 
 * 函数原型：
 
@@ -72,9 +78,7 @@ widget_t* color_tile_cast (widget_t* widget);
 
 * 函数功能：
 
-> <p id="color_tile_t_color_tile_create"> 创建color_tile对象
-
-
+> <p id="color_tile_t_color_tile_create">创建color_tile对象
 
 * 函数原型：
 
@@ -92,14 +96,68 @@ widget_t* color_tile_create (widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 | y | xy\_t | y坐标 |
 | w | wh\_t | 宽度 |
 | h | wh\_t | 高度 |
+#### color\_tile\_get\_bg\_color 函数
+-----------------------
+
+* 函数功能：
+
+> <p id="color_tile_t_color_tile_get_bg_color">获取背景颜色。
+
+* 函数原型：
+
+```
+const char* color_tile_get_bg_color (widget_t* widget);
+```
+
+* 参数说明：
+
+| 参数 | 类型 | 说明 |
+| -------- | ----- | --------- |
+| 返回值 | const char* | 返回背景颜色。 |
+| widget | widget\_t* | 控件对象。 |
+#### color\_tile\_get\_border\_color 函数
+-----------------------
+
+* 函数功能：
+
+> <p id="color_tile_t_color_tile_get_border_color">获取边框颜色。
+
+* 函数原型：
+
+```
+const char* color_tile_get_border_color (widget_t* widget);
+```
+
+* 参数说明：
+
+| 参数 | 类型 | 说明 |
+| -------- | ----- | --------- |
+| 返回值 | const char* | 返回边框颜色。 |
+| widget | widget\_t* | 控件对象。 |
+#### color\_tile\_get\_widget\_vtable 函数
+-----------------------
+
+* 函数功能：
+
+> <p id="color_tile_t_color_tile_get_widget_vtable">获取 color_tile 虚表。
+
+* 函数原型：
+
+```
+const widget_vtable_t* color_tile_get_widget_vtable ();
+```
+
+* 参数说明：
+
+| 参数 | 类型 | 说明 |
+| -------- | ----- | --------- |
+| 返回值 | const widget\_vtable\_t* | 成功返回 color\_tile 虚表。 |
 #### color\_tile\_set\_bg\_color 函数
 -----------------------
 
 * 函数功能：
 
-> <p id="color_tile_t_color_tile_set_bg_color"> 设置背景颜色。
-
-
+> <p id="color_tile_t_color_tile_set_bg_color">设置背景颜色。
 
 * 函数原型：
 
@@ -119,9 +177,7 @@ ret_t color_tile_set_bg_color (widget_t* widget, const char* color);
 
 * 函数功能：
 
-> <p id="color_tile_t_color_tile_set_border_color"> 设置边框颜色。
-
-
+> <p id="color_tile_t_color_tile_set_border_color">设置边框颜色。
 
 * 函数原型：
 
@@ -141,9 +197,7 @@ ret_t color_tile_set_border_color (widget_t* widget, const char* color);
 
 * 函数功能：
 
-> <p id="color_tile_t_color_tile_set_value"> 设置背景颜色。
-
-
+> <p id="color_tile_t_color_tile_set_value">设置背景颜色。
 
 * 函数原型：
 
@@ -160,10 +214,9 @@ ret_t color_tile_set_value (widget_t* widget, color_t color);
 | color | color\_t | 背景颜色。 |
 #### bg\_color 属性
 -----------------------
-> <p id="color_tile_t_bg_color"> 背景颜色。
+> <p id="color_tile_t_bg_color">背景颜色。
 
-
-* 类型：const char*
+* 类型：char*
 
 | 特性 | 是否支持 |
 | -------- | ----- |
@@ -177,10 +230,9 @@ ret_t color_tile_set_value (widget_t* widget, color_t color);
 | 可通过widget\_set\_prop修改 | 是 |
 #### border\_color 属性
 -----------------------
-> <p id="color_tile_t_border_color"> 边框颜色。
+> <p id="color_tile_t_border_color">边框颜色。
 
-
-* 类型：const char*
+* 类型：char*
 
 | 特性 | 是否支持 |
 | -------- | ----- |

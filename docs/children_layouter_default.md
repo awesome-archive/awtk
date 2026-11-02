@@ -1,6 +1,6 @@
 # 缺省子控件的布局器
 
-## 一、语法
+## 语法
 
 子控件布局器统一使用 children_layout 属性指定，其语法为：
 
@@ -15,22 +15,23 @@ PARAM_LIST => PARAM | PARAM ',' PARAM_LIST
 <view x="0" y="0" w="100%" h="100%" children_layout="default(c=2,r=8,m=5,s=5)">
 ```
 
-## 二、参数
+## 参数
 
 缺省子控件的布局器提供了下列参数：
 
-| 参数          | 简写   |  说明 |
-|----------------|:------:|:--------------|
-| rows           | r      | 行数 |
-| cols           | c      | 列数 |
-| width          | w      | 子控件的宽度，可以用来计算列数，与 cols 互斥   |
-| height         | h      | 子控件的高度，可以用来计算行数，与 rows 互斥   |
-|  x\_margin     | xm     | 水平方向的边距  |
-| y\_margin      | ym     | 垂直方向的边距   |
-| spacing        | s      | 子控件之间的间距   |
-| keep_invisible | ki     | 是否给不可见的控件留位置（缺省否）|
-| keep_disable   | kd     | 是否给不用的控件留位置（缺省是）|
-| aligh_h        | a      | 用于 hbox 的情况 (col=0,row=1), 子控件整体水平对齐的方式。
+| 参数           | 简写  | 说明                                                       |
+| -------------- | :---: | :--------------------------------------------------------- |
+| rows           |   r   | 行数                                                       |
+| cols           |   c   | 列数                                                       |
+| width          |   w   | 子控件的宽度，可以用来计算列数（grid），或作为 vflow 的列宽（与 cols 互斥） |
+| height         |   h   | 子控件的高度，可以用来计算行数（grid），或作为 hflow 的行高（与 rows 互斥） |
+| x\_margin      |  xm   | 水平方向的边距                                             |
+| y\_margin      |  ym   | 垂直方向的边距                                             |
+| spacing        |   s   | 子控件之间的间距                                           |
+| flexible       |   f   | 一行或一列放不下时，是否再另起一行或一列（缺省否）         |
+| keep_invisible |  ki   | 是否给不可见的控件留位置（缺省否）                         |
+| keep_disable   |  kd   | 是否给不用的控件留位置（缺省是）                           |
+| align_h        |   a   | 用于 hbox 和 hflow，子控件整体水平对齐的方式。             |
 
 在代码中，可以通过 widget\_set\_children\_layout 函数启用子控件布局器：
 
@@ -54,6 +55,7 @@ widget_set_children_layout(w, "default(r=2,c=2)");
 ```
 
 在 XML 中，可以通过 children\_layout 属性设置：
+
 ```
   <column x="20" y="160" w="50%" h="60" children_layout="default(r=2,c=1,ym=2,s=10)" >
     <check_button name="c1" text="Book"/>
@@ -61,15 +63,15 @@ widget_set_children_layout(w, "default(r=2,c=2)");
   </column>
 ```
 
-## 三、使用方法
+## 使用方法
 
 下面我们看看，如何调整 rows/cols 两个参数，来实现不同的布局方式。
 
-### 0. 缺省
+### 缺省
 
 在没有设置子控件布局参数时，采用缺省的布局方式，父控件啥事也不做，完全由子控件自己的布局参数决定。
 
-### 1. hbox 水平布局
+### hbox 水平布局
 
 当 rows=1,cols=0 时，所有子控件在水平方向排成一行，可以实现水平布局功能。子控件的参数：
 
@@ -100,9 +102,9 @@ widget_set_children_layout(w, "default(r=2,c=2)");
  bin\preview_ui.exe t.xml
 ```
 
-![水平布局](images/layout_hbox.png)
+![水平布局](./images/layout_hbox.png)
 
-### 2. vbox 垂直布局
+### vbox 垂直布局
 
 当 cols=1,rows=0 时，所有子控件在垂直方向排成一列，可以实现垂直布局功能。子控件的参数：
 
@@ -132,9 +134,9 @@ widget_set_children_layout(w, "default(r=2,c=2)");
 bin\preview_ui.exe t.xml
 ```
 
-![垂直布局](images/layout_vbox.png)
+![垂直布局](./images/layout_vbox.png)
 
-### 3. listbox 列表布局
+### listbox 列表布局
 
 当 cols=1,rows=N 时，所有子控件在垂直方向排成一列，可以实现列表布局功能。子控件的参数：
 
@@ -164,9 +166,9 @@ bin\preview_ui.exe t.xml
  bin\preview_ui.exe t.xml
 ```
 
-![列表布局](images/layout_list.png)
+![列表布局](./images/layout_list.png)
 
-### 4. grid 网格布局
+### grid 网格布局
 
 当 cols=M,rows=N 时，所有子控件放在 MxN 的网格中，可以实现网格布局功能。
 
@@ -191,9 +193,62 @@ bin\preview_ui.exe t.xml
  bin\preview_ui.exe t.xml
 ```
 
-![网格布局](images/layout_grid.png)
+![网格布局](./images/layout_grid.png)
 
-### 5. floating 浮动布局
+### hflow 水平流式布局
+
+当 height=item_h、cols=0 时，子控件在水平方向逐行排列，高度统一为 item_h，宽度由子控件自身决定，一行放不下时自动换到下一行。子控件的参数：
+
+* x 从左到右排列，由布局参数计算而出（按 align_h 对齐）。
+* y 为该行的起始 y。
+* w 由子控件自身宽度决定，布局器据此换行。
+* h 为 item_h。
+
+> 子控件需自行决定宽度（w 属性，或 self_layout 的 flex/百分比/像素）。
+> 布局器先跑子控件的 self_layout 确定其宽度（百分比相对行宽），再按宽度换行定位；self_layout 的 x/y/h 不生效（由布局器决定），仅 w 生效。
+> align_h 参数控制每行整体水平对齐方式。
+> 一行放不下的子控件换到下一行；垂直方向放不下的子控件被隐藏。
+
+示例：
+
+```
+<window>
+  <view x="c" y="m" w="300" h="100" children_layout="default(h=30, s=5, align_h=center)">
+      <button text="1" w="80"/>
+      <button text="2" w="100"/>
+      <button text="3" w="80"/>
+      <button text="4" w="100"/>
+  </view>
+</window>
+```
+
+### vflow 垂直流式布局
+
+当 width=item_w、rows=0 时，子控件在垂直方向逐列排列，宽度统一为 item_w，高度由子控件自身决定，一列放不下时自动换到下一列。子控件的参数：
+
+* x 为该列的起始 x。
+* y 从上到下排列，由布局参数计算而出（顶端对齐）。
+* w 为 item_w。
+* h 由子控件自身高度决定，布局器据此换列。
+
+> 子控件需自行决定高度（h 属性，或 self_layout 的 flex/百分比/像素）。
+> 布局器先跑子控件的 self_layout 确定其高度（百分比相对列高），再按高度换列定位；self_layout 的 x/y/w 不生效（由布局器决定），仅 h 生效。
+> 一列放不下的子控件换到下一列；水平方向放不下的子控件被隐藏。
+
+示例：
+
+```
+<window>
+  <view x="c" y="m" w="100" h="300" children_layout="default(w=30, s=5)">
+      <button text="1" h="80"/>
+      <button text="2" h="100"/>
+      <button text="3" h="80"/>
+      <button text="4" h="100"/>
+  </view>
+</window>
+```
+
+### floating 浮动布局
 
 如果子控件的 floating 属性设置为 true，其不受 children\_layout 的限制：
 
@@ -218,11 +273,11 @@ bin\preview_ui.exe t.xml
  bin\preview_ui.exe t.xml
 ```
 
-![浮动布局](images/layout_floating.png)
+![浮动布局](./images/layout_floating.png)
 
-## 四、高级用法
+## 高级用法
 
-### 1. 子控件布局器和子控件自身的布局参数结合。
+### 子控件布局器和子控件自身的布局参数结合。
 
 为了更大的灵活性，缺省子控件布局器可以和子控件自身的参数结合起来。
 
@@ -245,9 +300,9 @@ bin\preview_ui.exe t.xml
  bin\preview_ui.exe t.xml
 ```
 
-![高级用法一](images/layout_adv1.png)
+![高级用法一](./images/layout_adv1.png)
 
-### 2. 子控件自身的布局参数 x/y/w/h 均为像素方式时，需要用 self\_layout 参数指定。
+### 子控件自身的布局参数 x/y/w/h 均为像素方式时，需要用 self\_layout 参数指定。
 
 示例：
 
@@ -268,9 +323,9 @@ bin\preview_ui.exe t.xml
  bin\preview_ui.exe t.xml
 ```
 
-![高级用法二](images/layout_adv2.png)
+![高级用法二](./images/layout_adv2.png)
 
-## 五、示例
+## 示例
 
 demos/assets/raw/ui/中有演示各种布局参数的示例。
 

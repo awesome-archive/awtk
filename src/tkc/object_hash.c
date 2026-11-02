@@ -1,0 +1,425 @@
+﻿/**
+ * File:   object_hash.c
+ * Author: AWTK Develop Team
+ * Brief:  用散列值查询属性的object
+ *
+ * Copyright (c) 2024 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY { without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * License file for more details.
+ *
+ */
+
+/**
+ * History:
+ * ================================================================
+ * 2024-08-19 Shen ZhaoKun <shenzhaokun@zlg.cn> created
+ *
+ */
+
+#include "tkc/mem.h"
+#include "tkc/utils.h"
+#include "tkc/named_value_hash.h"
+
+#include "tkc/object_hash.h"
+
+#define OBJECT_HASH_FIND_PROP_BY_NAME_PROPS_SIZE_THRESHOLD 8
+#define OBJECT_HASH_FIND_PROP_BY_NAME_LEN_THRESHOLD 16
+
+inline static uint64_t object_hash_gen_name_hash(object_hash_t* o, const char* name) {
+  if (o->name_case_insensitive) {
+    return named_value_hash_get_hash_from_str_with_conv(name, tolower);
+  } else {
+    return named_value_hash_get_hash_from_str(name);
+  }
+}
+
+inline static tk_compare_t object_hash_get_cmp_by_name(object_hash_t* o) {
+  if (o->name_case_insensitive) {
+    return (tk_compare_t)named_value_icompare_by_name;
+  } else {
+    return (tk_compare_t)named_value_compare_by_name;
+  }
+}
+
+static int32_t object_hash_find_prop_index_by_name(tk_object_t* obj, const char* name,
+                                                   bool_t* p_is_gen_hash, uint64_t* p_hash) {
+  int32_t ret = -1;
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL && name != NULL, -1);
+
+  if (tk_str_indexable(name)) {
+    ret = tk_atoi(name + 1);
+    return_value_if_fail(ret < o->props.size, -1);
+  } else if (p_hash == NULL &&
+             o->props.size <= OBJECT_HASH_FIND_PROP_BY_NAME_PROPS_SIZE_THRESHOLD &&
+             tk_strlen(name) <= OBJECT_HASH_FIND_PROP_BY_NAME_LEN_THRESHOLD) {
+    ret = darray_find_index_ex(&(o->props), object_hash_get_cmp_by_name(o), (void*)name);
+  } else {
+    uint64_t hash = object_hash_gen_name_hash(o, name);
+    if (p_hash != NULL) {
+      (*p_hash) = hash;
+    }
+    if (p_is_gen_hash != NULL) {
+      (*p_is_gen_hash) = TRUE;
+    }
+
+    if (!o->keep_props_order) {
+      ret =
+          darray_bsearch_index(&(o->props), (tk_compare_t)named_value_hash_compare_by_hash, &hash);
+    } else {
+      ret =
+          darray_find_index_ex(&(o->props), (tk_compare_t)named_value_hash_compare_by_hash, &hash);
+    }
+
+    if (ret >= 0) {
+      named_value_hash_t* nvh = (named_value_hash_t*)darray_get(&o->props, ret);
+      if (0 != object_hash_get_cmp_by_name(o)(nvh, name)) {
+        darray_t bucket;
+        darray_init(&bucket, 8, NULL, NULL);
+
+        log_debug("%s: Hashing collision!\r\n", __FUNCTION__);
+        log_debug("Hash: %" PRId64 "\r\n", hash);
+        log_debug("Wrong name: %s\r\n", nvh->base.name);
+        log_debug("Target name: %s\r\n\r\n", name);
+
+        ret = -1;
+        if (RET_OK == darray_find_all(&o->props, (tk_compare_t)named_value_hash_compare_by_hash,
+                                      &hash, &bucket)) {
+          named_value_hash_t* right_nvh = (named_value_hash_t*)darray_find_ex(
+              &bucket, object_hash_get_cmp_by_name(o), (void*)name);
+          if (right_nvh != NULL) {
+            ret = darray_find_index_ex(&o->props, pointer_compare, (void*)right_nvh);
+          }
+        }
+
+        darray_deinit(&bucket);
+      }
+    }
+  }
+
+  return ret;
+}
+
+static value_t* object_hash_find_prop_by_name(tk_object_t* obj, const char* name,
+                                              bool_t* p_is_gen_hash, uint64_t* p_hash) {
+  named_value_hash_t* nvh = NULL;
+  object_hash_t* o = OBJECT_HASH(obj);
+  int32_t index = -1;
+  return_value_if_fail(o != NULL && name != NULL, NULL);
+
+  index = object_hash_find_prop_index_by_name(obj, name, p_is_gen_hash, p_hash);
+  if (index >= 0) {
+    nvh = (named_value_hash_t*)darray_get(&o->props, index);
+  }
+
+  return nvh != NULL ? &(nvh->base.value) : NULL;
+}
+
+static ret_t object_hash_clear_props(tk_object_t* obj) {
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  return darray_clear(&(o->props));
+}
+
+static ret_t object_hash_on_destroy(tk_object_t* obj) {
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  return darray_deinit(&(o->props));
+}
+
+static ret_t object_hash_remove_prop(tk_object_t* obj, const char* name) {
+  int32_t index = 0;
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  if (o->props.size > 0 && o->enable_path) {
+    tk_object_t* sub = tk_object_get_child_object(obj, name, &name);
+    if (sub != NULL) {
+      return tk_object_remove_prop(sub, name);
+    }
+  }
+
+  index = object_hash_find_prop_index_by_name(obj, name, NULL, NULL);
+  if (index >= 0) {
+    return darray_remove_index(&(o->props), index);
+  } else {
+    return RET_NOT_FOUND;
+  }
+}
+
+static ret_t object_hash_set_prop(tk_object_t* obj, const char* name, const value_t* v) {
+  value_t* vv = NULL;
+  ret_t ret = RET_NOT_FOUND;
+  object_hash_t* o = OBJECT_HASH(obj);
+  bool_t is_gen_hash = FALSE;
+  uint64_t hash = 0;
+  ENSURE(o);
+
+  if (tk_str_eq(name, TK_OBJECT_PROP_KEEP_PROPS_ORDER)) {
+    return object_hash_set_keep_props_order(obj, value_bool(v));
+  }
+
+  if (o->props.size > 0 && o->enable_path) {
+    tk_object_t* sub = tk_object_get_child_object(obj, name, &name);
+    if (sub != NULL) {
+      return tk_object_set_prop(sub, name, v);
+    }
+  }
+
+  vv = object_hash_find_prop_by_name(obj, name, &is_gen_hash, &hash);
+  if (vv != NULL) {
+    if (o->keep_prop_type) {
+      ret = value_deep_copy_keep_type(vv, v);
+    } else {
+      ret = value_replace(vv, v, TRUE);
+    }
+  } else {
+    named_value_hash_t* nvh = named_value_hash_create_ex(NULL, v);
+    return_value_if_fail(nvh != NULL, RET_OOM);
+
+    named_value_set_name(&nvh->base, name);
+    nvh->hash = is_gen_hash ? hash : object_hash_gen_name_hash(o, name);
+
+    if (!o->keep_props_order) {
+      ret = darray_sorted_insert(&(o->props), nvh, NULL, FALSE);
+    } else {
+      ret = darray_push(&(o->props), nvh);
+    }
+    if (ret != RET_OK) {
+      named_value_hash_destroy(nvh);
+    }
+  }
+
+  return ret;
+}
+
+static ret_t object_hash_get_prop(tk_object_t* obj, const char* name, value_t* v) {
+  ret_t ret = RET_NOT_FOUND;
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  if (tk_str_eq(name, TK_OBJECT_PROP_SIZE)) {
+    value_set_uint32(v, o->props.size);
+    return RET_OK;
+  } else if (tk_str_eq(name, TK_OBJECT_PROP_DISABLE_PATH)) {
+    value_set_bool(v, !o->enable_path);
+    return RET_OK;
+  } else if (tk_str_eq(name, TK_OBJECT_PROP_KEEP_PROPS_ORDER)) {
+    value_set_bool(v, o->keep_props_order);
+    return RET_OK;
+  }
+
+  if (o->props.size > 0 && o->enable_path) {
+    tk_object_t* sub = tk_object_get_child_object(obj, name, &name);
+    if (sub != NULL) {
+      return tk_object_get_prop(sub, name, v);
+    }
+  }
+
+  if (o->props.size > 0) {
+    const value_t* vv = object_hash_find_prop_by_name(obj, name, NULL, NULL);
+    if (vv != NULL) {
+      ret = value_copy(v, vv);
+    } else {
+      ret = RET_NOT_FOUND;
+    }
+  }
+
+  return ret;
+}
+
+static bool_t object_hash_can_exec(tk_object_t* obj, const char* name, const char* args) {
+  bool_t ret = FALSE;
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  if (o->enable_path) {
+    tk_object_t* sub = tk_object_get_child_object(obj, name, &name);
+    if (sub != NULL) {
+      return tk_object_can_exec(sub, name, args);
+    }
+  }
+
+  return ret;
+}
+
+static ret_t object_hash_exec(tk_object_t* obj, const char* name, const char* args) {
+  ret_t ret = RET_NOT_FOUND;
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  if (o->enable_path) {
+    tk_object_t* sub = tk_object_get_child_object(obj, name, &name);
+    if (sub != NULL) {
+      return tk_object_exec(sub, name, args);
+    }
+  }
+
+  return ret;
+}
+
+static ret_t object_hash_foreach_prop(tk_object_t* obj, tk_visit_t on_prop, void* ctx) {
+  ret_t ret = RET_OK;
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL && on_prop != NULL, RET_BAD_PARAMS);
+  if (o->props.size > 0) {
+    bool_t has_removed = FALSE;
+    uint32_t i = 0;
+    for (i = 0; i < o->props.size; i++) {
+      named_value_hash_t* iter = (named_value_hash_t*)(o->props.elms[i]);
+      ret = on_prop(ctx, iter);
+      TK_FOREACH_VISIT_RESULT_PROCESSING(ret, named_value_hash_destroy(iter);
+                                         o->props.elms[i] = NULL; has_removed = TRUE);
+    }
+    if (has_removed) {
+      darray_remove_all(&(o->props), pointer_compare, NULL);
+      tk_object_notify_changed(obj);
+    }
+  }
+
+  return ret;
+}
+
+static value_t* object_hash_find_prop(tk_object_t* obj, tk_compare_t cmp, const void* data) {
+  named_value_hash_t* nvh = NULL;
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL && cmp != NULL, NULL);
+  nvh = (named_value_hash_t*)darray_find_ex(&(o->props), cmp, (void*)data);
+  return nvh != NULL ? &(nvh->base.value) : NULL;
+}
+
+static tk_object_t* object_hash_clone(object_hash_t* o) {
+  uint32_t i = 0;
+  tk_object_t* dup = NULL;
+  object_hash_t* dupo = NULL;
+  return_value_if_fail(o != NULL, NULL);
+
+  dup = object_hash_create_with_opt(&(object_hash_create_opt_t){
+      .enable_path = o->enable_path,
+      .keep_prop_type = o->keep_prop_type,
+      .name_case_insensitive = o->name_case_insensitive,
+      .keep_props_order = o->keep_props_order,
+      .extra_data_size = o->extra_data_size,
+  });
+  return_value_if_fail(dup != NULL, NULL);
+
+  dupo = OBJECT_HASH(dup);
+  memcpy(dupo + 1, o + 1, dupo->extra_data_size);
+
+  for (i = 0; i < o->props.size; i++) {
+    named_value_hash_t* iter = (named_value_hash_t*)(o->props.elms[i]);
+    named_value_hash_t* nvh = named_value_hash_clone(iter);
+
+    if (darray_push(&(dupo->props), nvh) != RET_OK) {
+      named_value_hash_destroy(nvh);
+      break;
+    }
+  }
+
+  return dup;
+}
+
+static const object_vtable_t s_object_hash_vtable = {
+    .type = OBJECT_HASH_TYPE,
+    .desc = OBJECT_HASH_TYPE,
+    .size = sizeof(object_hash_t),
+    .is_collection = FALSE,
+    .on_destroy = object_hash_on_destroy,
+    .clone = (tk_object_clone_t)object_hash_clone,
+    .compare = tk_object_compare_name_without_nullptr,
+    .get_prop = object_hash_get_prop,
+    .set_prop = object_hash_set_prop,
+    .can_exec = object_hash_can_exec,
+    .exec = object_hash_exec,
+    .remove_prop = object_hash_remove_prop,
+    .foreach_prop = object_hash_foreach_prop,
+    .clear_props = object_hash_clear_props,
+    .find_prop = object_hash_find_prop,
+};
+
+tk_object_t* object_hash_create_with_opt(const object_hash_create_opt_t* opt) {
+  object_hash_create_opt_t _opt;
+  if (NULL == opt) {
+    memset(&_opt, 0x00, sizeof(_opt));
+    opt = &_opt;
+  }
+  tk_object_t* obj = tk_object_create_ex(&s_object_hash_vtable, opt->extra_data_size);
+  object_hash_t* o = OBJECT_HASH(obj);
+  ENSURE(o);
+  return_value_if_fail(obj != NULL, NULL);
+
+  o->enable_path = opt->enable_path;
+  o->keep_prop_type = opt->keep_prop_type;
+  o->name_case_insensitive = opt->name_case_insensitive;
+  o->keep_props_order = opt->keep_props_order;
+  o->extra_data_size = opt->extra_data_size;
+
+  darray_init(&(o->props), 8, (tk_destroy_t)named_value_hash_destroy,
+              (tk_compare_t)named_value_hash_compare);
+
+  return obj;
+}
+
+tk_object_t* object_hash_create_ex(bool_t enable_path) {
+  return object_hash_create_with_opt(&(object_hash_create_opt_t){.enable_path = enable_path});
+}
+
+tk_object_t* object_hash_create(void) {
+  return object_hash_create_ex(TRUE);
+}
+
+ret_t object_hash_set_keep_prop_type(tk_object_t* obj, bool_t keep_prop_type) {
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  o->keep_prop_type = keep_prop_type;
+
+  return RET_OK;
+}
+
+ret_t object_hash_set_name_case_insensitive(tk_object_t* obj, bool_t name_case_insensitive) {
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  if (o->name_case_insensitive != name_case_insensitive) {
+    uint32_t i = 0;
+
+    o->name_case_insensitive = name_case_insensitive;
+
+    for (i = 0; i < o->props.size; i++) {
+      named_value_hash_t* iter = (named_value_hash_t*)(o->props.elms[i]);
+      iter->hash = object_hash_gen_name_hash(o, iter->base.name);
+    }
+
+    if (!o->keep_props_order) {
+      darray_sort(&(o->props), NULL);
+    }
+  }
+
+  return RET_OK;
+}
+
+ret_t object_hash_set_keep_props_order(tk_object_t* obj, bool_t keep_props_order) {
+  object_hash_t* o = OBJECT_HASH(obj);
+  return_value_if_fail(o != NULL, RET_BAD_PARAMS);
+
+  if (o->keep_props_order != keep_props_order) {
+    o->keep_props_order = keep_props_order;
+
+    if (!o->keep_props_order) {
+      darray_sort(&(o->props), NULL);
+    }
+  }
+
+  return RET_OK;
+}
+
+object_hash_t* object_hash_cast(tk_object_t* obj) {
+  return_value_if_fail(obj != NULL && obj->vt == &s_object_hash_vtable, NULL);
+  return (object_hash_t*)(obj);
+}

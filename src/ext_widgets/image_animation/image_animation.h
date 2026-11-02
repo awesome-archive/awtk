@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  image_animation
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -44,7 +44,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [image_animation.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/image_animation.xml)
+ * [image_animation.xml](https://github.com/zlgopen/awtk/blob/master/design/default/ui/image_animation.xml)
  *
  * 在c代码中使用函数image\_animation\_create创建图片动画控件。如：
  *
@@ -75,7 +75,7 @@ typedef struct _image_animation_t {
   /**
    * @property {char*} sequence
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 播放的序列，字符可选值为:0-9,a-z,A-Z。
+   * 播放的序列，字符可选值为数字和英文大小写字母，字符可以重复。如：0123456789或者123123abcd。
    *
    */
   char* sequence;
@@ -91,6 +91,12 @@ typedef struct _image_animation_t {
    * 图片结束序数。
    */
   uint32_t end_index;
+  /**
+   * @property {bool_t} reverse
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否倒序播放。
+   */
+  bool_t reverse;
   /**
    * @property {bool_t} loop
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
@@ -127,14 +133,30 @@ typedef struct _image_animation_t {
    * 自动播放时延迟播放的时间(毫秒)。
    */
   uint32_t delay;
+  /**
+   * @property {bool_t} show_when_done
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 结束后是否继续显示最后一帧。
+   */
+  bool_t show_when_done;
 
   /*private*/
   bool_t inited;
+  bool_t playing;
   int32_t index;
   uint32_t timer_id;
-  void* image_data;
-  char image_name[TK_NAME_LEN + 1];
+  void* image_buffer;
 } image_animation_t;
+
+/**
+ * @event {event_t} EVT_ANIM_ONCE
+ * 使能循环播放时，控件动画完成一次事件。
+ */
+
+/**
+ * @event {event_t} EVT_ANIM_END
+ * 控件动画完成事件。
+ */
 
 /**
  * @method image_animation_create
@@ -174,7 +196,7 @@ ret_t image_animation_set_image(widget_t* widget, const char* image);
 
 /**
  * @method image_animation_set_interval
- * 设置播放间隔时间。
+ * 设置播放间隔时间(毫秒)。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget image_animation对象。
  * @param {uint32_t} interval 间隔时间(毫秒)。
@@ -246,7 +268,7 @@ ret_t image_animation_play(widget_t* widget);
 
 /**
  * @method image_animation_stop
- * 停止(并重置index为0)。
+ * 停止(并重置index为-1)。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget image_animation对象。
  *
@@ -263,6 +285,16 @@ ret_t image_animation_stop(widget_t* widget);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t image_animation_pause(widget_t* widget);
+
+/**
+ * @method image_animation_next
+ * 手动切换到下一张图片。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget image_animation对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_animation_next(widget_t* widget);
 
 /**
  * @method image_animation_set_format
@@ -295,6 +327,28 @@ ret_t image_animation_set_format(widget_t* widget, const char* format);
 ret_t image_animation_set_unload_after_paint(widget_t* widget, bool_t unload_after_paint);
 
 /**
+ * @method image_animation_set_reverse
+ * 设置是否倒序播放。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget image_animation对象。
+ * @param {bool_t} reverse 是否倒序播放。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_animation_set_reverse(widget_t* widget, bool_t reverse);
+
+/**
+ * @method image_animation_set_show_when_done
+ * 设置结束播放后是否保持显示最后一帧。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget image_animation对象。
+ * @param {bool_t} show_when_done 是否继续显示最后一帧。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_animation_set_show_when_done(widget_t* widget, bool_t show_when_done);
+
+/**
  * @method image_animation_cast
  * 转换为image_animation对象(供脚本语言使用)。
  * @annotation ["cast", "scriptable"]
@@ -304,12 +358,24 @@ ret_t image_animation_set_unload_after_paint(widget_t* widget, bool_t unload_aft
  */
 widget_t* image_animation_cast(widget_t* widget);
 
+/**
+ * @method image_animation_is_playing
+ * 判断是否在播放。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget image_animation对象。
+ *
+ * @return {bool_t} 返回TRUE表示是，否则表示否。
+ */
+bool_t image_animation_is_playing(widget_t* widget);
+
 #define IMAGE_ANIMATION_PROP_LOOP "loop"
+#define IMAGE_ANIMATION_PROP_REVERSE "reverse"
 #define IMAGE_ANIMATION_PROP_SEQUENCE "sequence"
 #define IMAGE_ANIMATION_PROP_START_INDEX "start_index"
 #define IMAGE_ANIMATION_PROP_END_INDEX "end_index"
 #define IMAGE_ANIMATION_PROP_INTERVAL "interval"
 #define IMAGE_ANIMATION_PROP_AUTO_PLAY "auto_play"
+#define IMAGE_ANIMATION_PROP_SHOW_WHEN_DENO "show_when_done"
 #define IMAGE_ANIMATION_PROP_UNLOAD_AFTER_PAINT "unload_after_paint"
 
 #define WIDGET_TYPE_IMAGE_ANIMATION "image_animation"

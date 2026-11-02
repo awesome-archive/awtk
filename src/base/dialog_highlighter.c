@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  dialog_highlighter
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied highlighterrranty of
@@ -21,6 +21,15 @@
 
 #include "base/dialog_highlighter.h"
 
+ret_t dialog_highlighter_clear_image(dialog_highlighter_t* h) {
+  if (h->img.buffer != NULL) {
+    bitmap_destroy(&(h->img));
+    memset(&(h->img), 0x00, sizeof(h->img));
+  }
+
+  return RET_OK;
+}
+
 dialog_highlighter_t* dialog_highlighter_create(const dialog_highlighter_vtable_t* vt) {
   dialog_highlighter_t* h = NULL;
   return_value_if_fail(vt != NULL && vt->size >= sizeof(dialog_highlighter_t), NULL);
@@ -35,36 +44,118 @@ dialog_highlighter_t* dialog_highlighter_create(const dialog_highlighter_vtable_
   return h;
 }
 
-ret_t dialog_highlighter_prepare(dialog_highlighter_t* h, canvas_t* c) {
+ret_t dialog_highlighter_prepare_ex(dialog_highlighter_t* h, canvas_t* c,
+                                    canvas_t* canvas_offline) {
   return_value_if_fail(h != NULL && h->vt != NULL && c != NULL, RET_BAD_PARAMS);
 
   h->canvas = c;
   if (h->vt->prepare != NULL) {
-    return h->vt->prepare(h, c);
+    return h->vt->prepare(h, canvas_offline);
   }
 
   return RET_NOT_IMPL;
 }
 
-ret_t dialog_highlighter_set_bg(dialog_highlighter_t* h, bitmap_t* img, framebuffer_object_t* fbo) {
+ret_t dialog_highlighter_prepare(dialog_highlighter_t* h, canvas_t* c) {
+  return dialog_highlighter_prepare_ex(h, c, c);
+}
+
+ret_t dialog_highlighter_set_bg(dialog_highlighter_t* h, bitmap_t* img) {
   return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
+
+  dialog_highlighter_clear_image(h);
 
   if (img != NULL) {
     h->img = *img;
   }
 
-  if (fbo != NULL) {
-    h->fbo = *fbo;
+  return RET_OK;
+}
+
+ret_t dialog_highlighter_set_win(dialog_highlighter_t* h, widget_t* win) {
+  return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
+
+  h->win = win;
+
+  return RET_OK;
+}
+
+ret_t dialog_highlighter_set_bg_clip_rect(dialog_highlighter_t* h, rect_t* clip_rect) {
+  return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
+
+  h->clip_rect = rect_init(clip_rect->x, clip_rect->y, clip_rect->w, clip_rect->h);
+  if (h->vt->set_bg_clip_rect != NULL) {
+    return h->vt->set_bg_clip_rect(h, clip_rect);
   }
 
   return RET_OK;
 }
 
-ret_t dialog_highlighter_draw(dialog_highlighter_t* h, float_t percent) {
+ret_t dialog_highlighter_system_bar_top_append_clip_rect(dialog_highlighter_t* h, rect_t* rect) {
+  return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
+
+  if (h->vt->system_bar_top_append_clip_rect != NULL) {
+    return h->vt->system_bar_top_append_clip_rect(h, rect);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+ret_t dialog_highlighter_system_bar_bottom_append_clip_rect(dialog_highlighter_t* h, rect_t* rect) {
+  return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
+
+  if (h->vt->system_bar_bottom_append_clip_rect != NULL) {
+    return h->vt->system_bar_bottom_append_clip_rect(h, rect);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+ret_t dialog_highlighter_set_system_bar_alpha(dialog_highlighter_t* h, uint8_t alpha) {
+  return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
+
+  if (h->vt->set_system_bar_alpha != NULL) {
+    return h->vt->set_system_bar_alpha(h, alpha);
+  }
+
+  return RET_NOT_IMPL;
+}
+
+uint8_t dialog_highlighter_get_alpha(dialog_highlighter_t* h, float_t percent) {
+  return_value_if_fail(h != NULL && h->vt != NULL, 0x0);
+
+  if (h->vt->get_alpha != NULL) {
+    return h->vt->get_alpha(h, percent);
+  }
+
+  return 0x0;
+}
+
+ret_t dialog_highlighter_draw_ex(dialog_highlighter_t* h, float_t percent, canvas_t* c) {
+  ret_t ret = RET_NOT_IMPL;
+  canvas_t* orig_canvas = NULL;
   return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
 
   if (h->vt->draw != NULL) {
-    return h->vt->draw(h, percent);
+    orig_canvas = h->canvas;
+    h->canvas = c;
+    ret = h->vt->draw(h, percent);
+    h->canvas = orig_canvas;
+  }
+
+  return ret;
+}
+
+ret_t dialog_highlighter_draw(dialog_highlighter_t* h, float_t percent) {
+  return_value_if_fail(h != NULL, RET_BAD_PARAMS);
+  return dialog_highlighter_draw_ex(h, percent, h->canvas);
+}
+
+ret_t dialog_highlighter_draw_mask(dialog_highlighter_t* h, canvas_t* c, float_t percent) {
+  return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
+
+  if (h->vt->draw_mask != NULL) {
+    return h->vt->draw_mask(h, c, percent);
   }
 
   return RET_NOT_IMPL;
@@ -89,18 +180,11 @@ static ret_t dialog_highlighter_on_destroy(dialog_highlighter_t* h) {
 }
 
 ret_t dialog_highlighter_destroy(dialog_highlighter_t* h) {
-  vgcanvas_t* vg = NULL;
   return_value_if_fail(h != NULL && h->vt != NULL, RET_BAD_PARAMS);
 
   emitter_dispatch_simple_event(EMITTER(h), EVT_DESTROY);
   dialog_highlighter_on_destroy(h);
-
-  if (h->fbo.handle) {
-    vg = canvas_get_vgcanvas(h->canvas);
-    vgcanvas_destroy_fbo(vg, &(h->fbo));
-  } else {
-    bitmap_destroy(&(h->img));
-  }
+  dialog_highlighter_clear_image(h);
 
   emitter_deinit(EMITTER(h));
   memset(h, 0x00, h->vt->size);

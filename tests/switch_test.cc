@@ -37,7 +37,7 @@ TEST(Switch, clone) {
 
   value_set_int(&v1, 200);
   ASSERT_EQ(widget_set_prop(w1, WIDGET_PROP_REPEAT, &v1), RET_OK);
-  widget_set_self_layout_params(w1, "1", "2", "3", "4");
+  widget_set_self_layout(w1, "default(x=1,y=2,w=3,h=4)");
   widget_set_children_layout(w1, "default(r=0, c=0, x=10, y=10, s=10)");
   ASSERT_EQ(switch_cast(w1), w1);
 
@@ -71,6 +71,36 @@ TEST(Switch, cast) {
   widget_t* w = switch_create(NULL, 0, 0, 100, 100);
 
   ASSERT_EQ(w, switch_cast(w));
+
+  widget_destroy(w);
+}
+
+TEST(Switch, change_value) {
+  widget_t* w = switch_create(NULL, 0, 0, 100, 100);
+  value_change_event_t evt;
+  memset(&evt, 0x00, sizeof(evt));
+
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_VALUE, FALSE), RET_OK);
+  widget_on(w, EVT_VALUE_WILL_CHANGE, on_value_will_changed_accept, NULL);
+  widget_on(w, EVT_VALUE_CHANGED, on_value_changed, &evt);
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_VALUE, TRUE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_VALUE, FALSE), TRUE);
+
+  ASSERT_EQ(value_bool(&(evt.old_value)), FALSE);
+  ASSERT_EQ(value_bool(&(evt.new_value)), TRUE);
+
+  widget_destroy(w);
+}
+
+TEST(Switch, change_value_abort) {
+  widget_t* w = switch_create(NULL, 0, 0, 100, 100);
+  value_change_event_t evt;
+  memset(&evt, 0x00, sizeof(evt));
+
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_VALUE, FALSE), RET_OK);
+  widget_on(w, EVT_VALUE_WILL_CHANGE, on_value_will_changed_abort, NULL);
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_VALUE, TRUE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_VALUE, TRUE), FALSE);
 
   widget_destroy(w);
 }

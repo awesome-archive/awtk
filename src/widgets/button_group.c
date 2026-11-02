@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  button_group
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -28,7 +28,7 @@ static ret_t button_group_on_paint_self(widget_t* widget, canvas_t* c) {
 
 TK_DECL_VTABLE(button_group) = {.size = sizeof(button_group_t),
                                 .type = WIDGET_TYPE_BUTTON_GROUP,
-                                .parent = TK_PARENT_VTABLE(widget),
+                                .get_parent_vt = TK_GET_PARENT_VTABLE(widget),
                                 .create = button_group_create,
                                 .on_paint_self = button_group_on_paint_self};
 

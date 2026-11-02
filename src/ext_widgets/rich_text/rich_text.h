@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  rich_text
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,6 +23,8 @@
 #define TK_RICH_TEXT_H
 
 #include "base/widget.h"
+#include "base/velocity.h"
+#include "base/widget_animator.h"
 #include "rich_text/rich_text_render_node.h"
 
 BEGIN_C_DECLS
@@ -44,7 +46,7 @@ BEGIN_C_DECLS
  * >
  *
  * > 更多用法请参考：
- * [rich_text.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/rich_text.xml)
+ * [rich_text.xml](https://github.com/zlgopen/awtk/blob/master/design/default/ui/rich_text.xml)
  *
  * 在c代码中使用函数rich\_text\_create创建图文混排控件。如：
  *
@@ -85,15 +87,57 @@ typedef struct _rich_text_t {
   widget_t widget;
 
   /**
-   * @property {int32_t} line_gap
+   * @property {uint32_t} line_gap
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 行间距。
    */
-  int32_t line_gap;
+  uint32_t line_gap;
+
+  /**
+   * @property {int32_t} yoffset
+   * @annotation ["set_prop","get_prop","readable"]
+   * y偏移。
+   */
+  int32_t yoffset;
+
+  /**
+   * @property {bool_t} yslidable
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 标识控件是否允许上下拖动。(需满足文字的高度大于控件的高度)
+   */
+  bool_t yslidable;
+
+  /**
+   * @property {bool_t} need_reset
+   * @annotation ["readable"]
+   * 标识控件是否需要重新绘图。
+   */
+  bool_t need_reset;
+
+  /**
+   * @property {bool_t} word_wrap
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否只允许在单词之间自动换行(默认TRUE)。
+   */
+  bool_t word_wrap;
 
   /*private*/
+  bool_t pressed;
+  int32_t ydown;
+  int32_t yoffset_end;
+  uint32_t content_h;
   rich_text_node_t* node;
+  widget_animator_t* wa;
+  velocity_t velocity;
+  int32_t yoffset_save;
   rich_text_render_node_t* render_node;
+
+  int32_t margin;
+  int32_t attribute_margin;
+  color_t default_color;
+  align_v_t default_align_v;
+  uint16_t default_font_size;
+  const char* default_font_name;
 } rich_text_t;
 
 /**
@@ -115,11 +159,33 @@ widget_t* rich_text_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
  * 设置文本。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {char*}  text 文本。
+ * @param {const char*}  text 文本。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t rich_text_set_text(widget_t* widget, const char* text);
+
+/**
+ * @method rich_text_set_yslidable
+ * 设置是否允许y方向滑动。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t} yslidable 是否允许滑动。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rich_text_set_yslidable(widget_t* widget, bool_t yslidable);
+
+/**
+ * @method rich_text_set_word_wrap
+ * 设置是否只允许在单词之间自动换行。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  word_wrap 是否只允许在单词之间自动换行。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rich_text_set_word_wrap(widget_t* widget, bool_t word_wrap);
 
 /**
  * @method rich_text_cast

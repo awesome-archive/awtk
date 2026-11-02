@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  scroll_bar
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,6 +24,7 @@
 
 #include "base/widget.h"
 #include "base/widget_animator.h"
+#include "base/shortcut.h"
 
 BEGIN_C_DECLS
 
@@ -32,8 +33,6 @@ BEGIN_C_DECLS
  * @parent widget_t
  * @annotation ["scriptable","design","widget"]
  * 滚动条控件。
- *
- *> 目前只支持垂直滚动。
  *
  * scroll\_bar\_t是[widget\_t](widget_t.md)的子类控件，widget\_t的函数均适用于scroll\_bar\_t控件。
  *
@@ -49,7 +48,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[list\_view\_m.xml](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/list_view_m.xml)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/ui/list_view_m.xml)
  *
  * 在c代码中使用函数scroll\_bar\_create创建列表项控件。如：
  *
@@ -66,7 +65,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[theme default](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L350)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L350)
  *
  */
 typedef struct _scroll_bar_t {
@@ -79,7 +78,7 @@ typedef struct _scroll_bar_t {
   int32_t virtual_size;
   /**
    * @property {int32_t} value
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable","inputable"]
    * 当前的值。
    */
   int32_t value;
@@ -90,17 +89,69 @@ typedef struct _scroll_bar_t {
    */
   int32_t row;
   /**
+   * @property {uint32_t} animator_time
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 翻页滚动动画时间(毫秒)。
+   */
+  uint32_t animator_time;
+  /**
+   * @property {uint32_t} scroll_delta
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 每次鼠标滚动值。（缺省值为0，0 则使用鼠标滚动默认值）
+   */
+  uint32_t scroll_delta;
+  /**
+   * @property {uint8_t} scroll_rows
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 每次鼠标滚动行数。（与 scroll_delta 互斥，缺省值为0，0 则使用 scroll_delta）
+   */
+  uint8_t scroll_rows;
+  /**
    * @property {bool_t} animatable
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 滚动时是否启用动画。
    */
   bool_t animatable;
+  /**
+   * @property {bool_t} auto_hide
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否自动隐藏(仅对mobile风格的滚动条有效)。
+   */
+  bool_t auto_hide;
+  /**
+   * @property {bool_t} wheel_scroll
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 设置鼠标滚轮是否滚动。
+   */
+  bool_t wheel_scroll;
+
+  /**
+   * @property {char*} wheel_modifier_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 滚轮辅助键(仅对desktop风格的滚动条有效)（垂直滚动条缺省值为空，水平滚动条缺省值为shift）。
+   */
+  char wheel_modifier_key[32];
 
   /*private*/
+  bool_t user_wheel_modifier_key;
+  shortcut_t data_wheel_modifier_key;
+
   widget_t* dragger;
   widget_animator_t* wa_value;
-  widget_animator_t* wa_opactiy;
+  widget_animator_t* wa_opacity;
+
+  uint32_t wheel_before_id;
 } scroll_bar_t;
+
+/**
+ * @event {value_change_event_t} EVT_VALUE_WILL_CHANGE
+ * 值(滚动值)即将改变事件。
+ */
+
+/**
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
+ * 值(滚动值)改变事件。
+ */
 
 /**
  * @method scroll_bar_create
@@ -175,7 +226,7 @@ ret_t scroll_bar_set_params(widget_t* widget, int32_t virtual_size, int32_t row)
  * @annotation ["scriptable"]
  * @param {widget_t*} widget scroll_bar控件。
  * @param {int32_t} value 值。
- * @param {int32_t} duration 动画持续时间。
+ * @param {int32_t} duration 动画持续时间(毫秒)。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -206,7 +257,6 @@ ret_t scroll_bar_add_delta(widget_t* widget, int32_t delta);
 /**
  * @method scroll_bar_scroll_delta
  * 在当前的值上增加一个值，并滚动到新的值，并触发EVT_VALUE_CHANGED事件。
- * @annotation ["scriptable"]
  * @param {widget_t*} widget scroll_bar控件。
  * @param {int32_t} delta 值。
  *
@@ -226,6 +276,20 @@ ret_t scroll_bar_scroll_delta(widget_t* widget, int32_t delta);
 ret_t scroll_bar_set_value_only(widget_t* widget, int32_t value);
 
 /**
+ * @method scroll_bar_set_auto_hide
+ * 设置auto_hide属性。
+ *
+ *>仅对mobile风格的滚动条有效
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget scroll_bar控件。
+ * @param {bool_t} auto_hide 值。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t scroll_bar_set_auto_hide(widget_t* widget, bool_t auto_hide);
+
+/**
  * @method scroll_bar_is_mobile
  * 判断是否是mobile风格的滚动条。
  * @annotation ["scriptable"]
@@ -235,10 +299,94 @@ ret_t scroll_bar_set_value_only(widget_t* widget, int32_t value);
  */
 bool_t scroll_bar_is_mobile(widget_t* widget);
 
+/**
+ * @method scroll_bar_set_animator_time
+ * 设置翻页滚动动画时间(毫秒)。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget scroll_bar控件。
+ * @param {uint32_t} animator_time 时间(毫秒)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t scroll_bar_set_animator_time(widget_t* widget, uint32_t animator_time);
+
+/**
+ * @method scroll_bar_hide_by_opacity_animation
+ * 通过动画隐藏滚动条。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget scroll_bar控件。
+ * @param {int32_t} duration 动画持续时间(毫秒)。
+ * @param {int32_t} delay 动画执行时间(毫秒)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t scroll_bar_hide_by_opacity_animation(widget_t* widget, int32_t duration, int32_t delay);
+
+/**
+ * @method scroll_bar_show_by_opacity_animation
+ * 通过动画显示滚动条。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget scroll_bar控件。
+ * @param {int32_t} duration 动画持续时间(毫秒)。
+ * @param {int32_t} delay 动画执行时间(毫秒)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t scroll_bar_show_by_opacity_animation(widget_t* widget, int32_t duration, int32_t delay);
+
+/**
+ * @method scroll_bar_set_wheel_scroll
+ * 设置鼠标滚轮是否滚动(仅对desktop风格的滚动条有效)。
+ * 
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget scroll_bar控件。
+ * @param {bool_t} scroll 是否设置该功能。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t scroll_bar_set_wheel_scroll(widget_t* widget, bool_t scroll);
+
+/**
+ * @method scroll_bar_set_scroll_delta
+ * 设置鼠标滚轮幅度(仅对desktop风格的滚动条有效)。
+ * 
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget scroll_bar控件。
+ * @param {uint32_t} scroll_delta 滚动幅度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t scroll_bar_set_scroll_delta(widget_t* widget, uint32_t scroll_delta);
+
+/**
+ * @method scroll_bar_set_scroll_rows
+ * 设置每次鼠标滚动行数(仅对desktop风格的滚动条有效)。
+ * 
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget scroll_bar控件。
+ * @param {uint8_t} scroll_rows 每次鼠标滚动行数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t scroll_bar_set_scroll_rows(widget_t* widget, uint8_t scroll_rows);
+
+/* private */
+
+#define SCROLL_BAR_PROP_IS_MOBILE "is_mobile"
+#define SCROLL_BAR_PROP_IS_HORIZON "is_horizon"
+#define SCROLL_BAR_PROP_ANIMATOR_TIME "animator_time"
+#define SCROLL_BAR_PROP_WHEEL_SCROLL "wheel_scroll"
+#define SCROLL_BAR_PROP_SCROLL_DELTA "scroll_delta"
+#define SCROLL_BAR_PROP_SCROLL_ROWS "scroll_rows"
+#define SCROLL_BAR_PROP_WHEEL_MODIFIER_KEY "wheel_modifier_key"
 #define SCROLL_BAR(widget) ((scroll_bar_t*)(scroll_bar_cast(WIDGET(widget))))
 
 /*public for subclass and runtime type check*/
-TK_EXTERN_VTABLE(scroll_bar);
+TK_EXTERN_VTABLE(scroll_bar_mobile);
+TK_EXTERN_VTABLE(scroll_bar_desktop);
 
 END_C_DECLS
 

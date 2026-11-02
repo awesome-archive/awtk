@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  func_call_parser
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is difunc_call_parseributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -27,7 +27,7 @@ func_call_parser_t* func_call_parser_init(func_call_parser_t* parser, const char
                                           uint32_t size) {
   return_value_if_fail(parser != NULL && str != NULL, NULL);
 
-  tokenizer_init(&(parser->tokenizer), str, size, "(=,) ");
+  tokenizer_init(&(parser->tokenizer), str, size, "(=,)\r\n\t ");
 
   return parser;
 }
@@ -48,10 +48,13 @@ ret_t func_call_parser_parse(func_call_parser_t* parser) {
 
   while (tokenizer_has_more(tokenizer)) {
     token = tokenizer_next(tokenizer);
+    if (token == NULL) {
+      break;
+    }
     tk_strncpy(name, token, TK_NAME_LEN);
 
-    ENSURE(tokenizer_has_more(tokenizer));
-    token = tokenizer_next(tokenizer);
+    return_value_if_fail(tokenizer_has_more(tokenizer), RET_BAD_PARAMS);
+    token = tokenizer_next_str(tokenizer);
 
     if (parser->on_param != NULL) {
       parser->on_param(parser, name, token);
@@ -77,24 +80,24 @@ ret_t func_call_parser_deinit(func_call_parser_t* parser) {
 typedef struct _object_parser_t {
   func_call_parser_t base;
 
-  object_t* obj;
+  tk_object_t* obj;
 } object_parser_t;
 
 static ret_t parser_on_param(func_call_parser_t* parser, const char* name, const char* value) {
   object_parser_t* p = (object_parser_t*)parser;
 
-  return object_set_prop_str(p->obj, name, value);
+  return tk_object_set_prop_str(p->obj, name, value);
 }
 
 static ret_t parser_on_name(func_call_parser_t* parser, const char* func_name) {
   object_parser_t* p = (object_parser_t*)parser;
 
-  return object_set_name(p->obj, func_name);
+  return tk_object_set_name(p->obj, func_name);
 }
 
-object_t* func_call_parse(const char* str, uint32_t size) {
+tk_object_t* func_call_parse(const char* str, uint32_t size) {
   object_parser_t parser;
-  return_value_if_fail(str != NULL, NULL);
+  return_value_if_fail(str != NULL && size > 0, NULL);
 
   memset(&parser, 0x00, sizeof(parser));
   func_call_parser_init(&(parser.base), str, size);

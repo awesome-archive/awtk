@@ -4,7 +4,7 @@
  * Author: AWTK Develop Team
  * Brief:  config
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -30,7 +30,7 @@
  */
 
 /**
- * 如果需要支持预先解码的图片，请定义本宏。一般只在RAM极小时，才启用本宏。
+ * 如果需要支持预先解码的位图字体，请定义本宏。一般只在RAM极小时，才启用本宏。
  * #define WITH_BITMAP_FONT 1
  */
 
@@ -59,6 +59,13 @@
  */
 
 /**
+ * 如果代码在flash中，而资源在文件系统，请定义本宏指明资源所在的路径。
+ * 
+ * #define APP_RES_ROOT "0://awtk/"
+ * 
+ */
+
+/**
  * 如果定义本宏，使用标准的UNICODE换行算法，除非资源极为有限，请定义本宏。
  *
  * #define WITH_UNICODE_BREAK 1
@@ -66,26 +73,31 @@
 
 /**
  * 如果定义本宏，将图片解码成BGRA8888格式，否则解码成RGBA8888的格式。
+ * 当硬件的2D加速需要BGRA格式时，请启用本宏。
  *
  * #define WITH_BITMAP_BGRA 1
  */
 
 /**
  * 如果定义本宏，将不透明的PNG图片解码成BGR565格式，建议定义。
+ * 另外和LCD的格式保存一致，可以大幅度提高性能。
+ * 如果没有定义 WITH_BITMAP_BGR565 和 WITH_BITMAP_RGB565 宏，默认解析为32位色
  *
  * #define WITH_BITMAP_BGR565 1
+ */
+
+/**
+ * 如果定义本宏，将不透明的PNG图片解码成RGB565格式，建议定义。
+ * 另外和LCD的格式保存一致，可以大幅度提高性能。
+ * 如果没有定义 WITH_BITMAP_BGR565 和 WITH_BITMAP_RGB565 宏，默认解析为32位色
+ *
+ * #define WITH_BITMAP_RGB565 1
  */
 
 /**
  * 如果不需输入法，请定义本宏
  *
  * #define WITH_NULL_IM 1
- */
-
-/**
- * 如果支持极速模式，请定义本宏。极速模式不支持控件透明半透明效果，只有在CPU配置极低时启用。
- *
- * #define USE_FAST_MODE 1
  */
 
 /**
@@ -137,31 +149,164 @@
  */
 
 /**
- * 在没有GPU时，如果启用agg作为nanovg的后端(较agge作为后端：大，慢，图形质量好)，请定义本宏。
- * 注意：agg是以GPL协议开源。
- *
- * #define WITH_NANOVG_AGG 1
- */
-
-/**
- * 如果启用内存泄露检查(内存小余1M慎用)，请定义本宏。
- * 可以重新定义MEM_MAX_RECORDS限制最大记录数量。
- *
- * #define ENABLE_MEM_LEAK_CHECK 1
- * #define MEM_MAX_RECORDS 4 * 1024
- */
-
-/**
  * 如果启用鼠标指针，请定义本宏
  *
  * #define ENABLE_CURSOR 1
  */
 
 /**
- * 如果启用控件缓存，请定义本宏
- * 缓存内存占用约：200 * WITH_WIDGET_POOL
+ * 对于低端平台，如果不使用控件动画，请定义本宏。
  *
- * #define WITH_WIDGET_POOL 1000
+ * #define WITHOUT_WIDGET_ANIMATORS 1
  */
 
+/**
+ * 对于低端平台，如果不使用窗口动画，请定义本宏。
+ *
+ * #define WITHOUT_WINDOW_ANIMATORS 1
+ */
+
+/**
+ * 对于低端平台，如果不使用对话框高亮策略，请定义本宏。
+ *
+ * #define WITHOUT_DIALOG_HIGHLIGHTER 1
+ */
+
+/**
+ * 对于低端平台，如果不使用扩展控件，请定义本宏。
+ *
+ * #define WITHOUT_EXT_WIDGETS 1
+ */
+
+/**
+ * 对于低端平台，如果内存不足以提供完整的FrameBuffer，请定义本宏启用局部FrameBuffer，可大幅度提高渲染性能。(单位是像素个数)
+ *
+ * #define FRAGMENT_FRAME_BUFFER_SIZE 32 * 1024
+ */
+
+/**
+ * 启用输入法，但不想启用联想功能，请定义本宏。
+ *
+ * #define WITHOUT_SUGGEST_WORDS 1
+ */
+
+/**
+ * 如果需要从zip文件中加载资源，请定义本宏。
+ *
+ * #define WITH_ASSET_LOADER_ZIP 1
+ */
+
+/**
+ * 对于只有512K flash的平台，而且LCD格式是BGR565。如果希望进一步优化空间，去掉多余的bitmap格式支持代码。请定义本宏。
+ * 其它LCD格式，可以自行修改：src/blend/soft_g2d.c 保留需要的格式即可。
+ *
+ * #define LCD_BGR565_LITE 1
+ */
+
+/**
+ * 如果希望支持文字双向排版算法(如阿拉伯语言)，请定义本宏。
+ * 
+ * #define WITH_TEXT_BIDI 1
+ * 
+ */
+
+/**
+ * 开启自定义的离线 canvas，如果板子使用特殊的画布的话，需要定义该宏来定义特殊离线 canvas 函数
+ * 
+ * #define WITH_CANVAS_OFFLINE_CUSTOM 1
+ */
+
+/**
+ * 开启透明色背景的刷新机制，一般使用在多图层的透明背景使用
+ * 
+ * #define WITH_LCD_CLEAR_ALPHA 1
+ */
+
+/**
+ * 如果支持多块不连续的内存块，请定义内存块的数目。
+ * 
+ * #define TK_MAX_MEM_BLOCK_NR 4
+ */
+
+/**
+ * 用于控制窗口动画是否使用缓存。开启后可以降低内存需求(减少2倍framebuffer大小的内存)，如果内存紧缺，在下面情况可以开启：
+ *  1. 界面简单
+ *  2. CPU速度快
+ *
+ * 如果绘制速度慢，而且内存紧缺，建议关闭窗口动画。
+ *
+ * 限制条件：
+ *  1.不支持缩放窗口动画。
+ *  2.不支持对话框高亮策略。
+ * 
+ * #define WITHOUT_WINDOW_ANIMATOR_CACHE 1
+ */
+
+/**
+ * 如果需要配置文件或者使用data_reader/data_writer，请定义本宏。
+ *
+ * #define WITH_DATA_READER_WRITER 1
+ */
+
+/**
+ * 对于低端平台，如果不使用 fscript 模块，请定义本宏。
+ *
+ * #define WITHOUT_FSCRIPT 1
+ */
+
+/**
+ * 对于极简键盘(3keys/5keys)，如果希望激活状态呈现不同的外观效果，请定义本宏。 
+ *
+ * #define WITH_STATE_ACTIVATED 1
+ */
+
+/**
+ * 开启高效的 lcd 旋转功能模块（几乎无损的屏幕旋转效果）
+ * 注意：
+ * 1，需要重新编译资源，把相关图片预先处理旋转后的位图数据。(如果需要实现运行时动态改变旋转的话，图片资源的只能为未旋转)
+ * 2，lcd 适配层需要支持。
+ * 3，vg 的适配层需要支持。
+ * 4，g2d 的适配层获取位图真实的数据需要通过 bitmap_get_physical_XXXX 函数来获取。
+ * 5，需要用户在程序开始之前调用 tk_enable_fast_lcd_portrait 函数开启该功能。
+ *
+ * #define WITH_FAST_LCD_PORTRAIT 1
+ */
+
+/**
+ * 是否启用 data_reader/data_writer。如果要使用ini/json/xml/ubjson等配置文件时，必须启用
+ *
+ * #define WITH_DATA_READER_WRITER 1
+ */
+
+/**
+ * OS 对应平台有自己的内存管理函数，但是不是标准的malloc/free，请定义本宏，并自己实现tk_alloc/tk_free系列函数。
+ *
+ * #define WITH_OS_MEM 1
+ */
+
+/**
+ * 是否启用默认输入法。
+ * #define WITH_DEFAULT_IM 1
+ */
+
+/**
+ * 是否禁用输入法引擎。
+ * #define WITH_IME_NULL 1
+ */
+
+/**
+ * 是否启用T9输入法。
+ * #define WITH_IME_T9 1
+ */
+
+/**
+ * 是否启用T9EXT输入法。
+ * #define WITH_IME_T9EXT 1
+ */
+
+/**
+ * 启用输入法，但不想启用联想功能，请定义本宏。
+ *
+ * #define WITHOUT_SUGGEST_WORDS 1
+ */
 #endif /*AWTK_CONFIG_H*/

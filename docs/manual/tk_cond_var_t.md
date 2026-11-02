@@ -1,7 +1,6 @@
 ## tk\_cond\_var\_t
 ### 概述
- 简化版的条件变量。
-
+简化版的条件变量。
 ----------------------------------
 ### 函数
 <p id="tk_cond_var_t_methods">
@@ -17,9 +16,7 @@
 
 * 函数功能：
 
-> <p id="tk_cond_var_t_tk_cond_var_awake"> 唤醒。
-
-
+> <p id="tk_cond_var_t_tk_cond_var_awake">唤醒。
 
 * 函数原型：
 
@@ -38,9 +35,7 @@ ret_t tk_cond_var_awake (tk_cond_var_t* cond_var);
 
 * 函数功能：
 
-> <p id="tk_cond_var_t_tk_cond_var_create"> 创建cond_var。
-
-
+> <p id="tk_cond_var_t_tk_cond_var_create">创建cond_var。
 
 * 函数原型：
 
@@ -58,9 +53,7 @@ tk_cond_var_t* tk_cond_var_create ();
 
 * 函数功能：
 
-> <p id="tk_cond_var_t_tk_cond_var_destroy"> 销毁cond_var对象。
-
-
+> <p id="tk_cond_var_t_tk_cond_var_destroy">销毁cond_var对象。
 
 * 函数原型：
 
@@ -79,14 +72,12 @@ ret_t tk_cond_var_destroy (tk_cond_var_t* cond_var);
 
 * 函数功能：
 
-> <p id="tk_cond_var_t_tk_cond_var_wait"> 等待。
-
-
+> <p id="tk_cond_var_t_tk_cond_var_wait">等待。
 
 * 函数原型：
 
 ```
-ret_t tk_cond_var_wait (tk_cond_var_t* cond_var, uint32_t* timeout_ms);
+ret_t tk_cond_var_wait (tk_cond_var_t* cond_var, uint32_t timeout);
 ```
 
 * 参数说明：
@@ -95,4 +86,4 @@ ret_t tk_cond_var_wait (tk_cond_var_t* cond_var, uint32_t* timeout_ms);
 | -------- | ----- | --------- |
 | 返回值 | ret\_t | 返回RET\_OK表示成功，否则表示失败。 |
 | cond\_var | tk\_cond\_var\_t* | cond\_var对象。 |
-| timeout\_ms | uint32\_t* | 最长等待时间。 |
+| timeout | uint32\_t | 最长等待时间(毫秒)。 |

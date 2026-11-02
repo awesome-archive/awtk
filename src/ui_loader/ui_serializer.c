@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   ui_serializer.c
  * Author: AWTK Develop Team
  * Brief:  ui_serializer
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,6 +22,7 @@
 #include "tkc/mem.h"
 #include "tkc/utf8.h"
 #include "tkc/utils.h"
+#include "base/widget_vtable.h"
 #include "ui_loader/ui_serializer.h"
 
 ret_t ui_widget_serialize_prop(ui_builder_t* writer, const char* name, value_t* value) {
@@ -53,7 +54,7 @@ ret_t ui_widget_serialize_prop(ui_builder_t* writer, const char* name, value_t* 
 }
 
 static ret_t ui_widget_serialize_props(ui_builder_t* writer, widget_t* widget,
-                                       const char** properties) {
+                                       const char* const* properties) {
   value_t v;
   value_t defv;
   uint32_t i = 0;
@@ -100,10 +101,11 @@ ret_t ui_widget_serialize(ui_builder_t* writer, widget_t* widget) {
   ui_builder_on_widget_start(writer, &desc);
 
   ui_widget_serialize_props(writer, widget, widget_get_persistent_props());
-  if (widget->vt->clone_properties || widget->vt->persistent_properties) {
-    const char** properties = widget->vt->persistent_properties;
+  if (widget_vtable_get_clone_properties(widget->vt) ||
+      widget_vtable_get_persistent_properties(widget->vt)) {
+    const char* const* properties = widget_vtable_get_persistent_properties(widget->vt);
     if (properties == NULL) {
-      properties = widget->vt->clone_properties;
+      properties = widget_vtable_get_clone_properties(widget->vt);
     }
     ui_widget_serialize_props(writer, widget, properties);
   }
@@ -120,6 +122,7 @@ ret_t ui_widget_serialize(ui_builder_t* writer, widget_t* widget) {
 ret_t widget_to_xml(widget_t* widget, str_t* str) {
   ui_xml_writer_t ui_xml_writer;
   return_value_if_fail(widget != NULL && str != NULL, RET_BAD_PARAMS);
+  str_set(str, "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\r\n");
 
   return ui_widget_serialize(ui_xml_writer_init(&ui_xml_writer, str), widget);
 }

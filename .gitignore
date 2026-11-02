@@ -9,6 +9,7 @@
 *.lib
 *.exp
 *.exe
+*.os
 .sconsign.dblite
 lua/demo1
 lua/lftk_run
@@ -25,3 +26,17 @@ args.txt
 log
 *.pyc
 __pycache__
+test.bin
+release
+event_log.bin
+res/assets/default/inc/fonts/default_full.res
+*.log
+tools/idl_gen/idl.json
+tools/idl_gen/tkc.json
+t.*
+test.png
+README.md.download 
+manifest.txt 
+test.xml
+build/
+tools/data/UnicodeData.txt

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  window manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,6 +22,7 @@
 #ifndef TK_WINDOW_MANAGER_DEFAULT_H
 #define TK_WINDOW_MANAGER_DEFAULT_H
 
+#include "tkc/fps.h"
 #include "base/native_window.h"
 #include "base/window_manager.h"
 
@@ -30,54 +31,63 @@ BEGIN_C_DECLS
 /**
  * @class window_manager_default_t
  * @parent window_manager_t
- * @annotation ["scriptable"]
  * 缺省窗口管理器。
  */
 typedef struct _window_manager_default_t {
   window_manager_t window_manager;
 
   /*private*/
-  canvas_t* canvas;
   bool_t animating;
+  bool_t ready_animator;
   bool_t ignore_user_input;
+  bool_t is_animator_paint_system_bar_top;
+  bool_t is_animator_paint_system_bar_bottom;
   window_animator_t* animator;
 
-  uint32_t fps;
-  uint32_t fps_time;
-  uint32_t fps_count;
+  fps_t fps;
   uint32_t last_paint_cost;
+  uint64_t last_paint_time;
 
   widget_t* pending_close_window;
   widget_t* pending_open_window;
 
-  char* cursor;
+  char cursor[TK_NAME_LEN + 1];
   rect_t r_cursor;
 
-  widget_t* system_bar;
-  input_device_status_t input_device_status;
   uint32_t screen_saver_timer_id;
   uint32_t screen_saver_time;
 
   widget_t* prev_win;
+
+  /* for window_manager_default_snap_prev_window */
+  widget_t* curr_win;
+  widget_t* last_curr_win;
+
   native_window_t* native_window;
   dialog_highlighter_t* dialog_highlighter;
 
   int32_t lcd_w;
   int32_t lcd_h;
+
+  bool_t keep_all_pressed_keys;
 } window_manager_default_t;
 
 /**
  * @method window_manager_create
+ * @export none
  * 创建窗口管理器。
  * @annotation ["constructor"]
  *
- * @return {window_manager_t*} 返回窗口管理器对象。
+ * @return {widget_t*} 返回窗口管理器对象。
  */
 widget_t* window_manager_create(void);
 
 #define WINDOW_MANAGER_DEFAULT(widget) ((window_manager_default_t*)(widget))
 
+/* private */
 ret_t window_manager_paint_system_bar(widget_t* widget, canvas_t* c);
+ret_t window_manager_paint_system_bar_top(widget_t* widget, canvas_t* c);
+ret_t window_manager_paint_system_bar_bottom(widget_t* widget, canvas_t* c);
 
 END_C_DECLS
 

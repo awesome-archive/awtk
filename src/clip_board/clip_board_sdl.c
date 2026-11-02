@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  clip_board on SDL
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,11 +19,11 @@
  *
  */
 
-#ifdef WITH_SDL
-
 #include "tkc/mem.h"
 #include "tkc/str.h"
-#include "SDL_clipboard.h"
+
+#ifdef WITH_SDL
+#include "platforms/pc/sdl_api.h"
 #include "clip_board/clip_board_sdl.h"
 
 typedef struct _clip_board_sdl_t {
@@ -97,6 +97,7 @@ clip_board_t* clip_board_sdl_create(void) {
   clip_board_sdl_t* cl = TKMEM_ZALLOC(clip_board_sdl_t);
   return_value_if_fail(cl != NULL, NULL);
 
+  str_init(&cl->str, 0);
   cl->clip_board.vt = &s_clip_board_sdl_vtable;
 
   return (clip_board_t*)cl;

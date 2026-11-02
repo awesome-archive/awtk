@@ -1,4 +1,4 @@
-/*adapted from :
+﻿/*adapted from :
  * http://rosettacode.org/wiki/Xiaolin_Wu%27s_line_algorithm#C
  */
 
@@ -23,16 +23,19 @@
     b = tmp;              \
   } while (0)
 
-void draw_line(canvas_t* c, unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2) {
+void draw_line(canvas_t* c, int x1, int y1, int x2, int y2) {
+  rect_t r;
   point_t p;
   lcd_t* lcd = c->lcd;
-  xy_t xmin = c->clip_left;
-  xy_t xmax = c->clip_right;
-  xy_t ymin = c->clip_top;
-  xy_t ymax = c->clip_bottom;
+  xy_t xmin, xmax, ymin, ymax;
   color_t* color = &(c->lcd->stroke_color);
   double dx = (double)x2 - (double)x1;
   double dy = (double)y2 - (double)y1;
+  canvas_get_clip_rect(c, &r);
+  xmin = r.x;
+  xmax = r.x + r.w - 1;
+  ymin = r.y;
+  ymax = r.y + r.h - 1;
 
   if (fabs(dx) > fabs(dy)) {
     if (x2 < x1) {

@@ -1,6 +1,7 @@
-﻿#include "widgets/window.h"
+﻿#include "base/window.h"
 #include "base/canvas.h"
 #include "base/widget.h"
+#include "widgets/button.h"
 #include "font_dummy.h"
 #include "lcd_log.h"
 #include "gtest/gtest.h"
@@ -12,6 +13,7 @@ TEST(Window, basic) {
   widget_t* w = window_create(NULL, 10, 20, 30, 40);
 
   value_set_wstr(&v1, L"window");
+  ASSERT_EQ(widget_is_normal_window(w), TRUE);
   ASSERT_EQ(widget_set_prop(w, WIDGET_PROP_TEXT, &v1), RET_OK);
   ASSERT_EQ(widget_get_prop(w, WIDGET_PROP_TEXT, &v2), RET_OK);
   ASSERT_EQ(wcscmp(v1.value.wstr, v2.value.wstr), 0);
@@ -42,32 +44,23 @@ TEST(Window, basic) {
   ASSERT_EQ(widget_get_prop(w, WIDGET_PROP_THEME, &v2), RET_OK);
   ASSERT_EQ(strcmp(value_str(&v2), value_str(&v1)), 0);
 
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_SINGLE_INSTANCE, TRUE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_SINGLE_INSTANCE, FALSE), TRUE);
+
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_SINGLE_INSTANCE, FALSE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_SINGLE_INSTANCE, TRUE), FALSE);
+
   widget_destroy(w);
 }
 
 TEST(Window, focus_key) {
   widget_t* w = window_create(NULL, 10, 20, 30, 40);
 
-  ASSERT_EQ(widget_get_prop_int(w, WIDGET_PROP_MOVE_FOCUS_PREV_KEY, 0), TK_KEY_MOVE_FOCUS_PREV);
-  ASSERT_EQ(widget_get_prop_int(w, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY, 0), TK_KEY_MOVE_FOCUS_NEXT);
-
-  ASSERT_EQ(widget_set_prop_int(w, WIDGET_PROP_MOVE_FOCUS_PREV_KEY, TK_KEY_LEFT), RET_OK);
-  ASSERT_EQ(widget_get_prop_int(w, WIDGET_PROP_MOVE_FOCUS_PREV_KEY, 0), TK_KEY_LEFT);
-
-  ASSERT_EQ(widget_set_prop_int(w, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY, TK_KEY_RIGHT), RET_OK);
-  ASSERT_EQ(widget_get_prop_int(w, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY, 0), TK_KEY_RIGHT);
-
   ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_MOVE_FOCUS_PREV_KEY, "UP"), RET_OK);
-  ASSERT_EQ(widget_get_prop_int(w, WIDGET_PROP_MOVE_FOCUS_PREV_KEY, 0), TK_KEY_UP);
+  ASSERT_STREQ(widget_get_prop_str(w, WIDGET_PROP_MOVE_FOCUS_PREV_KEY, 0), "UP");
 
   ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY, "DOWN"), RET_OK);
-  ASSERT_EQ(widget_get_prop_int(w, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY, 0), TK_KEY_DOWN);
-
-  ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_MOVE_FOCUS_PREV_KEY, "up"), RET_OK);
-  ASSERT_EQ(widget_get_prop_int(w, WIDGET_PROP_MOVE_FOCUS_PREV_KEY, 0), TK_KEY_UP);
-
-  ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY, "down"), RET_OK);
-  ASSERT_EQ(widget_get_prop_int(w, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY, 0), TK_KEY_DOWN);
+  ASSERT_STREQ(widget_get_prop_str(w, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY, 0), "DOWN");
 
   widget_destroy(w);
 }
@@ -123,4 +116,173 @@ TEST(Window, font_manager) {
   ASSERT_EQ(widget_get_font_manager(w), font_manager());
 
   widget_destroy(w);
+}
+
+TEST(Window, focused_widget) {
+  widget_t* w = window_create(NULL, 0, 0, 300, 400);
+  widget_t* b = button_create(w, 0, 0, 60, 30);
+  widget_set_focusable(b, TRUE);
+  widget_set_name(b, "b1");
+
+  b = button_create(w, 0, 30, 60, 30);
+  widget_set_focusable(b, TRUE);
+  widget_set_name(b, "b2");
+
+  b = button_create(w, 0, 30, 60, 30);
+  widget_set_focusable(b, TRUE);
+  widget_set_name(b, "b3");
+
+  widget_focus_first(w);
+  ASSERT_STREQ(widget_get_focused_widget(b)->name, "b1");
+
+  widget_focus_next(widget_get_focused_widget(b));
+  ASSERT_STREQ(widget_get_focused_widget(b)->name, "b2");
+
+  widget_focus_next(widget_get_focused_widget(b));
+  ASSERT_STREQ(widget_get_focused_widget(b)->name, "b3");
+
+  widget_destroy(w);
+}
+
+TEST(Window, strongly_focus) {
+  value_t v1;
+  value_t v2;
+  widget_t* w = window_create(NULL, 10, 20, 30, 40);
+
+  value_set_bool(&v1, TRUE);
+  ASSERT_EQ(WINDOW_BASE(w)->strongly_focus, FALSE);
+  ASSERT_EQ(widget_set_prop(w, WIDGET_PROP_STRONGLY_FOCUS, &v1), RET_OK);
+
+  ASSERT_EQ(widget_get_prop(w, WIDGET_PROP_STRONGLY_FOCUS, &v2), RET_OK);
+  ASSERT_EQ(WINDOW_BASE(w)->strongly_focus, TRUE);
+  ASSERT_EQ(WINDOW_BASE(w)->strongly_focus, value_bool(&v2));
+}
+
+TEST(Window, open_bin) {
+  widget_t* win = window_open("main");
+  ASSERT_EQ(win != NULL, true);
+  widget_destroy(win);
+}
+
+TEST(Window, open_xml) {
+  widget_t* win = window_open("file://./design/default/ui/main.xml");
+  ASSERT_EQ(win != NULL, true);
+  widget_destroy(win);
+}
+
+TEST(Window, open_local_bin) {
+  widget_t* win = window_open("file://./res/assets/default/raw/ui/main.bin");
+  ASSERT_EQ(win != NULL, true);
+  widget_destroy(win);
+}
+
+TEST(Window, copy) {
+  widget_t* w = window_create(NULL, 10, 20, 30, 40);
+
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_STRONGLY_FOCUS, TRUE), RET_OK);
+  ASSERT_EQ(widget_set_prop_int(w, WIDGET_PROP_DESIGN_W, 400), RET_OK);
+  ASSERT_EQ(widget_set_prop_int(w, WIDGET_PROP_DESIGN_H, 300), RET_OK);
+  ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_THEME, "hello"), RET_OK);
+  ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_ANIM_HINT, "popup"), RET_OK);
+  widget_t* w1 = widget_clone(w, NULL);
+
+  ASSERT_EQ(widget_get_prop_bool(w1, WIDGET_PROP_STRONGLY_FOCUS, FALSE), TRUE);
+  ASSERT_EQ(widget_get_prop_int(w1, WIDGET_PROP_DESIGN_W, 0), 400);
+  ASSERT_EQ(widget_get_prop_int(w1, WIDGET_PROP_DESIGN_H, 0), 300);
+  ASSERT_STREQ(widget_get_prop_str(w1, WIDGET_PROP_THEME, NULL), "hello");
+  ASSERT_STREQ(widget_get_prop_str(w1, WIDGET_PROP_ANIM_HINT, NULL), "popup");
+
+  widget_destroy(w);
+  widget_destroy(w1);
+}
+
+static ret_t on_model_changed(void* ctx, event_t* e) {
+  model_event_t* evt = model_event_cast(e);
+  str_t* str = (str_t*)ctx;
+  str_append_more(str, evt->name, ",", evt->change_type, ";", NULL);
+
+  return RET_OK;
+}
+
+TEST(Window, model_change) {
+  str_t str;
+  widget_t* w1 = window_create(NULL, 10, 20, 30, 40);
+  widget_t* w2 = window_create(NULL, 10, 20, 30, 40);
+
+  str_init(&str, 100);
+  widget_on(w1, EVT_MODEL_CHANGE, on_model_changed, &str);
+  widget_on(w2, EVT_MODEL_CHANGE, on_model_changed, &str);
+  widget_set_prop_str(w2, "on:model_change", "widget_set(self, 'name', name);print(name)");
+
+  widget_dispatch_model_event(w1, "person", "add", NULL);
+  widget_dispatch_model_event(w1, "person", "remove", NULL);
+
+  ASSERT_STREQ(str.str, "person,add;person,add;person,remove;person,remove;");
+  ASSERT_STREQ(w2->name, "person");
+
+  str_reset(&str);
+  widget_destroy(w1);
+  widget_destroy(w2);
+}
+
+TEST(Window, applet_name) {
+  assets_manager_t* am = NULL;
+  locale_info_t* li = NULL;
+  widget_t* w1 = window_create(NULL, 10, 20, 30, 40);
+  widget_t* w2 = window_create(NULL, 10, 20, 30, 40);
+  widget_t* b1 = button_create(w1, 0, 0, 20, 20);
+  widget_t* b2 = button_create(w1, 0, 0, 20, 20);
+
+  assets_managers_set_applet_res_root("./tests/applets");
+  widget_set_prop_str(w1, WIDGET_PROP_APPLET_NAME, "bar");
+  widget_set_prop_str(w2, WIDGET_PROP_APPLET_NAME, "foo");
+
+  am = widget_get_assets_manager(w1);
+  ASSERT_NE(am, assets_manager());
+  am = widget_get_assets_manager(w2);
+  ASSERT_NE(am, assets_manager());
+
+  am = widget_get_assets_manager(b1);
+  ASSERT_NE(am, assets_manager());
+  am = widget_get_assets_manager(b2);
+  ASSERT_NE(am, assets_manager());
+
+  li = widget_get_locale_info(w1);
+  ASSERT_NE(li, locale_info());
+  li = widget_get_locale_info(w2);
+  ASSERT_NE(li, locale_info());
+
+  widget_set_prop_str(w1, WIDGET_PROP_APPLET_NAME, NULL);
+  widget_set_prop_str(w2, WIDGET_PROP_APPLET_NAME, NULL);
+
+  am = widget_get_assets_manager(w1);
+  ASSERT_EQ(am, assets_manager());
+  am = widget_get_assets_manager(w2);
+  ASSERT_EQ(am, assets_manager());
+
+  am = widget_get_assets_manager(b1);
+  ASSERT_EQ(am, assets_manager());
+  am = widget_get_assets_manager(b2);
+  ASSERT_EQ(am, assets_manager());
+
+  li = widget_get_locale_info(w1);
+  ASSERT_EQ(li, locale_info());
+  li = widget_get_locale_info(w2);
+  ASSERT_EQ(li, locale_info());
+
+  widget_set_prop_str(w1, WIDGET_PROP_APPLET_NAME, "");
+  widget_set_prop_str(w2, WIDGET_PROP_APPLET_NAME, "");
+
+  am = widget_get_assets_manager(w1);
+  ASSERT_EQ(am, assets_manager());
+  am = widget_get_assets_manager(w2);
+  ASSERT_EQ(am, assets_manager());
+
+  li = widget_get_locale_info(w1);
+  ASSERT_EQ(li, locale_info());
+  li = widget_get_locale_info(w2);
+  ASSERT_EQ(li, locale_info());
+
+  widget_destroy(w1);
+  widget_destroy(w2);
 }

@@ -17,7 +17,9 @@ TEST(UISerializer, basic) {
   str_init(&str, 1024);
   widget_to_xml(w, &str);
 
-  ASSERT_EQ(string(str.str), "<button x=\"10\" y=\"20\" w=\"30\" h=\"40\">\n</button>\n");
+  ASSERT_EQ(string(str.str),
+            "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\r\n<button x=\"10\" y=\"20\" "
+            "w=\"30\" h=\"40\">\n</button>\n");
 
   str_reset(&str);
   widget_destroy(w);
@@ -31,7 +33,8 @@ TEST(UISerializer, repeat) {
   widget_to_xml(w, &str);
 
   ASSERT_EQ(string(str.str),
-            "<button x=\"10\" y=\"20\" w=\"30\" h=\"40\" repeat=\"100\">\n</button>\n");
+            "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\r\n<button x=\"10\" y=\"20\" "
+            "w=\"30\" h=\"40\" repeat=\"100\">\n</button>\n");
 
   str_reset(&str);
   widget_destroy(w);
@@ -40,12 +43,13 @@ TEST(UISerializer, layout_self) {
   str_t str;
   widget_t* w = button_create(NULL, 10, 20, 30, 40);
 
-  widget_set_self_layout_params(w, "right:100", "middle:10", "fill", "10%");
+  widget_set_self_layout(w, "default(x=right:100,y=middle:10,w=fill,h=10%)");
   str_init(&str, 1024);
   widget_to_xml(w, &str);
 
   ASSERT_EQ(string(str.str),
-            "<button x=\"10\" y=\"20\" w=\"30\" h=\"40\" "
+            "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\r\n<button x=\"10\" y=\"20\" "
+            "w=\"30\" h=\"40\" "
             "self_layout=\"default(x=r:100,y=m:10,w=0,h=10%)\">\n</button>\n");
 
   str_reset(&str);
@@ -56,12 +60,13 @@ TEST(UISerializer, layout_self1) {
   str_t str;
   widget_t* w = button_create(NULL, 10, 20, 30, 40);
 
-  widget_set_self_layout_params(w, "center:100", "bottom:10", "fill", "10%");
+  widget_set_self_layout(w, "default(x=center:100,y=bottom:10,w=fill,h=10%)");
   str_init(&str, 1024);
   widget_to_xml(w, &str);
 
   ASSERT_EQ(string(str.str),
-            "<button x=\"10\" y=\"20\" w=\"30\" h=\"40\" "
+            "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\r\n<button x=\"10\" y=\"20\" "
+            "w=\"30\" h=\"40\" "
             "self_layout=\"default(x=c:100,y=b:10,w=0,h=10%)\">\n</button>\n");
 
   str_reset(&str);

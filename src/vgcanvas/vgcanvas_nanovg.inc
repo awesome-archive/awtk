@@ -1,20 +1,111 @@
-#include "nanovg.h"
+﻿#include "nanovg.h"
 #include "tkc/mem.h"
 #include "tkc/utf8.h"
+#include "base/events.h"
 #include "base/vgcanvas.h"
 #include "base/system_info.h"
 #include "base/image_manager.h"
+#include "base/font_manager.h"
 #include "base/assets_manager.h"
+#include "base/vgcanvas_asset_manager.h"
+#include "base/lcd_orientation_helper.h"
 
-static ret_t vgcanvas_nanovg_reset(vgcanvas_t* vgcanvas) {
-  (void)vgcanvas;
+static int vgcanvas_nanovg_ensure_image(vgcanvas_nanovg_t* canvas, bitmap_t* img);
+static ret_t vgcanvas_nanovg_image_orientation_matrix(NVGcontext* vg, bitmap_t* img);
+
+static ret_t vgcanvas_nanovg_destroy(vgcanvas_t* vgcanvas);
+static ret_t vgcanvas_nanovg_end_frame(vgcanvas_t* vgcanvas);
+static ret_t vgcanvas_nanovg_set_antialias(vgcanvas_t* vgcanvas, bool_t value);
+static ret_t vgcanvas_nanovg_destroy_fbo(vgcanvas_t* vgcanvas, framebuffer_object_t* fbo);
+static ret_t vgcanvas_nanovg_reinit(vgcanvas_t* vg, uint32_t w, uint32_t h, uint32_t stride,
+                                    bitmap_format_t format, void* data);
+static ret_t vgcanvas_nanovg_begin_frame(vgcanvas_t* vgcanvas, const dirty_rects_t* dirty_rects);
+static ret_t vgcanvas_nanovg_create_fbo(vgcanvas_t* vgcanvas, uint32_t w, uint32_t h,
+                                        bool_t custom_draw_model, framebuffer_object_t* fbo);
+static ret_t vgcanvas_nanovg_create_fbo_ex(vgcanvas_t* vgcanvas, uint32_t w, uint32_t h,
+                                           bool_t custom_draw_model, bool_t with_depth,
+                                           framebuffer_object_t* fbo);
+static ret_t vgcanvas_nanovg_bind_fbo(vgcanvas_t* vgcanvas, framebuffer_object_t* fbo);
+static ret_t vgcanvas_nanovg_unbind_fbo(vgcanvas_t* vgcanvas, framebuffer_object_t* fbo);
+static ret_t vgcanvas_nanovg_fbo_to_bitmap(vgcanvas_t* vgcanvas, framebuffer_object_t* fbo,
+                                           bitmap_t* img, const rect_t* r);
+static const rectf_t* vgcanvas_nanovg_get_clip_rect(vgcanvas_t* vgcanvas);
+
+#ifndef WITH_NANOVG_GPU
+static ret_t vgcanvas_nanovg_soft_text_set_font(vgcanvas_t* vgcanvas, const char* name);
+static ret_t vgcanvas_nanovg_soft_text_set_font_size(vgcanvas_t* vgcanvas, float_t size);
+static ret_t vgcanvas_nanovg_soft_text_set_text_align(vgcanvas_t* vgcanvas, const char* text_align);
+static ret_t vgcanvas_nanovg_soft_text_set_text_baseline(vgcanvas_t* vgcanvas,
+                                                          const char* text_baseline);
+static ret_t vgcanvas_nanovg_soft_text_fill_text(vgcanvas_t* vgcanvas, const char* text, float_t x,
+                                                  float_t y, float_t max_width);
+static float_t vgcanvas_nanovg_soft_text_measure_text(vgcanvas_t* vgcanvas, const char* text);
+static ret_t vgcanvas_nanovg_soft_text_get_text_metrics(vgcanvas_t* vgcanvas, float_t* ascent,
+                                                         float_t* descent, float_t* line_hight);
+static ret_t vgcanvas_nanovg_soft_text_on_clear_cache(vgcanvas_t* vgcanvas);
+#endif /*WITH_NANOVG_GPU*/
+
+static ret_t vgcanvas_nanovg_on_asset_events(void* ctx, event_t* e) {
+  assets_event_t* evt = (assets_event_t*)e;
+
+  if (evt->type == ASSET_TYPE_FONT) {
+    asset_info_t* info = evt->asset_info;
+    if (e->type == EVT_ASSET_MANAGER_CLEAR_CACHE) {
+      vgcanvas_asset_manager_remove_font(vgcanvas_asset_manager(), ctx, NULL);
+    } else if (e->type == EVT_ASSET_MANAGER_UNLOAD_ASSET) {
+      vgcanvas_asset_manager_remove_font(vgcanvas_asset_manager(), ctx, asset_info_get_name(info));
+    }
+  }
 
   return RET_OK;
 }
 
-static ret_t vgcanvas_nanovg_flush(vgcanvas_t* vgcanvas) {
+static ret_t vgcanvas_nanovg_init(vgcanvas_t* vgcanvas) {
   (void)vgcanvas;
+  return RET_OK;
+}
 
+static ret_t vgcanvas_nanovg_set_assets_manager(vgcanvas_t* vg, assets_manager_t* assets_manager) {
+  return_value_if_fail(vg != NULL, RET_BAD_PARAMS);
+
+  if (vg->assets_manager != NULL && vg->assets_manager != assets_manager) {
+    emitter_off_by_ctx(EMITTER(vg->assets_manager), vg);
+  }
+  if (assets_manager != NULL && vg->assets_manager != assets_manager) {
+    emitter_t* emitter = EMITTER(assets_manager);
+    emitter_on(emitter, EVT_ASSET_MANAGER_CLEAR_CACHE, vgcanvas_nanovg_on_asset_events, vg);
+    emitter_on(emitter, EVT_ASSET_MANAGER_UNLOAD_ASSET, vgcanvas_nanovg_on_asset_events, vg);
+  }
+  vg->assets_manager = assets_manager;
+  return RET_OK;
+}
+
+static ret_t vgcanvas_nanovg_deinit(vgcanvas_t* vgcanvas) {
+  emitter_t* emitter = EMITTER(assets_manager());
+  emitter_off_by_ctx(emitter, vgcanvas);
+
+  return RET_OK;
+}
+
+static ret_t vgcanvas_nanovg_reset(vgcanvas_t* vgcanvas) {
+  /*TODO: unload fonts*/
+  NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+  nvgDeleteFontByName(vg, NULL);
+  vgcanvas_asset_manager_remove_font(vgcanvas_asset_manager(), vgcanvas, NULL);
+  return RET_OK;
+}
+
+static ret_t vgcanvas_nanovg_reset_curr_state(vgcanvas_t* vgcanvas) {
+  NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+  nvgReset(vg);
+  return RET_OK;
+}
+
+static ret_t vgcanvas_nanovg_flush(vgcanvas_t* vgcanvas) {
+#ifdef WITH_NANOVG_GPU
+  NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+  nvgEndFrame(vg);
+#endif
   return RET_OK;
 }
 
@@ -172,13 +263,59 @@ static ret_t vgcanvas_nanovg_close_path(vgcanvas_t* vgcanvas) {
   return RET_OK;
 }
 
+static ret_t vgcanvas_nanovg_set_fill_mode(vgcanvas_t* vgcanvas, vgcanvas_fill_mode_t fill_mode) {
+  NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+
+  switch (fill_mode) {
+  case VGCANVAS_FILL_MODE_ALL_FILL:
+    nvgFillMode(vg, NVG_FILLMODE_All);
+    break;
+  case VGCANVAS_FILL_MODE_NON_ZERO:
+    nvgFillMode(vg, NVG_FILLMODE_NONZERO);
+    break;
+  case VGCANVAS_FILL_MODE_EVEN_ODD:
+    nvgFillMode(vg, NVG_FILLMODE_EVENODD);
+    break;
+  default:
+    nvgFillMode(vg, NVG_FILLMODE_All);
+    break;
+  }
+  return RET_OK;
+}
+
+static ret_t vgcanvas_nanovg_intersect_clip_rect(vgcanvas_t* vgcanvas, float_t* x, float_t* y,
+                                                 float_t* w, float_t* h) {
+  NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+
+  nvgIntersectScissor_ex(vg, x, y, w, h);
+  nvgGetCurrScissor(vg, &vgcanvas->clip_rect.x, &vgcanvas->clip_rect.y, &vgcanvas->clip_rect.w, &vgcanvas->clip_rect.h);
+  return RET_OK;
+}
+
 static ret_t vgcanvas_nanovg_clip_rect(vgcanvas_t* vgcanvas, float_t x, float_t y, float_t w,
                                        float_t h) {
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
-
   nvgScissor(vg, x, y, w, h);
-
+  nvgGetCurrScissor(vg, &vgcanvas->clip_rect.x, &vgcanvas->clip_rect.y, &vgcanvas->clip_rect.w, &vgcanvas->clip_rect.h);
   return RET_OK;
+}
+
+static bool_t vgcanvas_nanovg_is_rectf_in_clip_rect(vgcanvas_t* vgcanvas, float_t left, float_t top, float_t right, float_t bottom) {
+  const rectf_t* clip_rect = vgcanvas_nanovg_get_clip_rect(vgcanvas);
+  float_t clip_left = clip_rect->x;
+  float_t clip_right = clip_rect->x + clip_rect->w - 1;
+  float_t clip_top = clip_rect->y;
+  float_t clip_bottom = clip_rect->y + clip_rect->h - 1;
+  if (left > clip_right || right < clip_left || top > clip_bottom || bottom < clip_top) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static const rectf_t* vgcanvas_nanovg_get_clip_rect(vgcanvas_t* vgcanvas) {
+  NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+  nvgGetCurrScissor(vg, &vgcanvas->clip_rect.x, &vgcanvas->clip_rect.y, &vgcanvas->clip_rect.w, &vgcanvas->clip_rect.h);
+  return &(vgcanvas->clip_rect);
 }
 
 static ret_t vgcanvas_nanovg_fill(vgcanvas_t* vgcanvas) {
@@ -198,15 +335,17 @@ static ret_t vgcanvas_nanovg_stroke(vgcanvas_t* vgcanvas) {
 }
 
 static ret_t vgcanvas_nanovg_paint(vgcanvas_t* vgcanvas, bool_t stroke, bitmap_t* img) {
-  int iw = img->w;
-  int ih = img->h;
   NVGpaint imgPaint;
+  int iw = bitmap_get_physical_width(img);
+  int ih = bitmap_get_physical_height(img);
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
   vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
   int id = vgcanvas_nanovg_ensure_image(canvas, img);
   return_value_if_fail(id >= 0, RET_BAD_PARAMS);
 
   imgPaint = nvgImagePattern(vg, 0, 0, iw, ih, 0, id, 1);
+  nvgSave(vg);
+  vgcanvas_nanovg_image_orientation_matrix(vg, img);
 
   if (stroke) {
     nvgStrokePaint(vg, imgPaint);
@@ -216,50 +355,53 @@ static ret_t vgcanvas_nanovg_paint(vgcanvas_t* vgcanvas, bool_t stroke, bitmap_t
     nvgClosePath(vg);
     nvgFill(vg);
   }
-
+  nvgRestore(vg);
   return RET_OK;
 }
 
 static ret_t vgcanvas_nanovg_set_font_size(vgcanvas_t* vgcanvas, float_t size) {
+#ifdef WITH_NANOVG_GPU
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
   nvgFontSize(vg, size);
+#else
+  return vgcanvas_nanovg_soft_text_set_font_size(vgcanvas, size);
+#endif
 
   return RET_OK;
 }
 
 static ret_t vgcanvas_nanovg_set_font(vgcanvas_t* vgcanvas, const char* name) {
+#ifdef WITH_NANOVG_GPU  
   int font_id = 0;
+  ret_t result = RET_FAIL;
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
   vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
   return_value_if_fail(name && *name, RET_BAD_PARAMS);
 
-  font_id = nvgFindFont(vg, name);
-  if (font_id < 0) {
-    const asset_info_t* r = assets_manager_ref(assets_manager(), ASSET_TYPE_FONT, name);
-    if (r == NULL || r->subtype != ASSET_TYPE_FONT_TTF) {
-      font_id = nvgFindFont(vg, name);
-      if (font_id >= 0) {
-        canvas->font_id = font_id;
-        return RET_OK;
-      }
+  font_id = tk_pointer_to_int(vgcanvas_asset_manager_get_font_ctx(vgcanvas_asset_manager(), vgcanvas, name, &result));
 
-      r = assets_manager_ref(assets_manager(), ASSET_TYPE_FONT, name);
+  if (result != RET_OK) {
+    font_id = nvgCreateEmptyFont(vg, name);
+    if (font_id < 0) {
+      log_warn("load font %s failed \r\n", name);
     }
 
-    if (r != NULL && r->subtype == ASSET_TYPE_FONT_TTF) {
-      font_id = nvgCreateFontMem(vg, name, (unsigned char*)r->data, r->size, 0);
+    if (font_id >= 0) {
+      vgcanvas_asset_manager_add_font(vgcanvas_asset_manager(), vgcanvas, name, tk_pointer_from_int(font_id));
     }
   }
-
-  return_value_if_fail(font_id >= 0, RET_FAIL);
 
   canvas->font_id = font_id;
   nvgFontFaceId(vg, font_id);
 
   return RET_OK;
+#else
+  return vgcanvas_nanovg_soft_text_set_font(vgcanvas, name);
+#endif
 }
 
 static ret_t vgcanvas_nanovg_set_text_align(vgcanvas_t* vgcanvas, const char* text_align) {
+#ifdef WITH_NANOVG_GPU
   vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
 
   if (text_align[0] == 'r') {
@@ -271,9 +413,13 @@ static ret_t vgcanvas_nanovg_set_text_align(vgcanvas_t* vgcanvas, const char* te
   }
 
   return RET_OK;
+#else
+  return vgcanvas_nanovg_soft_text_set_text_align(vgcanvas, text_align);
+#endif
 }
 
 static ret_t vgcanvas_nanovg_set_text_baseline(vgcanvas_t* vgcanvas, const char* text_baseline) {
+#ifdef WITH_NANOVG_GPU
   vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
 
   if (text_baseline[0] == 'b') {
@@ -285,37 +431,127 @@ static ret_t vgcanvas_nanovg_set_text_baseline(vgcanvas_t* vgcanvas, const char*
   }
 
   return RET_OK;
+#else
+  return vgcanvas_nanovg_soft_text_set_text_baseline(vgcanvas, text_baseline);
+#endif
 }
 
 static ret_t vgcanvas_nanovg_fill_text(vgcanvas_t* vgcanvas, const char* text, float_t x, float_t y,
                                        float_t max_width) {
+#ifdef WITH_NANOVG_GPU
+  ret_t ret = RET_FAIL;
+  glyphs_t* glyphs = NULL;
+  vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
+  NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+  font_t* font = font_manager_get_font(vgcanvas->c->font_manager, vgcanvas->font, vgcanvas->font_size);
+  return_value_if_fail(font != NULL && wstr_set_utf8(&canvas->tmp_wstr, text) == RET_OK, RET_FAIL);
+  glyphs = font_create_glyphs(font, canvas->tmp_wstr.str, canvas->tmp_wstr.size, vgcanvas->font_size, NULL);
+  if (glyphs != NULL) {
+    ret = vgcanvas_fill_text_by_glyphs(vgcanvas, glyphs, 0, glyphs_get_length(glyphs), x, y, max_width);
+    glyphs_destroy(glyphs);
+  }
+
+  return ret;
+#else
+  return vgcanvas_nanovg_soft_text_fill_text(vgcanvas, text, x, y, max_width);
+#endif
+}
+
+static ret_t vgcanvas_nanovg_fill_text_by_glyphs(vgcanvas_t* vgcanvas, glyphs_t* glyphs, uint32_t start, uint32_t len, float_t x, float_t y,
+                                                 float_t max_width) {
+  uint32_t i = 0;
+  uint32_t nr = len + start;
   vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
 
-  nvgTextAlign(vg, canvas->text_align_v | canvas->text_align_h);
-  nvgText(vg, x, y, text, text + strlen(text));
+  float font_size = (float)glyphs_get_physical_font_size(glyphs);
+  int32_t baseline = glyphs_get_physical_font_ascent(glyphs);
+  float_t ratio = system_info()->device_pixel_ratio;
 
+  nvgTextAlign(vg, canvas->text_align_v | canvas->text_align_h);
+  for (i = start; i < nr; i++) {
+    const glyph_t* g = glyphs_get(glyphs, i);
+    if (g != NULL) {
+      xy_t xx = x * ratio + g->x;
+      xy_t yy = y * ratio + g->y + baseline;
+      nvgGlyph(vg, g->glyph_index, font_size, (float)xx, (float)yy, (float)g->w, (float)g->h, g->data);
+      x += (g->advance / ratio);
+    } else {
+      x += 4;
+    }
+  }
   return RET_OK;
 }
 
 static float_t vgcanvas_nanovg_measure_text(vgcanvas_t* vgcanvas, const char* text) {
-  float bounds[4];
+#ifdef WITH_NANOVG_GPU
+  float_t w = 0.0f;
+  glyphs_t* glyphs = NULL;
   vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+  font_t* font = font_manager_get_font(vgcanvas->c->font_manager, vgcanvas->font, vgcanvas->font_size);
+  return_value_if_fail(font != NULL && wstr_set_utf8(&canvas->tmp_wstr, text) == RET_OK, 0.0f);
+  glyphs = font_create_glyphs(font, canvas->tmp_wstr.str, canvas->tmp_wstr.size, vgcanvas->font_size, NULL);
+  if (glyphs != NULL) {
+    w = glyphs_measure(glyphs, 0, glyphs_get_length(glyphs));
+    glyphs_destroy(glyphs);
+  }
+  return w;
+#else
+  return vgcanvas_nanovg_soft_text_measure_text(vgcanvas, text);
+#endif
+}
 
-  nvgTextAlign(vg, canvas->text_align_v | canvas->text_align_h);
+static ret_t vgcanvas_nanovg_get_text_metrics(vgcanvas_t* vgcanvas, float_t* ascent,
+                                              float_t* descent, float_t* line_hight) {
+#ifdef WITH_NANOVG_GPU
+  font_vmetrics_t vmetrics = font_get_vmetrics(vgcanvas->c->font, vgcanvas->c->font_size);
+  if (ascent != NULL) {
+    *ascent = vmetrics.ascent;
+  }
 
-  return nvgTextBounds(vg, 0, 0, text, text + strlen(text), bounds);
+  if (descent != NULL) {
+    *descent = vmetrics.descent;
+  }
+
+  if (line_hight != NULL) {
+    *line_hight = (float_t)(vmetrics.ascent - vmetrics.descent + vmetrics.line_gap);
+  }
+
+  return RET_OK;
+#else
+  return vgcanvas_nanovg_soft_text_get_text_metrics(vgcanvas, ascent, descent, line_hight);
+#endif
+}
+
+// 快速旋转会让 bitmap 旋转，通过变换矩阵来把旋转后的 bitmap 旋转回来正常未旋转的状态。
+static ret_t vgcanvas_nanovg_image_orientation_matrix(NVGcontext* vg, bitmap_t* img) {
+  if (img->orientation == LCD_ORIENTATION_90 || img->orientation == LCD_ORIENTATION_270) {
+    float_t anchor_x = img->w / 2.0f;
+    float_t anchor_y = img->h / 2.0f;
+    nvgTranslate(vg, anchor_x, anchor_y);
+		nvgRotate(vg, TK_D2R((float_t)(img->orientation)));
+		nvgTranslate(vg, -anchor_y, -anchor_x);
+  } else if (img->orientation == LCD_ORIENTATION_180) {
+    float_t anchor_x = img->w / 2.0f;
+    float_t anchor_y = img->h / 2.0f;
+		nvgTranslate(vg, anchor_x, anchor_y);
+		nvgRotate(vg, TK_D2R(180.0f));
+		nvgTranslate(vg, -anchor_x, -anchor_y);
+  }
+  return RET_OK;
 }
 
 static ret_t vgcanvas_nanovg_draw_image(vgcanvas_t* vgcanvas, bitmap_t* img, float_t sx, float_t sy,
                                         float_t sw, float_t sh, float_t dx, float_t dy, float_t dw,
                                         float_t dh) {
-  int iw = img->w;
-  int ih = img->h;
+  rectf_t r_src;
   NVGpaint imgPaint;
   float scaleX = (float)dw / sw;
   float scaleY = (float)dh / sh;
+  rectf_t src_r = {sx, sy, sw, sh};
+  int iw = bitmap_get_physical_width(img);
+  int ih = bitmap_get_physical_height(img);
   vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
 
@@ -328,7 +564,9 @@ static ret_t vgcanvas_nanovg_draw_image(vgcanvas_t* vgcanvas, bitmap_t* img, flo
   nvgBeginPath(vg);
   nvgTranslate(vg, dx - (sx * scaleX), dy - (sy * scaleY));
   nvgScale(vg, scaleX, scaleY);
-  nvgRect(vg, sx, sy, sw, sh);
+  vgcanvas_nanovg_image_orientation_matrix(vg, img);
+  r_src = lcd_orientation_rectf_rotate_by_anticlockwise(&src_r, img->orientation, img->w, img->h);
+  nvgRect(vg, r_src.x, r_src.y, r_src.w, r_src.h);
   nvgFillPaint(vg, imgPaint);
   nvgClosePath(vg);
   nvgFill(vg);
@@ -339,9 +577,15 @@ static ret_t vgcanvas_nanovg_draw_image(vgcanvas_t* vgcanvas, bitmap_t* img, flo
 }
 
 static ret_t vgcanvas_nanovg_set_antialias(vgcanvas_t* vgcanvas, bool_t value) {
+#ifdef WITH_NANOVG_GPU
+  vgcanvas_nanovg_t* canvas = (vgcanvas_nanovg_t*)vgcanvas;
+  NVGcontext* vg = canvas->vg;
+  nvgShapeAntiAlias(vg, value);
+#else
   (void)vgcanvas;
   (void)value;
   /*always*/
+#endif
 
   return RET_OK;
 }
@@ -356,7 +600,7 @@ static ret_t vgcanvas_nanovg_set_line_width(vgcanvas_t* vgcanvas, float_t value)
 
 static ret_t vgcanvas_nanovg_set_global_alpha(vgcanvas_t* vgcanvas, float_t value) {
   NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
-
+  vgcanvas->global_alpha = value;
   nvgGlobalAlpha(vg, value);
 
   return RET_OK;
@@ -430,6 +674,8 @@ static ret_t vgcanvas_nanovg_set_line_cap(vgcanvas_t* vgcanvas, const char* valu
     line_cap = NVG_ROUND;
   } else if (*value == 's') {
     line_cap = NVG_SQUARE;
+  } else if (*value == 'b') {
+    line_cap = NVG_BUTT;
   }
 
   nvgLineCap(vg, line_cap);
@@ -476,10 +722,26 @@ static ret_t vgcanvas_nanovg_restore(vgcanvas_t* vgcanvas) {
   return RET_OK;
 }
 
+static ret_t vgcanvas_nanovg_clear_cache(vgcanvas_t* vgcanvas) {
+  NVGcontext* vg = ((vgcanvas_nanovg_t*)vgcanvas)->vg;
+
+  nvgClearCache(vg);
+  nvgDeleteFontByName(vg, NULL);
+  vgcanvas_asset_manager_remove_font(vgcanvas_asset_manager(), vgcanvas, NULL);
+  vgcanvas_asset_manager_remove_image(vgcanvas_asset_manager(), vgcanvas, NULL);
+#ifndef WITH_NANOVG_GPU
+  vgcanvas_nanovg_soft_text_on_clear_cache(vgcanvas);
+#endif
+  
+  return RET_OK;
+}
+
 static const vgcanvas_vtable_t vt = {
     .reinit = vgcanvas_nanovg_reinit,
     .begin_frame = vgcanvas_nanovg_begin_frame,
+    .set_assets_manager = vgcanvas_nanovg_set_assets_manager,
     .reset = vgcanvas_nanovg_reset,
+    .reset_curr_state = vgcanvas_nanovg_reset_curr_state,
     .flush = vgcanvas_nanovg_flush,
     .clear_rect = vgcanvas_nanovg_clear_rect,
     .begin_path = vgcanvas_nanovg_begin_path,
@@ -499,6 +761,10 @@ static const vgcanvas_vtable_t vt = {
     .transform = vgcanvas_nanovg_transform,
     .set_transform = vgcanvas_nanovg_set_transform,
     .clip_rect = vgcanvas_nanovg_clip_rect,
+    .get_clip_rect = vgcanvas_nanovg_get_clip_rect,
+    .is_rectf_in_clip_rect = vgcanvas_nanovg_is_rectf_in_clip_rect,
+    .intersect_clip_rect = vgcanvas_nanovg_intersect_clip_rect,
+    .set_fill_mode = vgcanvas_nanovg_set_fill_mode,
     .fill = vgcanvas_nanovg_fill,
     .stroke = vgcanvas_nanovg_stroke,
     .paint = vgcanvas_nanovg_paint,
@@ -507,6 +773,7 @@ static const vgcanvas_vtable_t vt = {
     .set_text_align = vgcanvas_nanovg_set_text_align,
     .set_text_baseline = vgcanvas_nanovg_set_text_baseline,
     .fill_text = vgcanvas_nanovg_fill_text,
+    .fill_text_by_glyphs = vgcanvas_nanovg_fill_text_by_glyphs,
     .measure_text = vgcanvas_nanovg_measure_text,
     .draw_image = vgcanvas_nanovg_draw_image,
     .set_antialias = vgcanvas_nanovg_set_antialias,
@@ -521,11 +788,15 @@ static const vgcanvas_vtable_t vt = {
     .set_line_join = vgcanvas_nanovg_set_line_join,
     .set_line_cap = vgcanvas_nanovg_set_line_cap,
     .set_miter_limit = vgcanvas_nanovg_set_miter_limit,
+    .get_text_metrics = vgcanvas_nanovg_get_text_metrics,
     .save = vgcanvas_nanovg_save,
     .restore = vgcanvas_nanovg_restore,
     .end_frame = vgcanvas_nanovg_end_frame,
     .create_fbo = vgcanvas_nanovg_create_fbo,
+    .create_fbo_ex = vgcanvas_nanovg_create_fbo_ex,
     .bind_fbo = vgcanvas_nanovg_bind_fbo,
     .destroy_fbo = vgcanvas_nanovg_destroy_fbo,
     .unbind_fbo = vgcanvas_nanovg_unbind_fbo,
+    .fbo_to_bitmap = vgcanvas_nanovg_fbo_to_bitmap,
+    .clear_cache = vgcanvas_nanovg_clear_cache,
     .destroy = vgcanvas_nanovg_destroy};

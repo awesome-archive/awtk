@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  list_item
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -53,7 +53,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[list\_view\_m.xml](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/list_view_m.xml)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/ui/list_view_m.xml)
  *
  * 在c代码中使用函数list\_item\_create创建列表项控件。如：
  *
@@ -74,7 +74,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[theme default](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L372)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L372)
  *
  */
 typedef struct _list_item_t {
@@ -83,8 +83,15 @@ typedef struct _list_item_t {
   /*private*/
   int32_t timer_id;
   bool_t dragged;
+  bool_t pressed;
+  bool_t downed;
   point_t down;
 } list_item_t;
+
+/**
+ * @event {pointer_event_t} EVT_CLICK
+ * 点击事件。
+ */
 
 /**
  * @method list_item_create
@@ -114,6 +121,11 @@ widget_t* list_item_cast(widget_t* widget);
 
 /*public for subclass and runtime type check*/
 TK_EXTERN_VTABLE(list_item);
+
+#define TK_LIST_ITEM_STYLE_ODD "odd"
+#define TK_LIST_ITEM_STYLE_EVEN "even"
+#define TK_LIST_ITEM_STYLE_ODD_CLICKABLE "odd_clickable"
+#define TK_LIST_ITEM_STYLE_EVEN_CLICKABLE "even_clickable"
 
 END_C_DECLS
 

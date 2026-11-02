@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  bitmap font generator
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2024  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,15 +22,23 @@
 #include <wctype.h>
 #include "tkc/mem.h"
 #include "tkc/utf8.h"
-#include "tkc/buffer.h"
+#include "tkc/fs.h"
+#include "tkc/path.h"
+#include "base/bitmap.h"
 #include "common/utils.h"
 #include "font_gen/font_gen.h"
+#include "font_gen/preprocess_text.inc"
 #include "base/assets_manager.h"
 #include "font_loader/font_loader_stb.h"
 #include "font_loader/font_loader_bitmap.h"
 
 #define MAX_CHARS 100 * 1024
 #define MAX_BUFF_SIZE 1 * 1024 * 1024
+//阿拉伯特殊字符范围 687 + 143
+#define UNICODE_ARABIC_LIGATURE_START 0xFB50
+#define UNICODE_ARABIC_LIGATURE_END 0xFDFF
+#define UNICODE_ARABIC_DECORA_CHAR_START 0xFE70
+#define UNICODE_ARABIC_DECORA_CHAR_END 0xFEFF
 
 static int char_cmp(const void* a, const void* b) {
   wchar_t c1 = *(wchar_t*)a;
@@ -39,70 +47,189 @@ static int char_cmp(const void* a, const void* b) {
   return c1 - c2;
 }
 
-ret_t font_gen(font_t* font, uint16_t font_size, const char* str, const char* output_filename) {
-  uint8_t* buff = (uint8_t*)TKMEM_ALLOC(MAX_BUFF_SIZE);
-  uint32_t size = font_gen_buff(font, font_size, str, buff, MAX_BUFF_SIZE);
+ret_t font_gen(font_t* font, uint16_t font_size, glyph_format_t format, const char* str,
+               const char* output_filename, const char* theme, const char* res_dir,
+               bool_t save_special_char) {
+  str_t tstr;
+  str_t name;
+  wbuffer_t wbuffer;
+  uint32_t size = 0;
+  str_init(&name, 0);
+  str_init(&tstr, 100000);
+  wbuffer_init_extendable(&wbuffer);
 
-  output_res_c_source(output_filename, ASSET_TYPE_FONT, ASSET_TYPE_FONT_BMP, buff, size);
+  str = font_gen_expand_text(str, &tstr);
+  size = font_gen_buff(font, font_size, format, str, &wbuffer, save_special_char);
 
-  TKMEM_FREE(buff);
+  if (strstr(output_filename, ".bin") != NULL) {
+    file_write(output_filename, wbuffer.data, size);
+  } else {
+    char path[MAX_PATH + 1] = {0};
+    if (TK_STR_IS_NOT_EMPTY(res_dir)) {
+      str_append(&name, res_dir);
+      str_append(&name, "/");
+    }
+    path_basename_ex(output_filename, TRUE, path, sizeof(path));
+    str_append(&name, path);
+
+    output_res_c_source_ex(output_filename, theme, ASSET_TYPE_FONT, ASSET_TYPE_FONT_BMP,
+                           wbuffer.data, size, name.str);
+  }
+
+  str_reset(&tstr);
+  str_reset(&name);
+  wbuffer_deinit(&wbuffer);
 
   return RET_OK;
 }
 
-uint32_t font_gen_buff(font_t* font, uint16_t font_size, const char* str, uint8_t* output_buff,
-                       uint32_t buff_size) {
+static ret_t fong_convert_alpha8_to_alpha4(glyph_t* from, glyph_t* to) {
+  uint32_t x = 0;
+  uint32_t y = 0;
+  const uint8_t* pfrom = from->data;
+  uint8_t* p = (uint8_t*)(to->data);
+
+  for (y = 0; y < from->h; y++) {
+    for (x = 0; x < from->w; x++) {
+      uint32_t i = x / 2;
+      if ((x % 2) == 0) {
+        p[i] = (pfrom[x] >> 4) & 0x0f;
+      } else {
+        p[i] |= pfrom[x] & 0xf0;
+      }
+    }
+    p += to->pitch;
+    pfrom += from->pitch;
+  }
+
+  return RET_OK;
+}
+
+static ret_t font_gen_glyph(font_t* font, glyph_format_t format, wchar_t c, font_size_t font_size,
+                            glyph_t* g) {
+  static glyph_t gg;
+  static uint8_t buff[200 * 200];
+
+  memset(&gg, 0x00, sizeof(gg));
+  memset(buff, 0x00, sizeof(buff));
+
+  if (font_get_glyph(font, c, font_size, &gg) == RET_OK) {
+    if (!gg.pitch) {
+      gg.pitch = gg.w;
+    }
+    *g = gg;
+
+    if (format != gg.format) {
+      g->data = buff;
+      g->format = format;
+      log_debug("convert %d => %d\n", (int)(gg.format), (int)(format));
+      if (format == GLYPH_FMT_ALPHA4 && gg.format == GLYPH_FMT_ALPHA) {
+        g->pitch = (gg.pitch + 1) / 2;
+
+        return fong_convert_alpha8_to_alpha4(&gg, g);
+      } else if (c != ' ') {
+        assert(!"not supported format yet");
+        return RET_FAIL;
+      }
+    }
+    return RET_OK;
+  } else {
+    return RET_FAIL;
+  }
+}
+
+uint32_t font_gen_buff(font_t* font, uint16_t font_size, glyph_format_t format, const char* str,
+                       wbuffer_t* wbuffer, bool_t save_special_char) {
   int i = 0;
   glyph_t g;
   int size = 0;
-  uint8_t* p = NULL;
   wchar_t wstr[MAX_CHARS];
+  font_vmetrics_t vmetrics = font_get_vmetrics(font, font_size);
 
-  font_bitmap_header_t* header = (font_bitmap_header_t*)output_buff;
-
-  utf8_to_utf16(str, wstr, MAX_CHARS);
+  tk_utf8_to_utf16(str, wstr, MAX_CHARS);
   size = wcslen(wstr);
+  if (save_special_char) {
+    wchar_t* p = wstr + size;
+    // 添加阿拉伯语补充字符范围
+    for (wchar_t c = UNICODE_ARABIC_LIGATURE_START;
+         c <= UNICODE_ARABIC_LIGATURE_END && p < wstr + MAX_CHARS - 1; c++, p++) {
+      *p = c;
+    }
+    for (wchar_t c = UNICODE_ARABIC_DECORA_CHAR_START;
+         c <= UNICODE_ARABIC_DECORA_CHAR_END && p < wstr + MAX_CHARS - 1; c++, p++) {
+      *p = c;
+    }
+    size = p - wstr;
+  }
 
   qsort(wstr, size, sizeof(wchar_t), char_cmp);
   size = unique(wstr, size);
 
+  int32_t header_size = sizeof(font_bitmap_header_t) + (size - 1) * sizeof(font_bitmap_index_t);
+  font_bitmap_header_t* header = (font_bitmap_header_t*)TKMEM_ALLOC(header_size);
+  memset(header, 0, header_size);
+  wbuffer_write_binary(wbuffer, header, header_size);
+
+  header->format = format;
   header->char_nr = size;
   header->font_size = (uint8_t)font_size;
-  header->baseline = (uint8_t)font_get_baseline(font, font_size);
+  header->ascent = vmetrics.ascent;
+  header->descent = vmetrics.descent;
+  header->line_gap = vmetrics.line_gap;
+  header->font_ascender = vmetrics.font_ascender;
+  header->font_descender = vmetrics.font_descender;
 
-  p = (uint8_t*)(header->index + size);
-  return_value_if_fail(buff_size > 512, 0);
-
+  memset(&g, 0x00, sizeof(g));
   for (i = 0; i < size; i++) {
     wchar_t c = wstr[i];
-    font_bitmap_index_t* iter = header->index + i;
 
-    iter->c = c;
-    iter->offset = p - output_buff;
+    header->index[i].c = c;
+    header->index[i].size = 0;
+    header->index[i].offset = wbuffer->cursor;
 
-    if (iswspace(c)) {
-      continue;
-    }
-    printf("%d/%d: 0x%04x\n", i, size, c);
-    if (font_get_glyph(font, c, font_size, &g) == RET_OK) {
-      uint32_t data_size = g.w * g.h;
-      return_value_if_fail(buff_size > (iter->offset + data_size + 4), 0);
+    printf("%d/%d: 0x%04x format=%d w=%d h=%d pitch=%d\n", i, size, c, (int)format, (int)(g.w),
+           (int)(g.h), (int)(g.pitch));
+    if (font_gen_glyph(font, format, c, font_size, &g) == RET_OK) {
+      uint32_t data_size = g.pitch * g.h;
+      header->index[i].gid = g.glyph_index;
 
-      save_uint8(p, g.x);
-      save_uint8(p, g.y);
-      save_uint8(p, g.w);
-      save_uint8(p, g.h);
-      save_uint32(p, g.advance);
+      wbuffer_write_uint32(wbuffer, g.glyph_index);
+      wbuffer_write_uint16(wbuffer, g.chr);
+      wbuffer_write_int16(wbuffer, g.x);
+      wbuffer_write_int16(wbuffer, g.y);
+      wbuffer_write_uint16(wbuffer, g.w);
+      wbuffer_write_uint16(wbuffer, g.h);
+      wbuffer_write_int16(wbuffer, g.advance);
+      wbuffer_write_int16(wbuffer, g.bidi_type);
+      wbuffer_write_uint16(wbuffer, g.str_count);
+      wbuffer_write_uint16(wbuffer, g.glyph_count);
+      wbuffer_write_uint8(wbuffer, g.format);
+      wbuffer_write_uint8(wbuffer, g.pitch);
 
-      memcpy(p, g.data, data_size);
-      p += data_size;
-    } else if (c > 32) {
-      printf("not found %d\n", c);
-      exit(0);
+      if (g.data != NULL) {
+        header->index[i].size = data_size;
+        wbuffer_write_binary(wbuffer, g.data, data_size);
+      }
+
+      if (g.format == GLYPH_FMT_MONO) {
+        bitmap_mono_dump(g.data, g.w, g.h);
+      }
+    } else if (c > 32 && c != 0xfeff) {
+      wchar_t arr[] = {c};
+      char utf8_arr[32] = {0};
+      memset(utf8_arr, 0x00, sizeof(utf8_arr));
+      tk_utf8_from_utf16(arr, utf8_arr, sizeof(utf8_arr));
+      printf("Warnning: not find char 0x%04x('%s') in TTF\n", c, utf8_arr);
+      header->index[i].offset = 0;
     } else {
-      iter->offset = 0;
+      header->index[i].offset = 0;
     }
   }
+  size = wbuffer->cursor;
+  wbuffer->cursor = 0;
+  wbuffer_write_binary(wbuffer, header, header_size);
+  wbuffer->cursor = size;
+  TKMEM_FREE(header);
 
-  return p - output_buff;
+  return size;
 }

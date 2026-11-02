@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  bsvg
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,11 +22,14 @@
 #ifndef TK_BSVG_H
 #define TK_BSVG_H
 
-#include "svg/svg_shape.h"
 #include "svg/bsvg_common.h"
 
 BEGIN_C_DECLS
 
+/**
+ * @class bsvg_t
+ * SVG的二进制格式。
+ */
 typedef struct _bsvg_t {
   uint32_t size;
   const uint32_t* data;
@@ -34,6 +37,17 @@ typedef struct _bsvg_t {
 } bsvg_t;
 
 const uint8_t* bsvg_visit_path(const uint8_t* p, void* ctx, tk_visit_t on_path);
+
+/**
+ * @method bsvg_init
+ * 初始化bsvg对象。
+ *
+ * @param {bsvg_t*} svg svg对象。
+ * @param {const uint32_t*} data svg数据。
+ * @param {uint32_t} size data长度。
+ *
+ * @return {bsvg_t*} 返回解析后的svg。
+ */
 bsvg_t* bsvg_init(bsvg_t* svg, const uint32_t* data, uint32_t size);
 ret_t bsvg_visit(bsvg_t* svg, void* ctx, tk_visit_t on_shape, tk_visit_t on_path);
 

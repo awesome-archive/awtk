@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  mledit
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -42,7 +42,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[mledit.xml](
- * https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/mledit.xml)
+ * https://github.com/zlgopen/awtk/blob/master/design/default/ui/mledit.xml)
  *
  * 在c代码中使用函数mledit\_create创建多行编辑器控件。如：
  *
@@ -60,48 +60,41 @@ typedef struct _mledit_t {
   widget_t widget;
 
   /**
-   * @property {bool_t} readonly
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 编辑器是否为只读。
-   */
-  bool_t readonly;
-  /**
-   * @property {uint8_t} top_margin
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 上边距。
-   */
-  uint8_t top_margin;
-  /**
-   * @property {uint8_t} bottom_margin
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 下边距。
-   */
-  uint8_t bottom_margin;
-  /**
-   * @property {uint8_t} left_margin
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 左边距。
-   */
-  uint8_t left_margin;
-  /**
-   * @property {uint8_t} right_margin
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 右边距。
-   */
-  uint8_t right_margin;
-  /**
    * @property {char*} tips
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 输入提示。
    */
   char* tips;
   /**
-   * @property {bool_t} focus
+   * @property {char*} tr_tips
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 设置为焦点(通常用于在XML中缺省设置为焦点控件)。
+   * 保存用于翻译的提示信息。
    */
-  bool_t focus;
-
+  char* tr_tips;
+  /**
+   * @property {char*} keyboard
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 自定义软键盘名称。
+   */
+  char* keyboard;
+  /**
+   * @property {uint32_t} max_lines
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 最大行数。
+   */
+  uint32_t max_lines;
+  /**
+   * @property {uint32_t} max_chars
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 最大字符数。
+   */
+  uint32_t max_chars;
+  /**
+   * @property {bool_t} overwrite
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否启用覆盖行。
+   */
+  bool_t overwrite;
   /**
    * @property {bool_t} wrap_word
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
@@ -110,18 +103,105 @@ typedef struct _mledit_t {
   bool_t wrap_word;
 
   /**
-   * @property {uint32_t} max_lines
+   * @property {bool_t} partial_layout
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 最大行数。
+   * 是否只 layout 可见区域。(默认不开启)
    */
-  uint32_t max_lines;
+  bool_t partial_layout;
+
+  /**
+   * @property {bool_t} readonly
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 编辑器是否为只读。
+   */
+  bool_t readonly;
+
+  /**
+   * @property {bool_t} cancelable
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否支持撤销编辑。如果为TRUE，在失去焦点之前可以撤销所有修改(恢复获得焦点之前的内容)。
+   *
+   * > * 1.一般配合keyboard的"cancel"按钮使用。
+   * > * 2.为TRUE时，如果内容有变化，会设置编辑器的状态为changed，所以此时编辑器需要支持changed状态的style。
+   */
+  bool_t cancelable;
+  /**
+   * @property {bool_t} open_im_when_focused
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 获得焦点时打开输入法。
+   *
+   * > 主要用于没有指针设备的情况，否则每次切换焦点时都打开输入法。
+   */
+  bool_t open_im_when_focused;
+  /**
+   * @property {bool_t} close_im_when_blured
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 
+   * 是否在失去焦点时关闭输入法(默认是)。
+   *
+   */
+  bool_t close_im_when_blured;
+  /**
+   * @property {bool_t} accept_return
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 
+   * 是否支持 Enter 按钮输入。
+   *
+   */
+  bool_t accept_return;
+  /**
+   * @property {bool_t} accept_tab
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 
+   * 是否支持 Tab 按钮输入。
+   *
+   */
+  bool_t accept_tab;
+  /**
+   * @property {bool_t} auto_adjust_height
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否根据文本自动调整控件自身高度。
+   */
+  bool_t auto_adjust_height;
+
+  /**
+   * @property {wstr_t} text
+   * @annotation ["set_prop","get_prop","readable","persitent","design","fake","inputable"]
+   * 文本。
+   */
 
   /*private*/
+  bool_t lock_scrollbar_value;
+  uint8_t margin;
+  uint8_t top_margin;
+  uint8_t left_margin;
+  uint8_t right_margin;
+  uint8_t bottom_margin;
+
+  bool_t is_key_inputing;
+  bool_t is_activated;
+
+  // 是否打开软键盘
+  bool_t is_open_input_method;
+
   text_edit_t* model;
   uint32_t timer_id;
 
   wstr_t temp;
+  wstr_t saved_text;
+  wstr_t last_changing_text;
+  wstr_t last_changed_text;
 } mledit_t;
+
+/**
+ * @event {value_change_event_t} EVT_VALUE_CHANGING
+ * 文本正在改变事件(编辑中)。
+ */
+
+/**
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
+ * 文本改变事件(编辑完成或设置文本时触发)。
+ */
 
 /**
  * @method mledit_create
@@ -149,6 +229,28 @@ widget_t* mledit_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 ret_t mledit_set_readonly(widget_t* widget, bool_t readonly);
 
 /**
+ * @method mledit_set_cancelable
+ * 设置编辑器是否为可撤销修改。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} cancelable 是否为可撤销修。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_cancelable(widget_t* widget, bool_t cancelable);
+
+/**
+ * @method mledit_set_focus
+ * 设置为焦点。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} focus 是否为焦点。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_focus(widget_t* widget, bool_t focus);
+
+/**
  * @method mledit_set_wrap_word
  * 设置编辑器是否自动折行。
  * @annotation ["scriptable"]
@@ -158,6 +260,28 @@ ret_t mledit_set_readonly(widget_t* widget, bool_t readonly);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t mledit_set_wrap_word(widget_t* widget, bool_t wrap_word);
+
+/**
+ * @method mledit_set_partial_layout
+ * 设置是否只 layout 可见区域。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} partial_layout 是否只 layout 可见区域。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_partial_layout(widget_t* widget, bool_t partial_layout);
+
+/**
+ * @method mledit_set_overwrite
+ * 设置编辑器是否启用覆盖行（在行数达到最大行数时，可继续新增行，但最早的行将会消失）。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} overwrite 是否启用覆盖行。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_overwrite(widget_t* widget, bool_t overwrite);
 
 /**
  * @method mledit_set_max_lines
@@ -171,15 +295,252 @@ ret_t mledit_set_wrap_word(widget_t* widget, bool_t wrap_word);
 ret_t mledit_set_max_lines(widget_t* widget, uint32_t max_lines);
 
 /**
- * @method mledit_set_input_tips
- * 设置编辑器的输入提示。
+ * @method mledit_set_max_chars
+ * 设置编辑器的最大字符数（0 为不限制字符数）。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
- * @param {char*} tips 输入提示。
+ * @param {uint32_t} max_chars 最大字符数。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t mledit_set_input_tips(widget_t* widget, const char* tips);
+ret_t mledit_set_max_chars(widget_t* widget, uint32_t max_chars);
+
+/**
+ * @method mledit_set_tips
+ * 设置编辑器的输入提示。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {const char*} tips 输入提示。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_tips(widget_t* widget, const char* tips);
+
+/**
+ * @method mledit_set_tr_tips
+ * 获取翻译之后的文本，然后调用mledit_set_tips。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*}  tr_tips 提示信息。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_tr_tips(widget_t* widget, const char* tr_tips);
+
+/**
+ * @method mledit_set_keyboard
+ * 设置自定义软键盘名称。
+ * 
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {const char*} keyboard 键盘名称(相应UI资源必须存在)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_keyboard(widget_t* widget, const char* keyboard);
+
+/**
+ * @method mledit_set_cursor
+ * 设置编辑器光标位置。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} cursor 光标位置。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_cursor(widget_t* widget, uint32_t cursor);
+
+/**
+ * @method mledit_get_cursor
+ * 获取编辑器光标位置。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ *
+ * @return {uint32_t} 返回光标位置。
+ */
+uint32_t mledit_get_cursor(widget_t* widget);
+
+/**
+ * @method mledit_scroll_to_offset
+ * 设置编辑器滚动到指定偏移位置。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} offset 偏移位置。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_scroll_to_offset(widget_t* widget, uint32_t offset);
+
+/**
+ * @method mledit_set_open_im_when_focused
+ * 设置编辑器是否在获得焦点时打开输入法。
+ *
+ *> * 设置默认焦点时，打开窗口时不弹出软键盘。
+ *> * 用键盘切换焦点时，编辑器获得焦点时不弹出软键盘。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} open_im_when_focused 是否在获得焦点时打开输入法。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_open_im_when_focused(widget_t* widget, bool_t open_im_when_focused);
+
+/**
+ * @method mledit_set_close_im_when_blured
+ * 设置编辑器是否在失去焦点时关闭输入法。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} close_im_when_blured 是否是否在失去焦点时关闭输入法。在失去焦点时关闭输入法。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_close_im_when_blured(widget_t* widget, bool_t close_im_when_blured);
+
+/**
+ * @method mledit_set_select
+ * 选择编辑器中指定范围的文本。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} start 起始偏移。
+ * @param {uint32_t} end 结束偏移。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_set_select(widget_t* widget, uint32_t start, uint32_t end);
+
+/**
+ * @method mledit_get_selected_text
+ * 获取选中的文本。
+ * 使用完后需调用 TKMEM_FREE() 进行释放文本占有内存。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ *
+ * @return {char*} 返回选中文本。
+ */
+char* mledit_get_selected_text(widget_t* widget);
+
+/**
+ * @method mledit_get_current_line_index
+ * 获取光标所在视觉行号(一行文本可能分多行显示)。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ *
+ * @return {uint32_t} 返回光标所在行号。
+ */
+uint32_t mledit_get_current_line_index(widget_t* widget);
+
+/**
+ * @method mledit_get_current_row_index
+ * 获取光标所在物理行号。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ *
+ * @return {uint32_t} 返回光标所在行号。
+ */
+uint32_t mledit_get_current_row_index(widget_t* widget);
+
+/**
+ * @method mledit_get_start_line_index
+ * 获取当前显示部分的起始视觉行号(一行文本可能分多行显示)。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ *
+ * @return {int32_t} 返回行号。
+ */
+int32_t mledit_get_start_line_index(widget_t* widget);
+
+/**
+ * @method mledit_get_start_row_index
+ * 获取当前显示部分的起始物理行号。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ *
+ * @return {int32_t} 返回行号。
+ */
+int32_t mledit_get_start_row_index(widget_t* widget);
+
+/**
+ * @method mledit_get_offset_at_line
+ * 获取指定视觉行对应的偏移位置。
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} line 行号。
+ * @param {uint32_t*} start 起始偏移。
+ * @param {uint32_t*} end 结束偏移。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_get_offset_at_line(widget_t* widget, uint32_t line, uint32_t* start, uint32_t* end);
+
+/**
+ * @method mledit_get_offset_at_row
+ * 获取指定物理行对应的偏移位置。
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} row 行号。
+ * @param {uint32_t*} start 起始偏移。
+ * @param {uint32_t*} end 结束偏移。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_get_offset_at_row(widget_t* widget, uint32_t row, uint32_t* start, uint32_t* end);
+
+/**
+ * @method mledit_get_line_at
+ * 获取指定偏移所在的视觉行号(一行文本可能分多行显示)。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} offset 偏移。
+ *
+ * @return {int32_t} 返回行号，不在范围内则返回-1。
+ */
+int32_t mledit_get_line_at(widget_t* widget, uint32_t offset);
+
+/**
+ * @method mledit_get_row_at
+ * 获取指定偏移所在的物理行号。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} offset 偏移。
+ *
+ * @return {int32_t} 返回行号，不在范围内则返回-1。
+ */
+int32_t mledit_get_row_at(widget_t* widget, uint32_t offset);
+
+/**
+ * @method mledit_get_row_of_line
+ * 获取指定视觉行号所在的物理行号。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} line 视觉行号。
+ *
+ * @return {int32_t} 返回物理行号，不在范围内则返回-1。
+ */
+int32_t mledit_get_row_of_line(widget_t* widget, uint32_t line);
+
+/**
+ * @method mledit_get_line_of_row
+ * 获取指定物理行号所在的视觉行号。
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} row 物理行号。
+ * @param {uint32_t*} start 起始视觉行号。
+ * @param {uint32_t*} end 结束视觉行号。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_get_line_of_row(widget_t* widget, uint32_t row, uint32_t* start, uint32_t* end);
+
+/**
+ * @method mledit_insert_text
+ * 插入一段文本。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {uint32_t} offset 插入的偏移位置。
+ * @param {const char*} text 待插入的文本。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mledit_insert_text(widget_t* widget, uint32_t offset, const char* text);
 
 /**
  * @method mledit_cast
@@ -194,8 +555,16 @@ widget_t* mledit_cast(widget_t* widget);
 #define WIDGET_TYPE_MLEDIT "mledit"
 
 #define MLEDIT_PROP_MAX_LINES "max_lines"
+#define MLEDIT_PROP_MAX_CHARS "max_chars"
 #define MLEDIT_PROP_WRAP_WORD "wrap_word"
+#define MLEDIT_PROP_PARTIAL_LAYOUT "partial_layout"
+#define MLEDIT_PROP_OVERWRITE "overwrite"
+#define MLEDIT_PROP_AUTO_ADJUST_HEIGHT "auto_adjust_height"
+
 #define MLEDIT(widget) ((mledit_t*)(mledit_cast(WIDGET(widget))))
+
+/*for compatability*/
+#define mledit_set_input_tips(w, t) mledit_set_tips(w, t)
 
 /*public for subclass and runtime type check*/
 TK_EXTERN_VTABLE(mledit);

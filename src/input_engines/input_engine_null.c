@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  null input method engine
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,6 +22,9 @@
 #include "tkc/mem.h"
 #include "tkc/buffer.h"
 #include "base/input_engine.h"
+#include "base/input_method.h"
+
+#ifdef WITH_IME_NULL
 
 static ret_t input_engine_null_reset_input(input_engine_t* engine) {
   (void)engine;
@@ -29,34 +32,33 @@ static ret_t input_engine_null_reset_input(input_engine_t* engine) {
   return RET_OK;
 }
 
-static ret_t input_engine_null_input(input_engine_t* engine, int c) {
-  wbuffer_t wb;
-  wbuffer_init(&wb, (uint8_t*)(engine->candidates), sizeof(engine->candidates));
+static ret_t input_engine_null_search(input_engine_t* engine, const char* keys) {
+  uint32_t keys_size = strlen(keys);
+  return_value_if_fail(engine != NULL && keys != NULL, RET_BAD_PARAMS);
+  input_engine_reset_candidates(engine);
 
-  (void)c;
-  if (engine->keys.size > 0) {
-    wbuffer_write_string(&wb, engine->keys.str);
-    wbuffer_write_string(&wb, "广");
-    wbuffer_write_string(&wb, "州");
-    wbuffer_write_string(&wb, "致");
-    wbuffer_write_string(&wb, "远");
-    wbuffer_write_string(&wb, "电子");
-    wbuffer_write_string(&wb, "有限公司");
-    engine->candidates_nr = 8;
-  } else {
-    engine->candidates_nr = 0;
+  if (keys_size > 0) {
+    input_engine_add_candidate(engine, keys);
+    input_engine_add_candidate(engine, "广");
+    input_engine_add_candidate(engine, "州");
+    input_engine_add_candidate(engine, "致");
+    input_engine_add_candidate(engine, "远");
+    input_engine_add_candidate(engine, "电子");
+    input_engine_add_candidate(engine, "有限公司");
+    input_engine_dispatch_candidates(engine, 0);
   }
 
   return RET_OK;
 }
 
-input_engine_t* input_engine_create(void) {
+input_engine_t* input_engine_create(input_method_t* im) {
   input_engine_t* engine = TKMEM_ZALLOC(input_engine_t);
   return_value_if_fail(engine != NULL, NULL);
 
   str_init(&(engine->keys), TK_IM_MAX_INPUT_CHARS + 1);
   engine->reset_input = input_engine_null_reset_input;
-  engine->input = input_engine_null_input;
+  engine->search = input_engine_null_search;
+  engine->im = im;
 
   return engine;
 }
@@ -68,3 +70,4 @@ ret_t input_engine_destroy(input_engine_t* engine) {
 
   return RET_OK;
 }
+#endif /*WITH_IME_NULL*/

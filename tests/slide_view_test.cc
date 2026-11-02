@@ -2,6 +2,7 @@
 #include "gtest/gtest.h"
 #include "widgets/button.h"
 #include "slide_view/slide_view.h"
+#include "slide_view/slide_indicator.h"
 #include <string>
 
 using std::string;
@@ -34,20 +35,20 @@ TEST(SlideView, basic) {
   widget_on(w, EVT_VALUE_CHANGED, slide_view_on_change, &str);
 
   slide_view_set_active(w, 0);
-  ASSERT_EQ(slide_view->active, 0);
+  ASSERT_EQ(slide_view->active, 0u);
   ASSERT_EQ(slide_view_get_prev(slide_view), WIDGET(NULL));
   ASSERT_EQ(slide_view_get_next(slide_view), b2);
 
   ASSERT_EQ(slide_view_activate_prev(slide_view), RET_FAIL);
   ASSERT_EQ(slide_view_activate_next(slide_view), RET_OK);
-  ASSERT_EQ(slide_view->active, 1);
+  ASSERT_EQ(slide_view->active, 1u);
   ASSERT_EQ(str, "will_changed:changed:");
 
   ASSERT_EQ(slide_view_activate_next(slide_view), RET_OK);
-  ASSERT_EQ(slide_view->active, 2);
+  ASSERT_EQ(slide_view->active, 2u);
 
   ASSERT_EQ(slide_view_activate_next(slide_view), RET_FAIL);
-  ASSERT_EQ(slide_view->active, 2);
+  ASSERT_EQ(slide_view->active, 2u);
 
   ASSERT_EQ(slide_view_get_prev(slide_view), b2);
   ASSERT_EQ(slide_view_get_next(slide_view), WIDGET(NULL));
@@ -123,4 +124,21 @@ TEST(SlideView, cast) {
   ASSERT_EQ(w, slide_view_cast(w));
 
   widget_destroy(w);
+}
+
+TEST(SlideIndicator, props) {
+  widget_t* w = slide_indicator_create(NULL, 0, 0, 400, 300);
+  ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_ANCHOR_X, "0.5"), RET_OK);
+  ASSERT_STREQ(widget_get_prop_str(w, WIDGET_PROP_ANCHOR_X, NULL), "0.5");
+
+  ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_ANCHOR_X, "100px"), RET_OK);
+  ASSERT_STREQ(widget_get_prop_str(w, WIDGET_PROP_ANCHOR_X, NULL), "100px");
+
+  ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_ANCHOR_Y, "0.5"), RET_OK);
+  ASSERT_STREQ(widget_get_prop_str(w, WIDGET_PROP_ANCHOR_Y, NULL), "0.5");
+
+  ASSERT_EQ(widget_set_prop_str(w, WIDGET_PROP_ANCHOR_Y, "100px"), RET_OK);
+  ASSERT_STREQ(widget_get_prop_str(w, WIDGET_PROP_ANCHOR_Y, NULL), "100px");
+
+  widget_destroy_sync(w);
 }

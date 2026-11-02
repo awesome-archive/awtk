@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  input method sdl
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2020  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,9 +19,11 @@
  *
  */
 
-#include <SDL.h>
+#include "platforms/pc/sdl_api.h"
 #include "tkc/mem.h"
 #include "base/input_method.h"
+#include "base/native_window.h"
+#include "base/window_manager.h"
 #include "main_loop/main_loop_simple.h"
 
 static ret_t input_method_sdl_request(input_method_t* im, widget_t* widget) {
@@ -35,12 +37,35 @@ static ret_t input_method_sdl_request(input_method_t* im, widget_t* widget) {
     r.x = p.x;
     r.y = p.y;
     r.w = widget->w;
-    r.h = widget->h;
+    r.h = 16; // 默认预编辑区字号，作为兜底
 
+#ifdef AWTK_SDL3
+    {
+      native_window_t* nw =
+          (native_window_t*)widget_get_prop_pointer(window_manager(), WIDGET_PROP_NATIVE_WINDOW);
+      SDL_Window* win = nw != NULL ? (SDL_Window*)nw->handle : NULL;
+      if (win != NULL) {
+        SDL_StartTextInput(win);
+        SDL_SetTextInputArea(win, &r, 0);
+      }
+    }
+#else
     SDL_StartTextInput();
     SDL_SetTextInputRect(&r);
+#endif
   } else {
+#ifdef AWTK_SDL3
+    {
+      native_window_t* nw =
+          (native_window_t*)widget_get_prop_pointer(window_manager(), WIDGET_PROP_NATIVE_WINDOW);
+      SDL_Window* win = nw != NULL ? (SDL_Window*)nw->handle : NULL;
+      if (win != NULL) {
+        SDL_StopTextInput(win);
+      }
+    }
+#else
     SDL_StopTextInput();
+#endif
   }
 
   return RET_OK;
@@ -59,6 +84,7 @@ input_method_t* input_method_sdl_create(void) {
   input_method_t* im = TKMEM_ZALLOC(input_method_t);
   return_value_if_fail(im != NULL, NULL);
 
+  im->is_native = TRUE;
   im->request = input_method_sdl_request;
   im->destroy = input_method_sdl_destroy;
 

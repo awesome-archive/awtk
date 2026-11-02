@@ -2,16 +2,15 @@
 ### 概述
 ![image](images/window_event_t_0.png)
 
- 窗口事件，由窗口管理器触发。
-
+窗口事件，由窗口管理器触发。
 ----------------------------------
 ### 函数
 <p id="window_event_t_methods">
 
 | 函数名称 | 说明 | 
 | -------- | ------------ | 
-| <a href="#window_event_t_pointer_event_rotate">pointer\_event\_rotate</a> | 根据屏幕旋转方向修正pointer_event中的坐标。 |
-| <a href="#window_event_t_window_event_cast">window\_event\_cast</a> | 把event对象转window_event_t对象。主要给脚本语言使用。 |
+| <a href="#window_event_t_pointer_event_rotate">pointer\_event\_rotate</a> | 根据屏幕旋转方向修正pointer_event中的坐标。(旋转方向为逆时针) |
+| <a href="#window_event_t_window_event_cast">window\_event\_cast</a> | 把event对象转window_event_t对象。 |
 | <a href="#window_event_t_window_event_init">window\_event\_init</a> | 初始化事件。 |
 ### 属性
 <p id="window_event_t_properties">
@@ -24,9 +23,7 @@
 
 * 函数功能：
 
-> <p id="window_event_t_pointer_event_rotate"> 根据屏幕旋转方向修正pointer_event中的坐标。
-
-
+> <p id="window_event_t_pointer_event_rotate">根据屏幕旋转方向修正pointer_event中的坐标。(旋转方向为逆时针)
 
 * 函数原型：
 
@@ -46,9 +43,7 @@ ret_t pointer_event_rotate (pointer_event_t* evt, system_info_t* info);
 
 * 函数功能：
 
-> <p id="window_event_t_window_event_cast"> 把event对象转window_event_t对象。主要给脚本语言使用。
-
-
+> <p id="window_event_t_window_event_cast">把event对象转window_event_t对象。
 
 * 函数原型：
 
@@ -67,14 +62,12 @@ window_event_t* window_event_cast (event_t* event);
 
 * 函数功能：
 
-> <p id="window_event_t_window_event_init"> 初始化事件。
-
-
+> <p id="window_event_t_window_event_init">初始化事件。
 
 * 函数原型：
 
 ```
-event_t* window_event_init (window_event_t* event, void* target, uint32_t type, widget_t* widget);
+event_t* window_event_init (window_event_t* event, uint32_t type, void* target, widget_t* widget);
 ```
 
 * 参数说明：
@@ -83,13 +76,12 @@ event_t* window_event_init (window_event_t* event, void* target, uint32_t type, 
 | -------- | ----- | --------- |
 | 返回值 | event\_t* | event对象。 |
 | event | window\_event\_t* | event对象。 |
-| target | void* | 事件目标。 |
 | type | uint32\_t | 事件类型。 |
+| target | void* | 事件目标。 |
 | widget | widget\_t* | window对象。 |
 #### window 属性
 -----------------------
-> <p id="window_event_t_window"> canvas。
-
+> <p id="window_event_t_window">canvas。
 
 * 类型：widget\_t*
 

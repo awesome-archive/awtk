@@ -2,33 +2,25 @@
 ### 概述
 ![image](images/ui_builder_default_t_0.png)
 
-
-
- 构建widget树。
-
-
+构建widget树。
 ----------------------------------
 ### 函数
 <p id="ui_builder_default_t_methods">
 
 | 函数名称 | 说明 | 
 | -------- | ------------ | 
-| <a href="#ui_builder_default_t_ui_builder_default">ui\_builder\_default</a> |  |
-#### ui\_builder\_default 函数
+| <a href="#ui_builder_default_t_ui_builder_default_create">ui\_builder\_default\_create</a> | 创建缺省的ui\_builder对象。 |
+#### ui\_builder\_default\_create 函数
 -----------------------
 
 * 函数功能：
 
-> <p id="ui_builder_default_t_ui_builder_default">
- 获取缺省的ui\_builder对象。
-
-
-
+> <p id="ui_builder_default_t_ui_builder_default_create">创建缺省的ui\_builder对象。
 
 * 函数原型：
 
 ```
-ui_builder_t* ui_builder_default (const char* name);
+ui_builder_t* ui_builder_default_create (const char* name);
 ```
 
 * 参数说明：

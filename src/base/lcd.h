@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  lcd interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,7 +26,9 @@
 #include "base/font.h"
 #include "tkc/matrix.h"
 #include "base/bitmap.h"
+#include "base/dirty_rects.h"
 #include "base/vgcanvas.h"
+#include "base/lcd_fb_dirty_rects.h"
 
 BEGIN_C_DECLS
 
@@ -38,13 +40,24 @@ typedef struct _draw_image_info_t {
   matrix_t matrix;
 } draw_image_info_t;
 
-struct _lcd_t;
-typedef struct _lcd_t lcd_t;
+typedef int32_t (*lcd_get_type_t)(lcd_t* lcd);
+typedef bool_t (*lcd_is_support_dirty_rect_t)(lcd_t* lcd);
+typedef ret_t (*lcd_set_vgcanvas_t)(lcd_t* lcd, vgcanvas_t* vg);
+typedef ret_t (*lcd_set_line_length_t)(lcd_t* lcd, uint32_t line_length);
+typedef ret_t (*lcd_set_canvas_t)(lcd_t* lcd, canvas_t* c);
+typedef ret_t (*lcd_get_dirty_rect_t)(lcd_t* lcd, rect_t* r);
+typedef const dirty_rects_t* (*lcd_get_dirty_rects_t)(lcd_t* lcd);
 
-typedef ret_t (*lcd_begin_frame_t)(lcd_t* lcd, rect_t* dirty_rect);
-typedef ret_t (*lcd_set_clip_rect_t)(lcd_t* lcd, rect_t* rect);
+typedef ret_t (*lcd_begin_frame_t)(lcd_t* lcd, const dirty_rects_t* dirty_rects);
+typedef bool_t (*lcd_is_rect_in_clip_rect_t)(lcd_t* lcd, xy_t left, xy_t top, xy_t right,
+                                             xy_t bottom);
+typedef ret_t (*lcd_set_clip_rect_t)(lcd_t* lcd, const rect_t* rect);
 typedef ret_t (*lcd_get_clip_rect_t)(lcd_t* lcd, rect_t* rect);
+typedef ret_t (*lcd_set_orientation_t)(lcd_t* lcd, lcd_orientation_t old_orientation,
+                                       lcd_orientation_t new_orientation);
 typedef ret_t (*lcd_resize_t)(lcd_t* lcd, wh_t w, wh_t h, uint32_t line_length);
+typedef ret_t (*lcd_get_text_metrics_t)(lcd_t* lcd, float_t* ascent, float_t* descent,
+                                        float_t* line_hight);
 
 typedef ret_t (*lcd_set_global_alpha_t)(lcd_t* lcd, uint8_t alpha);
 typedef ret_t (*lcd_set_text_color_t)(lcd_t* lcd, color_t color);
@@ -53,26 +66,33 @@ typedef ret_t (*lcd_set_fill_color_t)(lcd_t* lcd, color_t color);
 typedef ret_t (*lcd_set_font_name_t)(lcd_t* lcd, const char* name);
 typedef ret_t (*lcd_set_font_size_t)(lcd_t* lcd, uint32_t size);
 
+typedef ret_t (*lcd_draw_image_repeat_t)(lcd_t* lcd, bitmap_t* img, const rect_t* src_in,
+                                         const rect_t* dst_in, wh_t dst_w, wh_t dst_h);
+
 typedef ret_t (*lcd_draw_vline_t)(lcd_t* lcd, xy_t x, xy_t y, wh_t h);
 typedef ret_t (*lcd_draw_hline_t)(lcd_t* lcd, xy_t x, xy_t y, wh_t w);
 typedef ret_t (*lcd_draw_points_t)(lcd_t* lcd, point_t* points, uint32_t nr);
 typedef color_t (*lcd_get_point_color_t)(lcd_t* lcd, xy_t x, xy_t y);
 
 typedef ret_t (*lcd_fill_rect_t)(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h);
+typedef ret_t (*lcd_clear_rect_t)(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h);
 typedef ret_t (*lcd_stroke_rect_t)(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h);
 
-typedef ret_t (*lcd_draw_glyph_t)(lcd_t* lcd, glyph_t* glyph, rect_t* src, xy_t x, xy_t y);
+typedef ret_t (*lcd_draw_glyph_t)(lcd_t* lcd, glyph_t* glyph, const rect_t* src, xy_t x, xy_t y);
 typedef float_t (*lcd_measure_text_t)(lcd_t* lcd, const wchar_t* str, uint32_t nr);
 typedef ret_t (*lcd_draw_text_t)(lcd_t* lcd, const wchar_t* str, uint32_t nr, xy_t x, xy_t y);
+typedef ret_t (*lcd_draw_text_by_glyphs_t)(lcd_t* lcd, glyphs_t* glyphs, uint32_t start, uint32_t len, xy_t x, xy_t y);
 
-typedef ret_t (*lcd_draw_image_t)(lcd_t* lcd, bitmap_t* img, rect_t* src, rect_t* dst);
+typedef ret_t (*lcd_draw_image_t)(lcd_t* lcd, bitmap_t* img, const rectf_t* src,
+                                  const rectf_t* dst);
 typedef ret_t (*lcd_draw_image_matrix_t)(lcd_t* lcd, draw_image_info_t* info);
 typedef vgcanvas_t* (*lcd_get_vgcanvas_t)(lcd_t* lcd);
-typedef ret_t (*lcd_take_snapshot_t)(lcd_t* lcd, bitmap_t* img, bool_t auto_rotate);
 typedef bitmap_format_t (*lcd_get_desired_bitmap_format_t)(lcd_t* lcd);
 
 typedef wh_t (*lcd_get_width_t)(lcd_t* lcd);
 typedef wh_t (*lcd_get_height_t)(lcd_t* lcd);
+typedef wh_t (*lcd_get_physical_width_t)(lcd_t* lcd);
+typedef wh_t (*lcd_get_physical_height_t)(lcd_t* lcd);
 typedef ret_t (*lcd_swap_t)(lcd_t* lcd);
 typedef ret_t (*lcd_flush_t)(lcd_t* lcd);
 typedef ret_t (*lcd_sync_t)(lcd_t* lcd);
@@ -139,7 +159,22 @@ typedef enum _lcd_type_t {
    * @const LCD_VGCANVAS
    * 基于VGCANVS的LCD。仅在支持OpenGL时，用nanovg实现。
    */
-  LCD_VGCANVAS
+  LCD_VGCANVAS,
+  /**
+   * @const LCD_MONO
+   * 单色LCD。
+   */
+  LCD_MONO,
+  /**
+   * @const LCD_CLUT
+   * 颜色表 LCD。
+   */
+  LCD_CLUT,
+  /**
+   * @const LCD_COMPOSITOR
+   * 复合LCD。用于同时使用多个 LCD 的情况
+   */
+  LCD_COMPOSITOR
 } lcd_type_t;
 
 /**
@@ -150,33 +185,47 @@ struct _lcd_t {
   lcd_begin_frame_t begin_frame;
   lcd_set_clip_rect_t set_clip_rect;
   lcd_get_clip_rect_t get_clip_rect;
+  lcd_is_rect_in_clip_rect_t is_rect_in_clip_rect;
   lcd_set_global_alpha_t set_global_alpha;
   lcd_set_text_color_t set_text_color;
   lcd_set_stroke_color_t set_stroke_color;
   lcd_set_fill_color_t set_fill_color;
   lcd_set_font_name_t set_font_name;
   lcd_set_font_size_t set_font_size;
+  lcd_get_text_metrics_t get_text_metrics;
   lcd_draw_vline_t draw_vline;
   lcd_draw_hline_t draw_hline;
   lcd_fill_rect_t fill_rect;
+  lcd_clear_rect_t clear_rect;
   lcd_stroke_rect_t stroke_rect;
   lcd_draw_image_t draw_image;
   lcd_draw_image_matrix_t draw_image_matrix;
   lcd_draw_glyph_t draw_glyph;
   lcd_draw_text_t draw_text;
+  lcd_draw_text_by_glyphs_t draw_text_by_glyphs;
   lcd_measure_text_t measure_text;
   lcd_draw_points_t draw_points;
+  lcd_draw_image_repeat_t draw_image_repeat;
   lcd_get_point_color_t get_point_color;
-  lcd_swap_t swap; /*适用于double fb，可选*/
+  lcd_swap_t swap; /*适用于有两个或更多fb的情况，可选*/
   lcd_get_width_t get_width;
   lcd_get_height_t get_height;
+  lcd_get_physical_width_t get_physical_width;
+  lcd_get_physical_height_t get_physical_height;
   lcd_flush_t flush;
   lcd_sync_t sync;
   lcd_end_frame_t end_frame;
   lcd_get_vgcanvas_t get_vgcanvas;
-  lcd_take_snapshot_t take_snapshot;
   lcd_get_desired_bitmap_format_t get_desired_bitmap_format;
+  lcd_set_vgcanvas_t set_vgcanvas;
+  lcd_set_line_length_t set_line_length;
+  lcd_get_type_t get_type;
+  lcd_get_dirty_rect_t get_dirty_rect;
+  lcd_get_dirty_rects_t get_dirty_rects;
+  lcd_is_support_dirty_rect_t is_support_dirty_rect;
+  lcd_set_canvas_t set_canvas;
   lcd_resize_t resize;
+  lcd_set_orientation_t set_orientation;
   lcd_destroy_t destroy;
 
   /**
@@ -186,17 +235,11 @@ struct _lcd_t {
    */
   wh_t w;
   /**
-   * @property {wh_t} height
+   * @property {wh_t} h
    * @annotation ["readable"]
    * 屏幕的高度
    */
   wh_t h;
-  /**
-   * @property {uint8_t} global_alpha
-   * @annotation ["readable"]
-   * 全局alpha
-   */
-  uint8_t global_alpha;
   /**
    * @property {color_t} text_color
    * @annotation ["readable"]
@@ -220,7 +263,7 @@ struct _lcd_t {
    * @annotation ["readable"]
    * 字体名称。
    */
-  const char* font_name;
+  char* font_name;
   /**
    * @property {uint32_t} font_size
    * @annotation ["readable"]
@@ -241,14 +284,24 @@ struct _lcd_t {
    * LCD的类型。
    */
   lcd_type_t type;
-
+  /**
+   * @property {uint64_t} last_update_time
+   * @annotation ["readable"]
+   * last update time
+   */
+  uint64_t last_update_time;
   /**
    * @property {float_t} ratio
    * @annotation ["readable"]
    * 屏幕密度。
    */
   float_t ratio;
-
+  /**
+   * @property {uint8_t} global_alpha
+   * @annotation ["readable"]
+   * 全局alpha
+   */
+  uint8_t global_alpha;
   /**
    * @property {bool_t} support_dirty_rect
    * @annotation ["readable"]
@@ -256,9 +309,10 @@ struct _lcd_t {
    */
   bool_t support_dirty_rect;
 
+  /*private*/
   rect_t fps_rect;
   rect_t dirty_rect;
-
+  const dirty_rects_t* dirty_rects;
   void* impl_data;
 };
 
@@ -266,22 +320,22 @@ struct _lcd_t {
  * @method lcd_begin_frame
  * 准备绘制。
  * @param {lcd_t*} lcd lcd对象。
- * @param {rect_t*} dirty_rect 需要绘制的区域。
- * @param {lcd_draw_mode_t} anim_mode 动画模式，如果可能，直接画到显存而不是离线的framebuffer。
+ * @param {const dirty_rects_t*} dirty_rects 需要绘制的区域。
+ * @param {lcd_draw_mode_t} draw_mode 绘制模式，如果可能，直接画到显存而不是离线的framebuffer。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t lcd_begin_frame(lcd_t* lcd, rect_t* dirty_rect, lcd_draw_mode_t draw_mode);
+ret_t lcd_begin_frame(lcd_t* lcd, const dirty_rects_t* dirty_rects, lcd_draw_mode_t draw_mode);
 
 /**
  * @method lcd_set_clip_rect
  * 设置裁剪区域。
  * @param {lcd_t*} lcd lcd对象。
- * @param {rect_t*} rect 裁剪区域。
+ * @param {const rect_t*} rect 裁剪区域。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t lcd_set_clip_rect(lcd_t* lcd, rect_t* rect);
+ret_t lcd_set_clip_rect(lcd_t* lcd, const rect_t* rect);
 
 /**
  * @method lcd_get_clip_rect
@@ -372,7 +426,7 @@ ret_t lcd_set_font_size(lcd_t* lcd, uint32_t font_size);
  * @param {lcd_t*} lcd lcd对象。
  * @param {xy_t} x x坐标。
  * @param {xy_t} y y坐标。
- * @param {xy_t} h 直线高度。
+ * @param {wh_t} h 直线高度。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -384,7 +438,7 @@ ret_t lcd_draw_vline(lcd_t* lcd, xy_t x, xy_t y, wh_t h);
  * @param {lcd_t*} lcd lcd对象。
  * @param {xy_t} x x坐标。
  * @param {xy_t} y y坐标。
- * @param {xy_t} w 直线宽度。
+ * @param {wh_t} w 直线宽度。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -426,8 +480,21 @@ color_t lcd_get_point_color(lcd_t* lcd, xy_t x, xy_t y);
 ret_t lcd_fill_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h);
 
 /**
+ * @method lcd_clear_rect
+ * 填充实心矩形。
+ * @param {lcd_t*} lcd lcd对象。
+ * @param {xy_t} x x坐标。
+ * @param {xy_t} y y坐标。
+ * @param {wh_t} w 宽度。
+ * @param {wh_t} h 高度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t lcd_clear_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h);
+
+/**
  * @method lcd_stroke_rect
- * 绘制矩形。
+ * 绘制矩形边框。
  * @param {lcd_t*} lcd lcd对象。
  * @param {xy_t} x x坐标。
  * @param {xy_t} y y坐标。
@@ -443,13 +510,13 @@ ret_t lcd_stroke_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h);
  * 绘制字符。如果实现了measure_text/draw_text则不需要实现本函数。
  * @param {lcd_t*} lcd lcd对象。
  * @param {glyph_t*} glyph 字模
- * @param {rect_t*} src 只绘制指定区域的部分。
+ * @param {const rect_t*} src 只绘制指定区域的部分。
  * @param {xy_t} x x坐标。
  * @param {xy_t} y y坐标。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t lcd_draw_glyph(lcd_t* lcd, glyph_t* glyph, rect_t* src, xy_t x, xy_t y);
+ret_t lcd_draw_glyph(lcd_t* lcd, glyph_t* glyph, const rect_t* src, xy_t x, xy_t y);
 
 /**
  * @method lcd_measure_text
@@ -476,16 +543,30 @@ float_t lcd_measure_text(lcd_t* lcd, const wchar_t* str, uint32_t nr);
 ret_t lcd_draw_text(lcd_t* lcd, const wchar_t* str, uint32_t nr, xy_t x, xy_t y);
 
 /**
+ * @method lcd_draw_text_by_glyphs
+ * 绘制字符。
+ * @param {lcd_t*} lcd lcd对象。
+ * @param {glyphs_t*} glyphs 字模列表。
+ * @param {uint32_t} start 开始序号。
+ * @param {uint32_t} len 长度。
+ * @param {xy_t} x x坐标。
+ * @param {xy_t} y y坐标。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t lcd_draw_text_by_glyphs(lcd_t* lcd, glyphs_t* glyphs, uint32_t start, uint32_t len, xy_t x, xy_t y);
+
+/**
  * @method lcd_draw_image
  * 绘制图片。
  * @param {lcd_t*} lcd lcd对象。
  * @param {bitmap_t*} img 图片。
- * @param {rect_t*} src 只绘制指定区域的部分。
- * @param {rect_t*} dst 绘制到目标区域。
+ * @param {const rectf_t*} src 只绘制指定区域的部分。
+ * @param {const rectf_t*} dst 绘制到目标区域。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t lcd_draw_image(lcd_t* lcd, bitmap_t* img, rect_t* src, rect_t* dst);
+ret_t lcd_draw_image(lcd_t* lcd, bitmap_t* img, const rectf_t* src, const rectf_t* dst);
 
 /**
  * @method lcd_draw_image_matrix
@@ -505,17 +586,6 @@ ret_t lcd_draw_image_matrix(lcd_t* lcd, draw_image_info_t* info);
  * @return {vgcanvas_t*} 返回矢量图canvas。
  */
 vgcanvas_t* lcd_get_vgcanvas(lcd_t* lcd);
-
-/**
- * @method lcd_take_snapshot
- * 拍摄快照，一般用于窗口动画，只有framebuffer模式，才支持。
- * @param {lcd_t*} lcd lcd对象。
- * @param {bitmap_t*} img 返回快照图片。
- * @param {bool_t} auto_rotate 是否根据LCD实际方向自动旋转。
- *
- * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
- */
-ret_t lcd_take_snapshot(lcd_t* lcd, bitmap_t* img, bool_t auto_rotate);
 
 /**
  * @method lcd_get_desired_bitmap_format
@@ -555,6 +625,24 @@ wh_t lcd_get_width(lcd_t* lcd);
 wh_t lcd_get_height(lcd_t* lcd);
 
 /**
+ * @method lcd_get_physical_width
+ * 获取真实物理宽度。
+ * @param {lcd_t*} lcd lcd对象。
+ *
+ * @return {wh_t} 返回真实物理宽度。
+ */
+wh_t lcd_get_physical_width(lcd_t* lcd);
+
+/**
+ * @method lcd_get_physical_height
+ * 获取真实物理高度。
+ * @param {lcd_t*} lcd lcd对象。
+ *
+ * @return {wh_t} 返回真实物理高度。
+ */
+wh_t lcd_get_physical_height(lcd_t* lcd);
+
+/**
  * @method lcd_flush
  * flush。
  * @annotation ["private"]
@@ -592,7 +680,90 @@ bool_t lcd_is_swappable(lcd_t* lcd);
  */
 ret_t lcd_end_frame(lcd_t* lcd);
 
+/**
+ * @method lcd_get_text_metrics
+ * 获取当前字体的度量信息。
+ *
+ * @param {lcd_t*} lcd lcd对象。
+ * @param {float_t*} ascent 用于返回ascent。
+ * @param {float_t*} descent 用于返回descent。
+ * @param {float_t*} line_hight 用于返回line height。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t lcd_get_text_metrics(lcd_t* lcd, float_t* ascent, float_t* descent, float_t* line_hight);
+
+/**
+ * @method lcd_get_type
+ * 获取 lcd 类型。
+ * @param {lcd_t*} lcd lcd对象。
+ *
+ * @return {lcd_type_t} 返回 lcd_type。
+ */
+lcd_type_t lcd_get_type(lcd_t* lcd);
+
+/**
+ * @method lcd_set_vgcanvas
+ * 设置 vgcanvas。
+ * @param {lcd_t*} lcd lcd对象。
+ * @param {vgcanvas_t*} vgcanvas vgcanvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t lcd_set_vgcanvas(lcd_t* lcd, vgcanvas_t* vgcanvas);
+
+/**
+ * @method lcd_set_line_length
+ * 设置 line_length 。
+ * @param {lcd_t*} lcd lcd对象。
+ * @param {uint32_t} line_length 一行的字节长度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t lcd_set_line_length(lcd_t* lcd, uint32_t line_length);
+
+/**
+ * @method lcd_destroy
+ * 销毁lcd对象。
+ * @param {lcd_t*} lcd lcd对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t lcd_destroy(lcd_t* lcd);
+
+/**
+ * @method lcd_get_dirty_rect
+ * 获取 lcd 对象的脏矩形。
+ * @param {lcd_t*} lcd lcd对象。
+ * @param {rect_t*} r 返回脏矩形。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t lcd_get_dirty_rect(lcd_t* lcd, rect_t* r);
+
+/**
+ * @method lcd_get_dirty_rects
+ * 获取 lcd 对象的脏矩形列表。
+ * @param {lcd_t*} lcd lcd对象。
+ *
+ * @return {const dirty_rects_t*} 成功返回脏矩形列表，失败返回 NULL。
+ */
+const dirty_rects_t* lcd_get_dirty_rects(lcd_t* lcd);
+
+/**
+ * @method lcd_is_support_dirty_rect
+ * 获取 lcd 对象是否支持脏矩形。
+ * @param {lcd_t*} lcd lcd对象。
+ *
+ * @return {bool_t} 返回TRUE表示支持，否则表示不支持。
+ */
+bool_t lcd_is_support_dirty_rect(lcd_t* lcd);
+
+/* private */
+bool_t lcd_is_dirty(lcd_t* lcd);
+ret_t lcd_set_canvas(lcd_t* lcd, canvas_t* c);
+ret_t lcd_set_orientation(lcd_t* lcd, lcd_orientation_t old_orientation,
+                          lcd_orientation_t new_orientation);
 
 END_C_DECLS
 

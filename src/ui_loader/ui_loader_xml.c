@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   ui_loader_xml.h
  * Author: AWTK Develop Team
  * Brief:  default ui_loader
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,15 +19,24 @@
  *
  */
 
+#include "tkc/fs.h"
 #include "tkc/mem.h"
 #include "tkc/str.h"
+#include "tkc/path.h"
 #include "tkc/utils.h"
 #include "base/enums.h"
 #include "base/layout.h"
+#include "tkc/tokenizer.h"
 #include "xml/xml_parser.h"
 #include "ui_loader/ui_loader_xml.h"
 
 #define TAG_PROPERTY "property"
+
+#ifdef HAS_STDIO
+#define EXIT(code) exit(code)
+#else
+#define EXIT(code) return
+#endif
 
 typedef enum _props_state_t {
   PROPS_STATE_NONE = 0,
@@ -39,11 +48,42 @@ typedef struct _xml_builder_t {
   XmlBuilder builder;
   ui_builder_t* ui_builder;
   str_t str;
+  str_t widget_name;
+  str_t tag;
+  char** attrs;
+  int attrs_capacity;
+  int attrs_nr;
 
+  char* buffer;
+  int buffer_used;
+  int capacity;
+
+  bool_t is_include;
+  bool_t is_set_name;
+  bool_t is_on_start;
   bool_t is_property;
+  bool_t format_error;
+  bool_t tag_is_include;
+  uint32_t include_count;
+  const char** include_name;
   props_state_t properties_state;
-  char property_name[TK_NAME_LEN + 1];
+  const char** include_attrs;
+  const char*** include_attrs_list;
+  bool_t** include_attrs_uses_list;
+  str_t** widget_name_list;
+  char property_name[TK_NAME_LEN * 2 + 2];
 } xml_builder_t;
+
+static XmlBuilder* builder_init(xml_builder_t* b, ui_builder_t* ui_builder);
+const char window_tag[][TK_NAME_LEN] = {WIDGET_TYPE_NORMAL_WINDOW,
+                                        WIDGET_TYPE_OVERLAY,
+                                        WIDGET_TYPE_TOOL_BAR,
+                                        WIDGET_TYPE_DIALOG,
+                                        WIDGET_TYPE_POPUP,
+                                        WIDGET_TYPE_SYSTEM_BAR,
+                                        WIDGET_TYPE_SYSTEM_BAR_BOTTOM,
+                                        WIDGET_TYPE_SPRITE,
+                                        WIDGET_TYPE_KEYBOARD};
 
 /*FIXME: it is not a good solution to hardcode*/
 static bool_t is_precedence_prop(const char* tag, const char* prop) {
@@ -73,75 +113,158 @@ static bool_t is_valid_layout_param(const char* v) {
   return FALSE;
 }
 
+static void xml_loader_reset_buffer(XmlBuilder* thiz) {
+  xml_builder_t* b = (xml_builder_t*)thiz;
+  b->buffer_used = 0;
+  b->attrs_nr = 0;
+  b->attrs[0] = NULL;
+
+  return;
+}
+
+static ret_t xml_loader_ensure_attrs_capacity(xml_builder_t* b, int needed) {
+  int new_capacity = 0;
+  char** temp = NULL;
+
+  if (b->attrs_nr + needed > b->attrs_capacity) {
+    new_capacity = (b->attrs_capacity << 1);
+    if (new_capacity < b->attrs_nr + needed) {
+      new_capacity = b->attrs_nr + needed;
+    }
+    temp = (char**)TKMEM_REALLOCT(char*, b->attrs, new_capacity + 1);
+    if (temp != NULL) {
+      b->attrs = temp;
+      b->attrs_capacity = new_capacity;
+      return RET_OK;
+    }
+    return RET_OOM;
+  }
+  return RET_OK;
+}
+
+static char* xml_loader_strdup(XmlBuilder* thiz, const char* start, int length) {
+  int k = 0;
+  char* attr = NULL;
+  xml_builder_t* b = (xml_builder_t*)thiz;
+
+  if ((b->buffer_used + length + 1) > b->capacity) {
+    char* old_buffer = b->buffer;
+    int new_capacity = b->capacity + (b->capacity >> 1) + length + 32;
+    char* buffer = (char*)TKMEM_REALLOCT(char, b->buffer, new_capacity);
+    if (buffer != NULL) {
+      if (buffer != old_buffer && old_buffer != NULL) {
+        ptrdiff_t delta = buffer - old_buffer;
+        for (k = 0; k < b->attrs_nr; k++) {
+          if (b->attrs[k] != NULL && b->attrs[k] >= old_buffer &&
+              b->attrs[k] < old_buffer + b->buffer_used) {
+            b->attrs[k] += delta;
+          }
+        }
+      }
+      b->buffer = buffer;
+      b->capacity = new_capacity;
+    }
+  }
+
+  if ((b->buffer_used + length + 1) > b->capacity) {
+    return attr;
+  }
+
+  attr = strncpy(b->buffer + b->buffer_used, start, length);
+  b->buffer[b->buffer_used + length] = '\0';
+  b->buffer_used += length + 1;
+
+  return attr;
+}
+
 static bool_t is_valid_self_layout(const char* x, const char* y, const char* w, const char* h) {
   return is_valid_layout_param(x) || is_valid_layout_param(y) || is_valid_layout_param(w) ||
          is_valid_layout_param(h);
 }
 
-static void xml_loader_on_start_widget(XmlBuilder* thiz, const char* tag, const char** attrs) {
+static void xml_loader_on_prop(XmlBuilder* thiz) {
   char c = '\0';
   uint32_t i = 0;
-  const char* x = "0";
-  const char* y = "0";
-  const char* w = "0";
-  const char* h = "0";
+  char* tag = NULL;
+  char** attrs = NULL;
+  const char* x = NULL;
+  const char* y = NULL;
+  const char* w = NULL;
+  const char* h = NULL;
+  const char* self_layout = NULL;
   widget_desc_t desc;
+  bool_t have_selflayout = FALSE;
+  bool_t after_selflayout = FALSE;
   const char* key = NULL;
   const char* value = NULL;
   xml_builder_t* b = (xml_builder_t*)thiz;
+  attrs = b->attrs;
+  tag = b->tag.str;
 
   memset(&desc, 0x00, sizeof(desc));
 
   while (attrs[i] != NULL) {
+    bool_t is_set_xywh = FALSE;
     key = attrs[i];
     value = attrs[i + 1];
+    if (tk_str_eq(key, WIDGET_PROP_SELF_LAYOUT)) {
+      self_layout = value;
+      have_selflayout = TRUE;
+    }
 
     c = key[0];
     if (key[1] == '\0') {
       if (c == 'x') {
         x = (value);
+        is_set_xywh = TRUE;
       } else if (c == 'y') {
         y = (value);
+        is_set_xywh = TRUE;
       } else if (c == 'w') {
         w = (value);
+        is_set_xywh = TRUE;
       } else if (c == 'h') {
         h = (value);
+        is_set_xywh = TRUE;
       }
+    }
+    if (have_selflayout && is_set_xywh) {
+      after_selflayout = TRUE;
     }
 
     i += 2;
   }
 
   strncpy(desc.type, tag, TK_NAME_LEN);
-  desc.layout.x = tk_atoi(x);
-  desc.layout.y = tk_atoi(y);
-  desc.layout.w = tk_atoi(w);
-  desc.layout.h = tk_atoi(h);
+  if (x != NULL) desc.layout.x = tk_atoi(x);
+  if (y != NULL) desc.layout.y = tk_atoi(y);
+  if (w != NULL) desc.layout.w = tk_atoi(w);
+  if (h != NULL) desc.layout.h = tk_atoi(h);
   ui_builder_on_widget_start(b->ui_builder, &desc);
 
   if (is_valid_self_layout(x, y, w, h)) {
     str_t* s = &(b->str);
     s->size = 0;
     str_append(s, "default(");
-    if (x != NULL) {
+    if (TK_STR_IS_NOT_EMPTY(x)) {
       str_append(s, "x=");
       str_append(s, x);
       str_append(s, ",");
     }
 
-    if (y != NULL) {
+    if (TK_STR_IS_NOT_EMPTY(y)) {
       str_append(s, "y=");
       str_append(s, y);
       str_append(s, ",");
     }
 
-    if (w != NULL) {
+    if (TK_STR_IS_NOT_EMPTY(w)) {
       str_append(s, "w=");
       str_append(s, w);
       str_append(s, ",");
     }
 
-    if (h != NULL) {
+    if (TK_STR_IS_NOT_EMPTY(h)) {
       str_append(s, "h=");
       str_append(s, h);
       str_append(s, ",");
@@ -152,6 +275,14 @@ static void xml_loader_on_start_widget(XmlBuilder* thiz, const char* tag, const 
     }
 
     str_append(s, ")");
+    if (have_selflayout && !after_selflayout) {
+      ENSURE(str_decode_xml_entity(&(b->str), self_layout) == RET_OK);
+      str_unescape(&(b->str));
+    }
+    ui_builder_on_widget_prop(b->ui_builder, WIDGET_PROP_SELF_LAYOUT, b->str.str);
+  } else if (have_selflayout && !after_selflayout) {
+    ENSURE(str_decode_xml_entity(&(b->str), self_layout) == RET_OK);
+    str_unescape(&(b->str));
     ui_builder_on_widget_prop(b->ui_builder, WIDGET_PROP_SELF_LAYOUT, b->str.str);
   }
 
@@ -167,6 +298,10 @@ static void xml_loader_on_start_widget(XmlBuilder* thiz, const char* tag, const 
         i += 2;
         continue;
       }
+    }
+    if (tk_str_eq(key, WIDGET_PROP_SELF_LAYOUT)) {
+      i += 2;
+      continue;
     }
 
     if (is_precedence_prop(tag, key)) {
@@ -191,16 +326,43 @@ static void xml_loader_on_start_widget(XmlBuilder* thiz, const char* tag, const 
         continue;
       }
     }
+    if (tk_str_eq(key, WIDGET_PROP_SELF_LAYOUT)) {
+      i += 2;
+      continue;
+    }
 
     if (!is_precedence_prop(tag, key)) {
-      ENSURE(str_decode_xml_entity(&(b->str), value) == RET_OK);
-      str_unescape(&(b->str));
+      if (str_decode_xml_entity(&(b->str), value) == RET_OK) {
+        str_unescape(&(b->str));
+      } else {
+        log_warn("decode xml entiry %s failed\n", value);
+      }
+
       ui_builder_on_widget_prop(b->ui_builder, key, b->str.str);
     }
 
     i += 2;
   }
 
+  return;
+}
+
+static void xml_loader_on_start_widget(XmlBuilder* thiz, const char* tag, const char** attrs) {
+  uint32_t i = 0;
+  const char* value = NULL;
+  xml_builder_t* b = (xml_builder_t*)thiz;
+  return_if_fail(b->format_error == FALSE);
+
+  str_set(&(b->tag), tag);
+
+  while (attrs[i] != NULL) {
+    value = attrs[i];
+    xml_loader_ensure_attrs_capacity(b, 1);
+    b->attrs[b->attrs_nr] = xml_loader_strdup(thiz, value, strlen(value));
+    b->attrs_nr++;
+    i++;
+  }
+  b->attrs[b->attrs_nr] = NULL;
   b->properties_state = PROPS_STATE_START;
 
   return;
@@ -209,12 +371,13 @@ static void xml_loader_on_start_widget(XmlBuilder* thiz, const char* tag, const 
 static void xml_loader_on_start_property(XmlBuilder* thiz, const char* tag, const char** attrs) {
   uint32_t i = 0;
   xml_builder_t* b = (xml_builder_t*)thiz;
+  return_if_fail(b->format_error == FALSE);
 
   while (attrs[i] != NULL) {
     const char* key = attrs[i];
     const char* value = attrs[i + 1];
     if (tk_str_eq(key, "name")) {
-      tk_strncpy(b->property_name, value, TK_NAME_LEN);
+      tk_strncpy(b->property_name, value, TK_NAME_LEN * 2 + 1);
       break;
     }
   }
@@ -222,6 +385,95 @@ static void xml_loader_on_start_property(XmlBuilder* thiz, const char* tag, cons
 
 static void xml_loader_on_prop_end(XmlBuilder* thiz) {
   xml_builder_t* b = (xml_builder_t*)thiz;
+  int32_t i = 0;
+  int32_t k = 0;
+  int32_t j = 0;
+  tokenizer_t t;
+  bool_t is_set_prop = FALSE;
+  const char* key = NULL;
+  const char* value = NULL;
+  const char* widget_name = NULL;
+  const char* widget_prop = NULL;
+  const char** include_attrs = NULL;
+  str_t* widget_name_str = NULL;
+  bool_t* include_attrs_used = NULL;
+  char** attrs = b->attrs;
+  return_if_fail(b->format_error == FALSE);
+
+  if (b->is_on_start) {
+    if (b->tag_is_include) {
+      while (attrs[i] != NULL) {
+        key = attrs[i];
+        value = attrs[i + 1];
+        if (tk_str_eq("name", key)) {
+          for (k = 0; k < b->include_count; k++) {
+            str_t* widget_name = b->widget_name_list[k];
+            if (widget_name->size > 0) {
+              str_append(widget_name, ".");
+            }
+            str_append(widget_name, value);
+          }
+          b->is_set_name = TRUE;
+        }
+        i += 2;
+      }
+      if (!b->is_set_name) {
+        for (k = 0; k < b->include_count; k++) {
+          str_t* widget_name = b->widget_name_list[k];
+          str_append(widget_name, ".");
+        }
+      }
+      for (k = b->include_count - 1; k >= 0; k--) {
+        i = 0;
+        include_attrs = b->include_attrs_list[k];
+        widget_name_str = b->widget_name_list[k];
+        include_attrs_used = b->include_attrs_uses_list[k];
+        while (include_attrs[i] != NULL) {
+          j = 0;
+          if (include_attrs_used[i]) {
+            i += 2;
+            continue;
+          }
+          key = include_attrs[i];
+          value = include_attrs[i + 1];
+          if (tk_str_eq(key, "filename")) {
+            i += 2;
+            continue;
+          }
+          tokenizer_init(&t, key, tk_strlen(key), "-");
+          widget_name = tokenizer_next(&t);
+          if (tk_str_eq(widget_name, widget_name_str->str) && tokenizer_has_more(&t)) {
+            is_set_prop = FALSE;
+            widget_prop = &(t.str[t.cursor]);
+            include_attrs_used[i] = TRUE;
+            while (attrs[j] != NULL) {
+              if (tk_str_eq(attrs[j], widget_prop)) {
+                attrs[j + 1] = (char*)value;
+                is_set_prop = TRUE;
+                break;
+              }
+              j += 2;
+            }
+            if (!is_set_prop) {
+              xml_loader_ensure_attrs_capacity(b, 2);
+              attrs = b->attrs;
+              b->attrs[b->attrs_nr] = xml_loader_strdup(thiz, widget_prop, strlen(widget_prop));
+              b->attrs_nr++;
+              b->attrs[b->attrs_nr] = xml_loader_strdup(thiz, value, strlen(value));
+              b->attrs_nr++;
+              b->attrs[b->attrs_nr] = NULL;
+            }
+          }
+          tokenizer_deinit(&t);
+          i += 2;
+        }
+      }
+    }
+    xml_loader_on_prop(thiz);
+    xml_loader_reset_buffer(thiz);
+    b->is_on_start = FALSE;
+    b->is_set_name = FALSE;
+  }
 
   if (b->properties_state == PROPS_STATE_START) {
     b->properties_state = PROPS_STATE_END;
@@ -230,27 +482,54 @@ static void xml_loader_on_prop_end(XmlBuilder* thiz) {
 }
 
 static void xml_loader_on_start(XmlBuilder* thiz, const char* tag, const char** attrs) {
+  int32_t i = 0;
   xml_builder_t* b = (xml_builder_t*)thiz;
+  return_if_fail(b->format_error == FALSE);
 
   if (tk_str_eq(tag, TAG_PROPERTY)) {
     b->is_property = TRUE;
     xml_loader_on_start_property(thiz, tag, attrs);
   } else {
     b->is_property = FALSE;
-
     xml_loader_on_prop_end(thiz);
+    b->is_on_start = TRUE;
+    b->tag_is_include = b->is_include;
+    if (b->is_include) {
+      for (i = 0; i < ARRAY_SIZE(window_tag); i++) {
+        if (tk_str_eq(tag, window_tag[i])) {
+          b->format_error = TRUE;
+        }
+      }
+    }
+
     xml_loader_on_start_widget(thiz, tag, attrs);
   }
 }
 
 static void xml_loader_on_end(XmlBuilder* thiz, const char* tag) {
+  int32_t i = 0;
+  int32_t offset;
   xml_builder_t* b = (xml_builder_t*)thiz;
-  (void)thiz;
-  (void)tag;
+  const char* widget_name_start = NULL;
+  return_if_fail(b->format_error == FALSE);
+
   if (tk_str_eq(tag, TAG_PROPERTY)) {
     b->is_property = FALSE;
   } else {
     xml_loader_on_prop_end(thiz);
+
+    if (b->is_include) {
+      for (i = b->include_count - 1; i >= 0; i--) {
+        str_t* widget_name = b->widget_name_list[i];
+        widget_name_start = tk_strrstr(widget_name->str, ".");
+        if (widget_name_start == NULL) {
+          widget_name_start = widget_name->str;
+        }
+        offset = widget_name_start - widget_name->str;
+        str_remove(widget_name, offset, widget_name->size - offset);
+      }
+    }
+
     ui_builder_on_widget_end(b->ui_builder);
   }
 
@@ -259,12 +538,18 @@ static void xml_loader_on_end(XmlBuilder* thiz, const char* tag) {
 
 static void xml_loader_on_text(XmlBuilder* thiz, const char* text, size_t length) {
   xml_builder_t* b = (xml_builder_t*)thiz;
+  return_if_fail(b->format_error == FALSE);
 
   if (b->is_property) {
     assert(b->properties_state == PROPS_STATE_START);
 
     str_set_with_len(&(b->str), text, length);
-    ui_builder_on_widget_prop(b->ui_builder, b->property_name, b->str.str);
+    xml_loader_ensure_attrs_capacity(b, 2);
+    b->attrs[b->attrs_nr] = xml_loader_strdup(thiz, b->property_name, strlen(b->property_name));
+    b->attrs_nr++;
+    b->attrs[b->attrs_nr] = xml_loader_strdup(thiz, b->str.str, b->str.size);
+    b->attrs_nr++;
+    b->attrs[b->attrs_nr] = NULL;
   }
 
   return;
@@ -279,9 +564,176 @@ static void xml_loader_on_comment(XmlBuilder* thiz, const char* text, size_t len
 }
 
 static void xml_loader_on_pi(XmlBuilder* thiz, const char* tag, const char** attrs) {
-  (void)thiz;
-  (void)tag;
-  (void)attrs;
+  xml_builder_t* b = (xml_builder_t*)thiz;
+  int32_t i = 0;
+  uint32_t size = 0;
+  str_t xml_data;
+  int32_t pairs = 0;
+  char* data = NULL;
+  XmlParser* parser = NULL;
+  const char* res_root = NULL;
+  const char* filename = NULL;
+  const char* theme_name = NULL;
+  bool_t include_name_loop = FALSE;
+  bool_t* include_attrs_used = NULL;
+  char subfilename[MAX_PATH] = {0};
+  char absfilename[MAX_PATH] = {0};
+  char b_name_build[MAX_PATH] = {0};
+  char bname_normalize[MAX_PATH] = {0};
+  ui_builder_t* builder = b->ui_builder;
+  assets_manager_t* am = assets_manager();
+  return_if_fail(b->format_error == FALSE);
+
+  if (tk_str_eq(tag, "include")) {
+    str_init(&xml_data, 100);
+
+    while (attrs[i] != NULL) {
+      const char* key = attrs[i];
+      const char* value = attrs[i + 1];
+      if (tk_str_eq(key, "filename")) {
+        filename = value;
+        break;
+      }
+      i += 2;
+    }
+    // 格式化路径
+    path_normalize(builder->name, bname_normalize, MAX_PATH);
+
+    if (filename != NULL) {
+      // 替换路径名
+      if (b->is_include) {
+        path_replace_basename(subfilename, MAX_PATH, b->include_name[b->include_count - 1],
+                              filename);
+      } else {
+        if (!path_is_abs(bname_normalize)) {
+          if (am != NULL) {
+            res_root = assets_manager_get_res_root(am);
+            theme_name = assets_manager_get_theme_name(am);
+            if (res_root != NULL) {
+              path_build(b_name_build, MAX_PATH, res_root, theme_name, "ui", builder->name, NULL);
+              path_normalize(b_name_build, bname_normalize, MAX_PATH);
+
+              if (!file_exist(bname_normalize) && !tk_str_eq(theme_name, "default")) {
+                memset(b_name_build, 0x00, MAX_PATH);
+                path_build(b_name_build, MAX_PATH, res_root, "default", "ui", builder->name, NULL);
+                path_normalize(b_name_build, bname_normalize, MAX_PATH);
+              }
+            }
+          }
+        }
+        path_replace_basename(subfilename, MAX_PATH, bname_normalize, filename);
+      }
+      path_abs_normalize(subfilename, absfilename, MAX_PATH);
+
+      // 判断是否重复包含
+      if (tk_str_eq(bname_normalize, absfilename)) {
+        include_name_loop = TRUE;
+      }
+      for (i = 0; i < b->include_count; i++) {
+        if (tk_str_eq(b->include_name[i], absfilename)) {
+          include_name_loop = TRUE;
+        }
+      }
+
+      if (include_name_loop == FALSE) {
+        data = (char*)file_read(absfilename, &size);
+        str_set_with_len(&xml_data, data, size);
+        TKMEM_FREE(data);
+      } else {
+        if (am != NULL) {
+          str_reset(&xml_data);
+          return;
+        } else {
+          if (b->include_count > 0) {
+            log_warn("!!!File name = %s error include file %s\n",
+                     b->include_name[b->include_count - 1], filename);
+          } else {
+            log_warn("!!!File name = %s error include file %s\n", bname_normalize, filename);
+          }
+          EXIT(EXIT_FAILURE);
+        }
+      }
+
+      if (xml_data.size != 0) {
+        xml_builder_t b_include;
+        parser = xml_parser_create();
+        xml_parser_set_builder(parser, builder_init(&b_include, b->ui_builder));
+        while (attrs[pairs] != NULL) {
+          pairs += 2;
+        }
+        include_attrs_used = (bool_t*)TKMEM_ZALLOCN(bool_t, pairs);
+        b_include.include_name = (const char**)TKMEM_ZALLOCN(char*, b->include_count + 1);
+        b_include.include_attrs_list = (const char***)TKMEM_ZALLOCN(char**, b->include_count + 1);
+        b_include.widget_name_list = (str_t**)TKMEM_ZALLOCN(str_t*, b->include_count + 1);
+        b_include.include_attrs_uses_list = (bool_t**)TKMEM_ZALLOCN(bool_t*, b->include_count + 1);
+        if (b_include.attrs) {
+          TKMEM_FREE(b_include.attrs);
+        }
+        b_include.attrs = b->attrs;
+        str_set(&(b_include.tag), b->tag.str);
+
+        b_include.is_include = TRUE;
+        b_include.format_error = FALSE;
+        b_include.include_attrs = attrs;
+        b_include.properties_state = b->properties_state;
+        b_include.is_set_name = b->is_set_name;
+        b_include.is_on_start = b->is_on_start;
+        b_include.tag_is_include = b->tag_is_include;
+        b_include.attrs_capacity = b->attrs_capacity;
+        b_include.attrs_nr = b->attrs_nr;
+        b_include.buffer = b->buffer;
+        b_include.buffer_used = b->buffer_used;
+        b_include.capacity = b->capacity;
+
+        for (i = 0; i < b->include_count; i++) {
+          b_include.include_name[i] = b->include_name[i];
+          b_include.include_attrs_list[i] = b->include_attrs_list[i];
+          b_include.widget_name_list[i] = b->widget_name_list[i];
+          b_include.include_attrs_uses_list[i] = b->include_attrs_uses_list[i];
+        }
+        b_include.include_name[b->include_count] = absfilename;
+        b_include.include_attrs_list[b->include_count] = attrs;
+        b_include.widget_name_list[b->include_count] = &(b_include.widget_name);
+        b_include.include_attrs_uses_list[b->include_count] = include_attrs_used;
+        b_include.include_count = b->include_count + 1;
+
+        xml_parser_parse(parser, xml_data.str, xml_data.size);
+        // 判断被包含的路径是否为非组件文件
+        if (am == NULL && b_include.format_error) {
+          if (b_include.include_count > 1) {
+            log_warn("!!!File name = %s error include file %s\n",
+                     b->include_name[b->include_count - 1], filename);
+          } else {
+            log_warn("!!!File name = %s error include file %s\n", bname_normalize, filename);
+          }
+          EXIT(EXIT_FAILURE);
+        }
+        b->properties_state = b_include.properties_state;
+        b_include.is_include = FALSE;
+        b->attrs = b_include.attrs;
+        b->buffer = b_include.buffer;
+        b->buffer_used = b_include.buffer_used;
+        b->attrs_nr = b_include.attrs_nr;
+        b->attrs_capacity = b_include.attrs_capacity;
+        b->capacity = b_include.capacity;
+        b->is_on_start = b_include.is_on_start;
+
+        xml_parser_destroy(parser);
+        str_reset(&(b_include.str));
+        str_reset(&(b_include.widget_name));
+        str_reset(&(b_include.tag));
+        TKMEM_FREE(include_attrs_used);
+        TKMEM_FREE(b_include.widget_name_list);
+        TKMEM_FREE(b_include.include_name);
+        TKMEM_FREE(b_include.include_attrs_list);
+        TKMEM_FREE(b_include.include_attrs_uses_list);
+      } else {
+        log_warn("!!!File is empty\n");
+      }
+    }
+    str_reset(&xml_data);
+  }
+
   return;
 }
 
@@ -307,7 +759,12 @@ static XmlBuilder* builder_init(xml_builder_t* b, ui_builder_t* ui_builder) {
   b->builder.on_pi = xml_loader_on_pi;
   b->builder.destroy = xml_loader_destroy;
   b->ui_builder = ui_builder;
+  b->format_error = FALSE;
   str_init(&(b->str), 100);
+  str_init(&(b->widget_name), 100);
+  str_init(&(b->tag), 100);
+  b->attrs = (char**)TKMEM_ZALLOCN(char*, MAX_ATTR_KEY_VALUE_NR + 1);
+  b->attrs_capacity = MAX_ATTR_KEY_VALUE_NR;
 
   return &(b->builder);
 }
@@ -325,11 +782,15 @@ ret_t ui_loader_load_xml(ui_loader_t* loader, const uint8_t* data, uint32_t size
   ui_builder_on_end(ui_builder);
   xml_parser_destroy(parser);
   str_reset(&(b.str));
+  str_reset(&(b.widget_name));
+  str_reset(&(b.tag));
+  TKMEM_FREE(b.attrs);
+  TKMEM_FREE(b.buffer);
 
   return RET_OK;
 }
 
-static const ui_loader_t s_xml_ui_loader = {.load = ui_loader_load_xml};
+static const ui_loader_t s_xml_ui_loader = {.load = ui_loader_load_xml, .support_xml = TRUE};
 
 ui_loader_t* xml_ui_loader() {
   return (ui_loader_t*)&s_xml_ui_loader;

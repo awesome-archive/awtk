@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  ui_builder
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -41,6 +41,7 @@ typedef ret_t (*ui_builder_on_widget_prop_t)(ui_builder_t* b, const char* name, 
 typedef ret_t (*ui_builder_on_widget_prop_end_t)(ui_builder_t* b);
 typedef ret_t (*ui_builder_on_widget_end_t)(ui_builder_t* b);
 typedef ret_t (*ui_builder_on_end_t)(ui_builder_t* b);
+typedef ret_t (*ui_builder_destroy_t)(ui_builder_t* b);
 
 /**
  * @class ui_builder_t
@@ -70,9 +71,13 @@ struct _ui_builder_t {
   ui_builder_on_widget_prop_end_t on_widget_prop_end;
   ui_builder_on_widget_end_t on_widget_end;
   ui_builder_on_end_t on_end;
+  ui_builder_destroy_t destroy;
   widget_t* root;
   widget_t* widget;
   const char* name;
+  const asset_info_t* ui;
+  void* additional_ctx;
+  tk_destroy_t free_additional_ctx;
 };
 
 /**
@@ -101,7 +106,7 @@ ret_t ui_builder_on_widget_start(ui_builder_t* builder, const widget_desc_t* des
 ret_t ui_builder_on_widget_prop(ui_builder_t* builder, const char* name, const char* value);
 
 /**
- * @method ui_builder_on_widget_prop
+ * @method ui_builder_on_widget_prop_end
  * ui\_loader在解析到widget全部属性结束时，调用本函数进一步处理。
  *
  * @param {ui_builder_t*} builder builder对象。
@@ -143,6 +148,30 @@ ret_t ui_builder_on_start(ui_builder_t* builder);
  *
  */
 ret_t ui_builder_on_end(ui_builder_t* builder);
+
+/**
+ * @method ui_builder_destroy
+ * 销毁builder。
+ *
+ * @param {ui_builder_t*} builder builder对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ *
+ */
+ret_t ui_builder_destroy(ui_builder_t* builder);
+
+/**
+ * @method ui_builder_set_additional_context
+ * 设置额外的上下文信息。
+ *
+ * @param {ui_builder_t*} builder builder对象。
+ * @param {void*} ctx 上下文对象。
+ * @param {tk_destroy_t} free_ctx 销毁上下文对象的回调。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ *
+ */
+ret_t ui_builder_set_additional_context(ui_builder_t* builder, void* ctx, tk_destroy_t free_ctx);
 
 #define UI_DATA_MAGIC 0x11221212
 

@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   window_animator_vtranslate.h
  * Author: AWTK Develop Team
  * Brief:  vertical translate window animator
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,7 +26,10 @@
 
 BEGIN_C_DECLS
 
-window_animator_t* window_animator_vtranslate_create(bool_t open, object_t* args);
+#define WINDOW_ANIMATOR_VTRANSLATE_PROP_PREV_WIN_INDEX "prev_win_index"
+#define WINDOW_ANIMATOR_VTRANSLATE_PROP_PREV_WIN_Y_RANGE "prev_win_y_range"
+
+window_animator_t* window_animator_vtranslate_create(bool_t open, tk_object_t* args);
 
 END_C_DECLS
 

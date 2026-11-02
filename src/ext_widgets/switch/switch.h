@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  switch
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -43,7 +43,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[switch.xml](
- * https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/switch.xml)
+ * https://github.com/zlgopen/awtk/blob/master/design/default/ui/switch.xml)
  *
  * 在c代码中使用函数switch\_create创建开关控件。如：
  *
@@ -64,14 +64,14 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[theme default](
- * https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L452)
+ * https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L452)
  *
  */
 typedef struct _switch_t {
   widget_t widget;
   /**
    * @property {bool_t} value
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable","inputable"]
    * 值。
    */
   bool_t value;
@@ -79,7 +79,7 @@ typedef struct _switch_t {
   /**
    * @property {float_t} max_xoffset_ratio
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 当开关处于关闭时，图片偏移相对于图片宽度的比例(缺省为1/3)。
+   * 主要用于当开关处于关闭时，图片偏移相对于图片宽度的比例(缺省为1/3)。
    */
   float_t max_xoffset_ratio;
 
@@ -90,15 +90,21 @@ typedef struct _switch_t {
   velocity_t velocity;
   widget_animator_t* wa;
   bool_t point_down_aborted;
+  bool_t pressed;
 } switch_t;
 
 /**
- * @event {event_t} EVT_VALUE_WILL_CHANGE
+ * @event {pointer_event_t} EVT_CLICK
+ * 点击事件。
+ */
+
+/**
+ * @event {value_change_event_t} EVT_VALUE_WILL_CHANGE
  * 值(开关状态)即将改变事件。
  */
 
 /**
- * @event {event_t} EVT_VALUE_CHANGED
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
  * 值(开关状态)改变事件。
  */
 

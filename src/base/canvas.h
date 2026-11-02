@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  canvas provides basic drawings functions.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,17 +23,21 @@
 #define TK_CANVAS_H
 
 #include "base/lcd.h"
+#include "base/dirty_rects.h"
+#include "base/system_info.h"
 #include "base/font_manager.h"
 
 BEGIN_C_DECLS
 
-struct _canvas_t;
-typedef struct _canvas_t canvas_t;
+typedef ret_t (*canvas_end_frame_t)(canvas_t* c);
+typedef ret_t (*canvas_begin_frame_t)(canvas_t* c, const dirty_rects_t* dirty_rects,
+                                      lcd_draw_mode_t draw_mode);
 
 /**
  * @class canvas_t
  * @annotation ["scriptable"]
- * canvas类。
+ * 提供基本的绘图功能和状态管理。
+ *
  */
 struct _canvas_t {
   /**
@@ -50,24 +54,128 @@ struct _canvas_t {
    */
   xy_t oy;
 
-  xy_t clip_left;
-  xy_t clip_top;
-  xy_t clip_right;
-  xy_t clip_bottom;
-  uint32_t fps;
-  bool_t show_fps;
-
-  lcd_t* lcd;
-  font_t* font;
-  font_size_t font_size;
+  /**
+   * @property {char*} font_name
+   * @annotation ["readable", "scriptable"]
+   * 当前字体名称。
+   */
   char* font_name;
 
-  align_v_t text_align_v;
-  align_h_t text_align_h;
-  font_manager_t* font_manager;
+  /**
+   * @property {font_size_t} font_size
+   * @annotation ["readable", "scriptable"]
+   * 当前字体大小。
+   */
+  font_size_t font_size;
+
+  /**
+   * @property {uint8_t} global_alpha
+   * @annotation ["readable", "scriptable"]
+   * 当前全局alpha。
+   */
   uint8_t global_alpha;
 
+  /**
+   * @property {xy_t} clip_left
+   * @annotation ["readable"]
+   * 当前裁剪矩形的左边位置。
+   */
+  xy_t clip_left;
+
+  /**
+   * @property {xy_t} clip_top
+   * @annotation ["readable"]
+   * 当前裁剪矩形的顶部位置。
+   */
+  xy_t clip_top;
+
+  /**
+   * @property {xy_t} clip_right
+   * @annotation ["readable"]
+   * 当前裁剪矩形的右边位置。
+   */
+  xy_t clip_right;
+
+  /**
+   * @property {xy_t} clip_bottom
+   * @annotation ["readable"]
+   * 当前裁剪矩形的底部位置。
+   */
+  xy_t clip_bottom;
+
+  /**
+   * @property {point_t} fps_position
+   * @annotation ["readable"]
+   * 当前的帧率绘制坐标。
+   */
+  point_t fps_position;
+
+  /**
+   * @property {uint32_t} fps
+   * @annotation ["readable"]
+   * 当前的帧率。
+   */
+  uint32_t fps;
+
+  /**
+   * @property {bool_t} show_fps
+   * @annotation ["readable"]
+   * 是否显示帧率。
+   */
+  bool_t show_fps;
+
+  /**
+   * @property {align_v_t} text_align_v
+   * @annotation ["readable"]
+   * 文本垂直对齐方式。
+   */
+  align_v_t text_align_v;
+
+  /**
+   * @property {align_h_t} text_align_h
+   * @annotation ["readable"]
+   * 文本水平对齐方式。
+   */
+  align_h_t text_align_h;
+
+  /**
+   * @property {lcd_t*} lcd
+   * @annotation ["readable"]
+   * lcd对象。
+   */
+  lcd_t* lcd;
+
+  /**
+   * @property {font_t*} font
+   * @annotation ["readable"]
+   * 字体对象。
+   */
+  font_t* font;
+
+  /**
+   * @property {font_manager_t*} font_manager
+   * @annotation ["readable"]
+   * 字体管理器对象。
+   */
+  font_manager_t* font_manager;
+
+  /**
+   * @property {assets_manager_t*} assets_manager
+   * @annotation ["readable"]
+   * 资源管理器对象。
+   */
+  assets_manager_t* assets_manager;
+
+  /*private*/
+  /*确保begin_frame/end_frame配对使用*/
   bool_t began_frame;
+
+  float last_text_length;
+  uint32_t last_text_nr;
+  wchar_t* last_text_str;
+
+  canvas_end_frame_t end_frame;
+  canvas_begin_frame_t begin_frame;
 };
 
 /**
@@ -117,6 +225,19 @@ wh_t canvas_get_height(canvas_t* c);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t canvas_get_clip_rect(canvas_t* c, rect_t* r);
+
+/**
+ * @method canvas_is_rect_in_clip_rect
+ * 判断改矩形区域是否在裁剪区中
+ * @param {canvas_t*} c canvas对象。
+ * @param {xy_t} left 矩形区域左边。
+ * @param {xy_t} top 矩形区域上边。
+ * @param {xy_t} right 矩形区域右边。
+ * @param {xy_t} bottom 矩形区域下边。
+ *
+ * @return {bool_t} 返回TRUE表示是，否则表示不是。
+ */
+bool_t canvas_is_rect_in_clip_rect(canvas_t* c, xy_t left, xy_t top, xy_t right, xy_t bottom);
 
 /**
  * @method canvas_set_clip_rect
@@ -301,7 +422,7 @@ ret_t canvas_draw_points(canvas_t* c, const point_t* points, uint32_t nr);
 
 /**
  * @method canvas_fill_rect
- * 填充矩形。
+ * 绘制矩形。
  *
  * @annotation ["scriptable"]
  * @param {canvas_t*} c canvas对象。
@@ -313,6 +434,38 @@ ret_t canvas_draw_points(canvas_t* c, const point_t* points, uint32_t nr);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t canvas_fill_rect(canvas_t* c, xy_t x, xy_t y, wh_t w, wh_t h);
+
+/**
+ * @method canvas_fill_rect_gradient
+ * 绘制矩形。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {xy_t} x x坐标。
+ * @param {xy_t} y y坐标。
+ * @param {wh_t} w 宽度。
+ * @param {wh_t} h 高度。
+ * @param {gradient_t*} gradient 渐变颜色。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_fill_rect_gradient(canvas_t* c, xy_t x, xy_t y, wh_t w, wh_t h, gradient_t* gradient);
+
+/**
+ * @method canvas_clear_rect
+ * 用填充颜色填充指定矩形。
+ * 
+ *> 如果lcd的颜色格式带alpha通道，连同alpha的值一起修改。
+ *
+ * @annotation ["scriptable"]
+ * @param {canvas_t*} c canvas对象。
+ * @param {xy_t} x x坐标。
+ * @param {xy_t} y y坐标。
+ * @param {wh_t} w 宽度。
+ * @param {wh_t} h 高度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_clear_rect(canvas_t* c, xy_t x, xy_t y, wh_t w, wh_t h);
 
 /**
  * @method canvas_stroke_rect
@@ -343,6 +496,17 @@ ret_t canvas_stroke_rect(canvas_t* c, xy_t x, xy_t y, wh_t w, wh_t h);
 ret_t canvas_set_font(canvas_t* c, const char* name, font_size_t size);
 
 /**
+ * @method canvas_reset_font
+ * 释放canvas中字体相关的资源。
+ *
+ * @annotation ["scriptable"]
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_reset_font(canvas_t* c);
+
+/**
  * @method canvas_set_text_align
  * 设置文本对齐方式。
  *
@@ -367,6 +531,16 @@ ret_t canvas_set_text_align(canvas_t* c, align_h_t align_h, align_v_t align_v);
 float_t canvas_measure_text(canvas_t* c, const wchar_t* str, uint32_t nr);
 
 /**
+ * @method canvas_get_font_height
+ * 获取字体的高度。
+ *
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {float_t} 返回字体的高度。
+ */
+float_t canvas_get_font_height(canvas_t* c);
+
+/**
  * @method canvas_measure_utf8
  * 计算文本所占的宽度。
  *
@@ -380,6 +554,22 @@ float_t canvas_measure_text(canvas_t* c, const wchar_t* str, uint32_t nr);
  * @return {float_t} 返回文本所占的宽度。
  */
 float_t canvas_measure_utf8(canvas_t* c, const char* str);
+
+/**
+ * @method canvas_draw_text_by_glyphs
+ * 绘制文本。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {glyphs_t*} glyphs 字模列表。
+ * @param {uint32_t} start 字模开始序号。
+ * @param {uint32_t} len 长度。
+ * @param {xy_t} x x坐标。
+ * @param {xy_t} y y坐标。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_draw_text_by_glyphs(canvas_t* c, glyphs_t* glyphs, uint32_t start, uint32_t len,
+                                 xy_t x, xy_t y);
 
 /**
  * @method canvas_draw_text
@@ -426,6 +616,53 @@ ret_t canvas_draw_utf8(canvas_t* c, const char* str, xy_t x, xy_t y);
 ret_t canvas_draw_text_in_rect(canvas_t* c, const wchar_t* str, uint32_t nr, const rect_t* r);
 
 /**
+ * @method canvas_draw_text_in_rect_by_glyphs
+ * 绘制文本。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {glyphs_t*} glyphs 字模列表。
+ * @param {uint32_t} start 字模起始序号。
+ * @param {uint32_t} len 绘制长度。
+ * @param {const rect_t*} r 矩形区域。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_draw_text_in_rect_by_glyphs(canvas_t* c, glyphs_t* glyphs, uint32_t start,
+                                         uint32_t len, const rect_t* r_in);
+
+/**
+ * @method canvas_draw_text_bidi_in_rect_by_glyphs
+ * 绘制文本
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {glyphs_t*} glyphs 字模列表。
+ * @param {uint32_t} start 字模起始序号。
+ * @param {uint32_t} len 绘制长度。
+ * @param {const rect_t*} r_in 矩形区域。
+ * @param {bool_t} ellipses 如果目标宽度不够，是否显示省略号。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_draw_text_bidi_in_rect_by_glyphs(canvas_t* c, glyphs_t* glyphs, uint32_t start,
+                                              uint32_t len, const rect_t* r_in, bool_t ellipses);
+
+/**
+ * @method canvas_draw_text_bidi_in_rect
+ * 绘制文本(支持Unicode Bidirectional Algorithm)。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {const wchar_t*} str 字符串。
+ * @param {uint32_t} nr 字符数。
+ * @param {const rect_t*} r 矩形区域。
+ * @param {const char*} bidi_type 类型。
+ * @param {bool_t} ellipses 如果目标宽度不够，是否显示省略号。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_draw_text_bidi_in_rect(canvas_t* c, const wchar_t* str, uint32_t nr, const rect_t* r,
+                                    const char* bidi_type, bool_t ellipses);
+
+/**
  * @method canvas_draw_utf8_in_rect
  * 绘制文本。
  *
@@ -462,12 +699,43 @@ ret_t canvas_draw_icon(canvas_t* c, bitmap_t* img, xy_t cx, xy_t cy);
  * @annotation ["scriptable"]
  * @param {canvas_t*} c canvas对象。
  * @param {bitmap_t*} img 图片对象。
- * @param {rect_t*} src 源区域。
- * @param {rect_t*} dst 目的区域。
+ * @param {const rect_t*} src 源区域。
+ * @param {const rect_t*} dst 目的区域。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t canvas_draw_image(canvas_t* c, bitmap_t* img, rect_t* src, rect_t* dst);
+ret_t canvas_draw_image(canvas_t* c, bitmap_t* img, const rect_t* src, const rect_t* dst);
+
+/**
+ * @method canvas_draw_image_ex
+ * 绘制图片。
+ *
+ * @annotation ["scriptable"]
+ * @param {canvas_t*} c canvas对象。
+ * @param {bitmap_t*} img 图片对象。
+ * @param {image_draw_type_t} draw_type 绘制类型。
+ * @param {const rect_t*} dst 目的区域。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_draw_image_ex(canvas_t* c, bitmap_t* img, image_draw_type_t draw_type,
+                           const rect_t* dst);
+
+/**
+ * @method canvas_draw_image_ex2
+ * 绘制图片。
+ *
+ * @annotation ["scriptable"]
+ * @param {canvas_t*} c canvas对象。
+ * @param {bitmap_t*} img 图片对象。
+ * @param {image_draw_type_t} draw_type 绘制类型。
+ * @param {const rect_t*} src 源区域。
+ * @param {const rect_t*} dst 目的区域。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_draw_image_ex2(canvas_t* c, bitmap_t* img, image_draw_type_t draw_type,
+                            const rect_t* src, const rect_t* dst);
 
 /**
  * @method canvas_get_vgcanvas
@@ -501,36 +769,258 @@ canvas_t* canvas_cast(canvas_t* c);
  */
 ret_t canvas_reset(canvas_t* c);
 
-/*private*/
-ret_t canvas_draw_image_ex(canvas_t* c, bitmap_t* img, image_draw_type_t draw_type,
-                           const rect_t* dst);
+/**
+ * @method canvas_reset_cache
+ * 清除canvas中缓存。
+ * > 备注：主要用于窗口动画的离线画布绘制完成后重置在线画布，使下一帧中lcd对象的数据保持一致。
+ *
+ * @annotation ["scriptable"]
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_reset_cache(canvas_t* c);
+
+/**
+ * @method canvas_draw_image_at
+ * 在指定位置画图。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {bitmap_t*} img 图片对象。
+ * @param {xy_t} x x坐标。
+ * @param {xy_t} y w坐标。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t canvas_draw_image_at(canvas_t* c, bitmap_t* img, xy_t x, xy_t y);
-ret_t canvas_draw_icon_in_rect(canvas_t* c, bitmap_t* img, rect_t* r);
 
-ret_t canvas_draw_image_center(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_patch3_x(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_patch3_x_scale_y(canvas_t* c, bitmap_t* img, rect_t* dst);
+/**
+ * @method canvas_draw_icon_in_rect
+ * 在指定rect内绘制icon。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {bitmap_t*} img 图片对象。
+ * @param {const rect_t*} r 矩形区域。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_draw_icon_in_rect(canvas_t* c, bitmap_t* img, const rect_t* r);
 
-ret_t canvas_draw_image_patch3_y(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_patch3_y_scale_x(canvas_t* c, bitmap_t* img, rect_t* dst);
+/*public for internal use*/
+ret_t canvas_draw_image_center(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_patch3_x(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_patch3_x_scale_y(canvas_t* c, bitmap_t* img, const rect_t* dst);
 
-ret_t canvas_draw_image_patch9(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_repeat(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_repeat_x(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_repeat_y(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_scale(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_scale_w(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_scale_h(canvas_t* c, bitmap_t* img, rect_t* dst);
-ret_t canvas_draw_image_scale_down(canvas_t* c, bitmap_t* img, rect_t* src, rect_t* dst);
+ret_t canvas_draw_image_patch3_y(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_patch3_y_scale_x(canvas_t* c, bitmap_t* img, const rect_t* dst);
 
+ret_t canvas_draw_image_patch9(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_repeat(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_repeat_x(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_repeat_y(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_repeat_y_inverse(canvas_t* c, bitmap_t* img, const rect_t* dst_in);
+ret_t canvas_draw_image_repeat9(canvas_t* c, bitmap_t* img, const rect_t* dst_in);
+ret_t canvas_draw_image_repeat3_x(canvas_t* c, bitmap_t* img, const rect_t* dst_in);
+ret_t canvas_draw_image_repeat3_y(canvas_t* c, bitmap_t* img, const rect_t* dst_in);
+ret_t canvas_draw_image_scale(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_scale_w(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_scale_h(canvas_t* c, bitmap_t* img, const rect_t* dst);
+ret_t canvas_draw_image_fill(canvas_t* c, bitmap_t* img, const rect_t* dst_in);
+ret_t canvas_draw_image_scale_down(canvas_t* c, bitmap_t* img, const rect_t* src,
+                                   const rect_t* dst);
+
+/**
+ * @method canvas_draw_line
+ * 画直线。
+ * @param {canvas_t*} c canvas对象。
+ * @param {xy_t} x1 起始点的x坐标。
+ * @param {xy_t} y1 起始点的y坐标。
+ * @param {xy_t} x2 结束点的x坐标。
+ * @param {xy_t} y2 结束点的y坐标。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t canvas_draw_line(canvas_t* c, xy_t x1, xy_t y1, xy_t x2, xy_t y2);
 ret_t canvas_draw_char(canvas_t* c, wchar_t chr, xy_t x, xy_t y);
 ret_t canvas_draw_image_matrix(canvas_t* c, bitmap_t* img, matrix_t* matrix);
-ret_t canvas_set_fps(canvas_t* c, bool_t show_fps, uint32_t fps);
-ret_t canvas_set_font_manager(canvas_t* c, font_manager_t* font_manager);
 
-ret_t canvas_begin_frame(canvas_t* c, rect_t* dirty_rect, lcd_draw_mode_t draw_mode);
+/**
+ * @method canvas_set_fps
+ * 设置FPS。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {bool_t} show_fps 是否显示fps。
+ * @param {uint32_t} fps FPS。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_set_fps(canvas_t* c, bool_t show_fps, uint32_t fps);
+ret_t canvas_set_fps_ex(canvas_t* c, bool_t show_fps, uint32_t fps, xy_t x, xy_t y);
+
+/**
+ * @method canvas_set_font_manager
+ * 设置canvas的font_manager对象。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {font_manager_t*} font_manager font_manager对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_set_font_manager(canvas_t* c, font_manager_t* font_manager);
+/**
+ * @method canvas_set_assets_manager
+ * 设置canvas的assets_manager对象。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {assets_manager_t*} assets_manager assets_manager对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_set_assets_manager(canvas_t* c, assets_manager_t* assets_manager);
+
+/**
+ * @method canvas_get_text_metrics
+ * 获取当前字体的度量信息。
+ *
+ * @param {canvas_t*} canvas canvas对象。
+ * @param {float_t*} ascent 用于返回ascent。
+ * @param {float_t*} descent 用于返回descent。
+ * @param {float_t*} line_hight 用于返回line height。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_get_text_metrics(canvas_t* canvas, float_t* ascent, float_t* descent,
+                              float_t* line_hight);
+
+/**
+ * @method canvas_begin_frame
+ * 绘制开始。
+ *
+ * @param {canvas_t*} c canvas对象。
+ * @param {const dirty_rects_t*} dirty_rects 脏矩形。
+ * @param {lcd_draw_mode_t} draw_mode 绘制模式。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_begin_frame(canvas_t* c, const dirty_rects_t* dirty_rects, lcd_draw_mode_t draw_mode);
+
+/**
+ * @method canvas_fill_rounded_rect
+ * 填充区域。
+ * @param {canvas_t*} c canvas对象。
+ * @param {const rect_t*} r 矩形。
+ * @param {const rect_t*} bg_r 矩形（默认为 NULL，当圆角直径大于 r 矩形的宽高后，会根据 bg_r 矩形来决定是否需要缩小圆角半径）。
+ * @param {const color_t*} color 颜色。
+ * @param {uint32_t} radius 圆角半径。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_fill_rounded_rect(canvas_t* c, const rect_t* r, const rect_t* bg_r,
+                               const color_t* color, uint32_t radius);
+
+/**
+ * @method canvas_fill_rounded_rect_gradient
+ * 填充圆角矩形区域。
+ * @param {canvas_t*} c canvas对象。
+ * @param {const rect_t*} r 矩形。
+ * @param {const rect_t*} bg_r 矩形（默认为 NULL，当圆角直径大于 r 矩形的宽高后，会根据 bg_r 矩形来决定是否需要缩小圆角半径）。
+ * @param {const gradient_t*} gradient 渐变颜色。
+ * @param {uint32_t} radius 圆角半径。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_fill_rounded_rect_gradient(canvas_t* c, const rect_t* r, const rect_t* bg_r,
+                                        const gradient_t* gradient, uint32_t radius);
+
+/**
+ * @method canvas_fill_rounded_rect_gradient_ex
+ * 填充圆角矩形区域。
+ * 半径半径小于等于2，则表示该角为直角，如果全部角都为直角则返回RET_FAIL。（如果全是直角，该函数效率没有canvas_fill_rect函数快）
+ * 如果各个半径都不一样的话，就是会使用vg，如果不支持vg就会返回RET_FAIL（直角的情况除外）。
+ * @param {canvas_t*} c canvas对象。
+ * @param {const rect_t*} r 矩形。
+ * @param {const rect_t*} bg_r 矩形。（默认为 NULL，当圆角直径大于 r 矩形的宽高后，会根据 bg_r 矩形来决定是否需要缩小圆角半径）
+ * @param {const gradient_t*} gradient 渐变颜色。
+ * @param {uint32_t} radius_tl 左上角圆角半径。
+ * @param {uint32_t} radius_tr 右上角圆角半径。
+ * @param {uint32_t} radius_bl 左下角圆角半径。
+ * @param {uint32_t} radius_br 右下角圆角半径。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_fill_rounded_rect_gradient_ex(canvas_t* c, const rect_t* r, const rect_t* bg_r,
+                                           const gradient_t* gradient, uint32_t radius_tl,
+                                           uint32_t radius_tr, uint32_t radius_bl,
+                                           uint32_t radius_br);
+
+/**
+ * @method canvas_fill_rounded_rect_ex
+ * 填充圆角矩形区域。
+ * 半径半径小于等于2，则表示该角为直角，如果全部角都为直角则返回RET_FAIL。（如果全是直角，该函数效率没有canvas_fill_rect函数快）
+ * 如果各个半径都不一样的话，就是会使用vg，如果不支持vg就会返回RET_FAIL（直角的情况除外）。
+ * @param {canvas_t*} c canvas对象。
+ * @param {const rect_t*} r 矩形。
+ * @param {const rect_t*} bg_r 矩形。（默认为 NULL，当圆角直径大于 r 矩形的宽高后，会根据 bg_r 矩形来决定是否需要缩小圆角半径）
+ * @param {const color_t*} color 颜色。
+ * @param {uint32_t} radius_tl 左上角圆角半径。
+ * @param {uint32_t} radius_tr 右上角圆角半径。
+ * @param {uint32_t} radius_bl 左下角圆角半径。
+ * @param {uint32_t} radius_br 右下角圆角半径。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_fill_rounded_rect_ex(canvas_t* c, const rect_t* r, const rect_t* bg_r,
+                                  const color_t* color, uint32_t radius_tl, uint32_t radius_tr,
+                                  uint32_t radius_bl, uint32_t radius_br);
+
+/**
+ * @method canvas_stroke_rounded_rect
+ * 绘制边框。
+ * @param {canvas_t*} c canvas对象。
+ * @param {const rect_t*} r 矩形。
+ * @param {const rect_t*} bg_r 矩形（默认为 NULL，当圆角直径大于 r 矩形的宽高后，会根据 bg_r 矩形来决定是否需要缩小圆角半径）。
+ * @param {const color_t*} color 颜色。
+ * @param {uint32_t} radius 圆角半径。
+ * @param {uint32_t} border_width 边宽。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_stroke_rounded_rect(canvas_t* c, const rect_t* r, const rect_t* bg_r,
+                                 const color_t* color, uint32_t radius, uint32_t border_width);
+
+/**
+ * @method canvas_stroke_rounded_rect_ex
+ * 绘制边框。
+ * 半径半径小于等于2，则表示该角为直角，如果全部角都为直角则返回RET_FAIL。（如果全是直角，该函数效率没有canvas_stroke_rect函数快）
+ * 如果各个半径都不一样的话，就是会使用vg，如果不支持vg就会返回RET_FAIL（直角的情况除外）。
+ * @param {canvas_t*} c canvas对象。
+ * @param {const rect_t*} r 矩形。
+ * @param {const rect_t*} bg_r 矩形（默认为 NULL，当圆角直径大于 r 矩形的宽高后，会根据 bg_r 矩形来决定是否需要缩小圆角半径）。
+ * @param {const color_t*} color 颜色。
+ * @param {uint32_t} radius_tl 左上角圆角半径。
+ * @param {uint32_t} radius_tr 右上角圆角半径。
+ * @param {uint32_t} radius_bl 左下角圆角半径。
+ * @param {uint32_t} radius_br 右下角圆角半径。
+ * @param {uint32_t} border_width 边宽。
+ * @param {int32_t} border_model 边框类型。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t canvas_stroke_rounded_rect_ex(canvas_t* c, const rect_t* r, const rect_t* bg_r,
+                                    const color_t* color, uint32_t radius_tl, uint32_t radius_tr,
+                                    uint32_t radius_bl, uint32_t radius_br, uint32_t border_width,
+                                    int32_t border_model);
+
+/**
+ * @method canvas_end_frame
+ * 绘制结束。
+ *
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t canvas_end_frame(canvas_t* c);
+
 ret_t canvas_test_paint(canvas_t* c, bool_t pressed, xy_t x, xy_t y);
 
 /*save/restore works for awtk web only*/

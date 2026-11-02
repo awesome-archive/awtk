@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  slider
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -43,7 +43,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [basic](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/basic.xml)
+ * [basic](https://github.com/zlgopen/awtk/blob/master/design/default/ui/basic.xml)
  *
  * 在c代码中使用函数slider\_create创建滑块控件。如：
  *
@@ -68,38 +68,59 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme
- * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L179)
+ * default](https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L179)
  *
  */
 typedef struct _slider_t {
   widget_t widget;
   /**
-   * @property {uint16_t} value
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * @property {double} value
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable","inputable"]
    * 值。
    */
-  uint16_t value;
+  double value;
 
   /**
-   * @property {uint16_t} min
+   * @property {double} min
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 最小值。
    */
-  uint16_t min;
+  double min;
 
   /**
-   * @property {uint16_t} max
+   * @property {double} max
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 最大值。
    */
-  uint16_t max;
+  double max;
 
   /**
-   * @property {uint16_t} step
+   * @property {double} step
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 拖动的最小单位。
    */
-  uint16_t step;
+  double step;
+
+  /**
+   * @property {uint32_t} bar_size
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 轴的宽度或高度（单位：像素），为0表示为控件的宽度或高度的一半，缺省为0。
+   */
+  uint32_t bar_size;
+
+  /**
+   * @property {uint32_t} dragger_size
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 滑块的宽度或高度（单位：像素），缺省为 bar_size * 1.5。
+   */
+  uint32_t dragger_size;
+
+  /**
+   * @property {char*} line_cap
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 前景色的线帽形状。（取值：butt|round，默认为跟随风格的圆角设置, 但是在没有设置圆角的时候无法使用 "round" 来设置圆角）
+   */
+  char* line_cap;
 
   /**
    * @property {bool_t} vertical
@@ -109,28 +130,50 @@ typedef struct _slider_t {
   bool_t vertical;
 
   /**
-   * @property {uint32_t} bar_size
+   * @property {bool_t} dragger_adapt_to_icon
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * bar的宽度或高度。
+   * 滑块的宽度或高度是否与icon适应，缺省为true。
    */
-  uint32_t bar_size;
+  bool_t dragger_adapt_to_icon;
+
+  /**
+   * @property {bool_t} slide_with_bar
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否允许在轴上滑动来改变滑块位置，缺省为FALSE。
+   */
+  bool_t slide_with_bar;
+
+  /**
+   * @property {uint32_t} drag_threshold
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 进入拖动状态的拖动临界值。
+   *
+   */
+  uint32_t drag_threshold;
 
   /*private*/
+  bool_t pressed;
   bool_t dragging;
+  bool_t no_dragger_icon;
+  bool_t auto_get_dragger_size;
+  double saved_value;
+  point_t down;
+  rect_t dragger_rect;
+
 } slider_t;
 
 /**
- * @event {event_t} EVT_VALUE_WILL_CHANGE
+ * @event {value_change_event_t} EVT_VALUE_WILL_CHANGE
  * 值即将改变事件。
  */
 
 /**
- * @event {event_t} EVT_VALUE_CHANGING
+ * @event {value_change_event_t} EVT_VALUE_CHANGING
  * 值正在改变事件(拖动中)。
  */
 
 /**
- * @event {event_t} EVT_VALUE_CHANGED
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
  * 值改变事件。
  */
 
@@ -163,44 +206,55 @@ widget_t* slider_cast(widget_t* widget);
  * 设置滑块的值。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {uint16_t}  value 值
+ * @param {double}  value 值
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t slider_set_value(widget_t* widget, uint16_t value);
+ret_t slider_set_value(widget_t* widget, double value);
 
 /**
  * @method slider_set_min
  * 设置滑块的最小值。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {uint16_t}  min 最小值
+ * @param {double}  min 最小值
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t slider_set_min(widget_t* widget, uint16_t min);
+ret_t slider_set_min(widget_t* widget, double min);
 
 /**
  * @method slider_set_max
  * 设置滑块的最大值。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {uint16_t}  max 最大值
+ * @param {double}  max 最大值
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t slider_set_max(widget_t* widget, uint16_t max);
+ret_t slider_set_max(widget_t* widget, double max);
+
+/**
+ * @method slider_set_line_cap
+ * 设置前景色的线帽形状。（默认为跟随风格的圆角设置，但是在没有设置圆角的时候无法使用 "round" 来设置圆角）
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {const char*}  line_cap 前景色的线帽形状，取值为：butt|round
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t slider_set_line_cap(widget_t* widget, const char* line_cap);
 
 /**
  * @method slider_set_step
  * 设置滑块的拖动的最小单位。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {uint16_t}  step 拖动的最小单位。
+ * @param {double}  step 拖动的最小单位。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t slider_set_step(widget_t* widget, uint16_t step);
+ret_t slider_set_step(widget_t* widget, double step);
 
 /**
  * @method slider_set_bar_size
@@ -224,6 +278,22 @@ ret_t slider_set_bar_size(widget_t* widget, uint32_t bar_size);
  */
 ret_t slider_set_vertical(widget_t* widget, bool_t vertical);
 
+/**
+ * @method slider_set_drag_threshold
+ * 设置拖拽临界值。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {uint32_t}  drag_threshold 拖拽临界值。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t slider_set_drag_threshold(widget_t* widget, uint32_t drag_threshold);
+
+#define SLIDER_PROP_DRAGGER_SIZE "dragger_size"
+#define SLIDER_PROP_DRAGGER_ADAPT_TO_ICON "dragger_adapt_to_icon"
+#define SLIDER_PROP_SLIDE_WITH_BAR "slide_with_bar"
+#define SLIDER_PROP_SLIDE_LINE_CAP "line_cap"
+
 #define SLIDER(widget) ((slider_t*)(slider_cast(WIDGET(widget))))
 
 /*public for subclass and runtime type check*/
@@ -232,7 +302,19 @@ TK_EXTERN_VTABLE(slider);
 /*public for test*/
 ret_t slider_dec(widget_t* widget);
 ret_t slider_inc(widget_t* widget);
-ret_t slider_set_value_internal(widget_t* widget, uint16_t value, event_type_t etype, bool_t force);
+
+/**
+ * @method slider_set_value_internal
+ * 设置滑块的值(public for test)。
+ *
+ * @param {widget_t*} widget 控件对象。
+ * @param {double}  value 值。
+ * @param {uint32_t} etype 触发事件。
+ * @param {bool_t} force 不管有没有变化都设置。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t slider_set_value_internal(widget_t* widget, double value, uint32_t etype, bool_t force);
 
 END_C_DECLS
 

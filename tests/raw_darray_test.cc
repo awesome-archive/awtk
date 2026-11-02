@@ -1,0 +1,236 @@
+﻿#include <string.h>
+#include <stdlib.h>
+#include "gtest/gtest.h"
+#include "tkc/raw_darray.h"
+
+TEST(RawDarray, basic) {
+  TK_RAW_DARRAY_T(int) arr = TK_RAW_DARRAY_CREATE(int, 4);
+  ASSERT_TRUE(arr != NULL);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 0u);
+
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 0), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 1), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 2), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 3), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 4);
+
+  for (size_t i = 0; i < TK_RAW_DARRAY_SIZE(arr); i++) {
+    ASSERT_EQ(arr[i], i);
+    arr[i] *= 10;
+  }
+
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 40), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 50), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 60), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 70), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 80), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 90), RET_OK);
+
+  for (size_t i = 0; i < TK_RAW_DARRAY_SIZE(arr); i++) {
+    ASSERT_EQ(arr[i], i * 10);
+  }
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}
+
+TEST(RawDarray, remove) {
+  TK_RAW_DARRAY_T(int) arr = TK_RAW_DARRAY_CREATE(int, 4);
+  ASSERT_TRUE(arr != NULL);
+
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 0), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 1), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 2), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 3), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 4);
+
+  TK_RAW_DARRAY_REMOVE(arr, 1);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 3);
+
+  int temp[] = {0, 2, 3};
+  for (size_t i = 0; i < TK_RAW_DARRAY_SIZE(arr); i++) {
+    ASSERT_EQ(arr[i], temp[i]);
+  }
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}
+
+TEST(RawDarray, insert) {
+  TK_RAW_DARRAY_T(int) arr = TK_RAW_DARRAY_CREATE(int, 4);
+  ASSERT_TRUE(arr != NULL);
+
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 0), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 1), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 2), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 3), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 4);
+
+  TK_RAW_DARRAY_INSERT(arr, 3, 33);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 5);
+
+  int temp[] = {0, 1, 2, 33, 3};
+  for (size_t i = 0; i < TK_RAW_DARRAY_SIZE(arr); i++) {
+    ASSERT_EQ(arr[i], temp[i]);
+  }
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}
+
+TEST(RawDarray, memset) {
+  TK_RAW_DARRAY_T(int) arr = TK_RAW_DARRAY_CREATE(int, 4);
+  ASSERT_TRUE(arr != NULL);
+
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 0), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 1), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 2), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 3), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 4);
+
+  TK_RAW_DARRAY_RESIZE(arr, 100);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 100);
+
+  memset(arr, 0, TK_RAW_DARRAY_SIZE(arr) * sizeof(*arr));
+
+  int temp[100] = {0};
+  ASSERT_EQ(memcmp(arr, temp, TK_RAW_DARRAY_SIZE(arr)), 0);
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}
+
+TEST(RawDarray, memcpy) {
+  TK_RAW_DARRAY_T(int) arr = TK_RAW_DARRAY_CREATE(int, 0);
+  ASSERT_TRUE(arr != NULL);
+
+  int temp[] = {0, 1, 2, 3, 4};
+  TK_RAW_DARRAY_RESIZE(arr, ARRAY_SIZE(temp));
+  memcpy(arr, temp, ARRAY_SIZE(temp) * sizeof(*temp));
+
+  for (size_t i = 0; i < TK_RAW_DARRAY_SIZE(arr); i++) {
+    ASSERT_EQ(arr[i], temp[i]);
+  }
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}
+
+static int raw_darray_test_cmp(const void* a, const void* b) {
+  int va = *(int*)(a);
+  int vb = *(int*)(b);
+  return va - vb;
+}
+
+TEST(RawDarray, sort_and_search) {
+  TK_RAW_DARRAY_T(int) arr = TK_RAW_DARRAY_CREATE(int, 0);
+  ASSERT_TRUE(arr != NULL);
+
+  int key = rand() % 100;
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, key), RET_OK);
+  for (size_t i = TK_RAW_DARRAY_SIZE(arr); i < 10; i++) {
+    ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, rand() % 100), RET_OK);
+  }
+
+  qsort(arr, TK_RAW_DARRAY_SIZE(arr), sizeof(*arr), raw_darray_test_cmp);
+
+  int* found = (int*)bsearch(&key, arr, TK_RAW_DARRAY_SIZE(arr), sizeof(*arr), raw_darray_test_cmp);
+  ASSERT_TRUE(found != NULL);
+  size_t index = found - arr;
+
+  for (size_t i = 0; i < TK_RAW_DARRAY_SIZE(arr); i++) {
+    if (i < index) {
+      ASSERT_LE(arr[i], key);
+    } else if (i > index) {
+      ASSERT_GE(arr[i], key);
+    } else {
+      ASSERT_EQ(arr[i], key);
+    }
+  }
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}
+
+static void raw_darray_func_arg_test(TK_RAW_DARRAY_T(int) * arr) {
+  return_if_fail(arr != NULL && *arr != NULL);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(*arr, 40), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(*arr, 50), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(*arr, 60), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(*arr, 70), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(*arr, 80), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(*arr, 90), RET_OK);
+}
+
+TEST(RawDarray, func_arg) {
+  TK_RAW_DARRAY_T(int) arr = TK_RAW_DARRAY_CREATE(int, 4);
+  ASSERT_TRUE(arr != NULL);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 0u);
+
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 0), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 1), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 2), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 3), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 4);
+
+  for (size_t i = 0; i < TK_RAW_DARRAY_SIZE(arr); i++) {
+    ASSERT_EQ(arr[i], i);
+    arr[i] *= 10;
+  }
+
+  raw_darray_func_arg_test(&arr);
+
+  for (size_t i = 0; i < TK_RAW_DARRAY_SIZE(arr); i++) {
+    ASSERT_EQ(arr[i], i * 10);
+  }
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}
+
+TEST(RawDarray, shrink) {
+  TK_RAW_DARRAY_T(int) arr = TK_RAW_DARRAY_CREATE(int, 4);
+  ASSERT_TRUE(arr != NULL);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 0u);
+
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 0), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 1), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 2), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 3), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 4);
+
+  ASSERT_EQ(TK_RAW_DARRAY_RESIZE(arr, 100), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 100);
+  ASSERT_EQ(TK_RAW_DARRAY_CAPACITY(arr), 100);
+
+  ASSERT_EQ(TK_RAW_DARRAY_RESIZE(arr, 4), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 4);
+  ASSERT_EQ(TK_RAW_DARRAY_CAPACITY(arr), 100);
+
+  ASSERT_EQ(TK_RAW_DARRAY_PUSH(arr, 4), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 5);
+
+  ASSERT_EQ(TK_RAW_DARRAY_SHRINK(arr), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 5);
+  ASSERT_EQ(TK_RAW_DARRAY_CAPACITY(arr), 5);
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}
+
+TEST(RawDarray, error) {
+  TK_RAW_DARRAY_T(int) arr = NULL;
+  arr = TK_RAW_DARRAY_CREATE(int, -1);
+  ASSERT_FALSE(arr != NULL);
+  arr = TK_RAW_DARRAY_CREATE(int, 4);
+  ASSERT_TRUE(arr != NULL);
+
+  TK_RAW_DARRAY_PUSH(arr, 0);
+  TK_RAW_DARRAY_PUSH(arr, 1);
+  TK_RAW_DARRAY_PUSH(arr, 2);
+
+  ASSERT_NE(TK_RAW_DARRAY_RESIZE(arr, -1), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 3);
+
+  ASSERT_NE(TK_RAW_DARRAY_REMOVE(arr, -1), RET_OK);
+  ASSERT_NE(TK_RAW_DARRAY_REMOVE(arr, TK_RAW_DARRAY_SIZE(arr)), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 3);
+
+  ASSERT_NE(TK_RAW_DARRAY_INSERT(arr, -1, -1), RET_OK);
+  ASSERT_NE(TK_RAW_DARRAY_INSERT(arr, TK_RAW_DARRAY_SIZE(arr) + 1, -2), RET_OK);
+  ASSERT_EQ(TK_RAW_DARRAY_SIZE(arr), 3);
+
+  ASSERT_EQ(TK_RAW_DARRAY_DESTROY(arr), RET_OK);
+}

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  mutable_image
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -27,11 +27,15 @@
 
 BEGIN_C_DECLS
 
+typedef bool_t (*mutable_image_need_redraw_t)(void* ctx);
 typedef ret_t (*mutable_image_prepare_image_t)(void* ctx, bitmap_t* image);
+typedef bitmap_t* (*mutable_image_create_image_t)(void* ctx, bitmap_format_t format,
+                                                  bitmap_t* old_image);
 
 /**
  * @class mutable_image_t
  * @parent image_base_t
+ * @annotation ["scriptable","design","widget"]
  *
  * mutable图片控件。
  *
@@ -49,7 +53,7 @@ typedef ret_t (*mutable_image_prepare_image_t)(void* ctx, bitmap_t* image);
  *
  * >更多用法请参考：
  * [mutable
- * image](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/mutable_image.xml)
+ * image](https://github.com/zlgopen/awtk/blob/master/design/default/ui/mutable_image.xml)
  *
  * 在c代码中使用函数mutable\_image\_create创建mutable图片控件。如：
  *
@@ -60,6 +64,7 @@ typedef ret_t (*mutable_image_prepare_image_t)(void* ctx, bitmap_t* image);
  *
  * > 创建之后:
  * >
+ * > 需要用mutable\_image\_set\_create\_image设置创建图片的回调函数。
  * > 需要用mutable\_image\_set\_prepare\_image设置准备图片的回调函数。
  *
  * > 完整示例请参考：[mutable image demo](
@@ -72,18 +77,27 @@ typedef struct _mutable_image_t {
   image_base_t image_base;
 
   /*private*/
+  bool_t is_need_redraw;
+  uint32_t timer_id;
   void* prepare_image_ctx;
   mutable_image_prepare_image_t prepare_image;
 
+  void* need_redraw_ctx;
+  mutable_image_need_redraw_t need_redraw;
+
+  void* create_image_ctx;
+  mutable_image_create_image_t create_image;
+
   bitmap_t* fb;
   bitmap_t* image;
+  bitmap_t* user_image;
   canvas_t* canvas;
 } mutable_image_t;
 
 /**
  * @method mutable_image_create
  * 创建mutable_image对象
- * @annotation ["constructor"]
+ * @annotation ["constructor", "scriptable"]
  * @param {widget_t*} parent 父控件
  * @param {xy_t} x x坐标
  * @param {xy_t} y y坐标
@@ -93,6 +107,33 @@ typedef struct _mutable_image_t {
  * @return {widget_t*} 对象。
  */
 widget_t* mutable_image_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
+
+/**
+ * @method mutable_image_invalidate_force
+ * mutable_image 强制刷新。
+ * 备注：
+ * 1. 该函数不负责更新界面数据，只是刷新更新控件脏矩形和触发刷新事件，会强制刷新并且无视 need_redraw 回调函数。
+ * 2. 可以配合 need_redraw 回调函数来使用，当 need_redraw 回调函数固定返回 false 时，同时按照用户自己的周期节拍调用该函数强制刷新，就可以实现外部控制 mutable_image 刷新时机。
+ * @param {widget_t*} widget mutable_image对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mutable_image_invalidate_force(widget_t* widget);
+
+/**
+ * @method mutable_image_set_need_redraw
+ * 设置need_redraw回调函数。
+ * 备注：该函数不负责更新界面数据，只是询问刷新时机同时更新控件脏矩形。（需要配合 mutable_image_set_prepare_image 来设置图片数据）
+ * 缺省每16ms刷新一次。但有时只是在变化时刷新，所以提供一个回调函数由用户决定是否需要重绘。
+ *
+ * @param {widget_t*} widget mutable_image对象。
+ * @param {mutable_image_need_redraw_t} need_redraw 检查是否需要重绘的回调函数。
+ * @param {void*} need_redraw_ctx need_redraw回调函数的上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mutable_image_set_need_redraw(widget_t* widget, mutable_image_need_redraw_t need_redraw,
+                                    void* need_redraw_ctx);
 
 /**
  * @method mutable_image_set_prepare_image
@@ -111,6 +152,23 @@ widget_t* mutable_image_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h)
  */
 ret_t mutable_image_set_prepare_image(widget_t* widget, mutable_image_prepare_image_t prepare_image,
                                       void* prepare_image_ctx);
+
+/**
+ * @method mutable_image_set_create_image
+ * 设置create_image回调函数。
+ *
+ * 由create_image函数决定是否重新创建image:
+ * 一般情况下(比如大小和格式不变时)，create_image 可以重用 old_image，直接返回 old_image。
+ * 如果重新创建新的图片，则create_image必须销毁old_image。
+ *
+ * @param {widget_t*} widget mutable_image对象。
+ * @param {mutable_image_create_image_t} create_image 创建图片的回调函数。
+ * @param {void*} create_image_ctx create_image回调函数的上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mutable_image_set_create_image(widget_t* widget, mutable_image_create_image_t create_image,
+                                     void* create_image_ctx);
 
 /**
  * @method mutable_image_set_framebuffer
@@ -141,7 +199,41 @@ ret_t mutable_image_set_framebuffer(widget_t* widget, uint32_t w, uint32_t h,
  */
 widget_t* mutable_image_cast(widget_t* widget);
 
-#define WIDGET_TYPE_MUTABLE_IMAGE "mutable"
+/**
+ * @method mutable_image_init
+ * 初始化 mutable_image （提供给继承的子类使用的）
+ *
+ * @annotation ["cast"]
+ * @param {widget_t*} widget mutable_image对象。
+ *
+ * @return {widget_t*} mutable_image对象。
+ */
+widget_t* mutable_image_init(widget_t* widget);
+
+/**
+ * @method mutable_image_on_destroy
+ * 释放 mutable_image （提供给继承的子类使用的）
+ *
+ * @annotation ["cast"]
+ * @param {widget_t*} widget mutable_image对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mutable_image_on_destroy(widget_t* widget);
+
+/**
+ * @method mutable_image_on_paint_self
+ * mutable_image 的绘制函数 （提供给继承的子类使用的）
+ *
+ * @annotation ["cast"]
+ * @param {widget_t*} widget mutable_image对象。
+ * @param {canvas_t*} canvas 画布对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t mutable_image_on_paint_self(widget_t* widget, canvas_t* canvas);
+
+#define WIDGET_TYPE_MUTABLE_IMAGE "mutable_image"
 
 #define MUTABLE_IMAGE(widget) ((mutable_image_t*)(mutable_image_cast(WIDGET(widget))))
 

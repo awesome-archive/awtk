@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  idle manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,7 +22,7 @@
 #ifndef TK_IDLE_H
 #define TK_IDLE_H
 
-#include "base/idle_manager.h"
+#include "tkc/idle_manager.h"
 
 BEGIN_C_DECLS
 
@@ -77,6 +77,19 @@ uint32_t idle_add(idle_func_t on_idle, void* ctx);
 ret_t idle_queue(idle_func_t on_idle, void* ctx);
 
 /**
+ * @method idle_queue_ex
+ * 用于非GUI线程增加一个idle，本函数向主循环的事件队列中发送一个增加idle的请求。
+ * @annotation ["static"]
+ * @param {idle_func_t} on_idle idle回调函数。
+ * @param {void*} ctx idle回调函数的上下文。
+ * @param {tk_destroy_t} on_destroy 回调函数（参数类型是idle_info_t，可通过info->on_destroy_ctx拿到上下文）。
+ * @param {void*} on_destroy_ctx 回调函数上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t idle_queue_ex(idle_func_t on_idle, void* ctx, tk_destroy_t on_destroy, void* on_destroy_ctx);
+
+/**
  * @method idle_remove
  * 删除指定的idle。
  * @annotation ["scriptable", "static"]
@@ -87,11 +100,32 @@ ret_t idle_queue(idle_func_t on_idle, void* ctx);
 ret_t idle_remove(uint32_t idle_id);
 
 /**
+ * @method idle_remove_ex
+ * 删除指定的idle。
+ * @annotation ["static"]
+ * @param {tk_compare_t} compare idle_info_t比较函数。
+ * @param {void*} ctx 比较函数的上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t idle_remove_ex(tk_compare_t compare, void* ctx);
+
+/**
+ * @method idle_remove_all_by_ctx
+ * 根据上下文删除所有对应的idle。
+ * @annotation ["static"]
+ * @param {void*} ctx idle回调函数的上下文
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t idle_remove_all_by_ctx(void* ctx);
+
+/**
  * @method idle_find
  * 查找指定ID的idle。
- * @annotation ["private"]
+ * @param {uint32_t} idle_id idleID。
  *
- * @return {idle_info_t*} 返回idle的信息。
+ * @return {const idle_info_t*} 返回idle的信息。
  */
 const idle_info_t* idle_find(uint32_t idle_id);
 
@@ -99,7 +133,7 @@ const idle_info_t* idle_find(uint32_t idle_id);
  * @method idle_set_on_destroy
  * 设置一个回调函数，在idle被销毁时调用(方便脚本语言去释放回调函数)。
  * @param {uint32_t} idle_id idleID。
- * @param {tk_destroy_t} on_destroy 回调函数。
+ * @param {tk_destroy_t} on_destroy 回调函数（参数类型是idle_info_t，可通过info->on_destroy_ctx拿到上下文）。
  * @param {void*} on_destroy_ctx 回调函数上下文。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -109,7 +143,6 @@ ret_t idle_set_on_destroy(uint32_t idle_id, tk_destroy_t on_destroy, void* on_de
 /**
  * @method idle_dispatch
  * 调用全部idle的函数。
- * @annotation ["private"]
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -123,6 +156,23 @@ ret_t idle_dispatch(void);
  * @return {uint32_t} 返回idle的个数。
  */
 uint32_t idle_count(void);
+
+/**
+ * @method idle_exist
+ * idle是否存在。
+ * @annotation ["static"]
+ * @param {idle_func_t} on_idle idle回调函数。
+ * @param {void*} ctx idle回调函数的上下文。
+ *
+ * @return {bool_t} 返回TRUE表示存在，否则表示不存在。
+ */
+bool_t idle_exist(idle_func_t on_idle, void* ctx);
+
+/*internal use*/
+ret_t idle_remove_all_by_ctx_and_type(uint32_t type, void* ctx);
+uint32_t idle_add_with_type(idle_func_t on_idle, void* ctx, uint32_t type);
+ret_t idle_queue_impl(idle_func_t on_idle, void* ctx, tk_destroy_t on_destroy, void* on_destroy_ctx,
+                      bool_t alarm);
 
 END_C_DECLS
 

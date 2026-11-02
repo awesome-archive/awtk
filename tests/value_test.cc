@@ -1,6 +1,7 @@
-﻿#include "tkc/value.h"
+#include "tkc/value.h"
 #include "gtest/gtest.h"
 #include "tkc/object_default.h"
+#include <cmath>
 
 TEST(value, i8) {
   value_t v;
@@ -95,19 +96,19 @@ TEST(value, wstri32) {
 TEST(value, u32) {
   value_t v;
   ASSERT_EQ(&v, value_set_uint32(&v, 10));
-  ASSERT_EQ(value_uint32(&v), 10);
+  ASSERT_EQ(value_uint32(&v), 10u);
 }
 
 TEST(value, stru32) {
   value_t v;
   ASSERT_EQ(&v, value_set_str(&v, "10"));
-  ASSERT_EQ(value_uint32(&v), 10);
+  ASSERT_EQ(value_uint32(&v), 10u);
 }
 
 TEST(value, wstru32) {
   value_t v;
   ASSERT_EQ(&v, value_set_wstr(&v, L"10"));
-  ASSERT_EQ(value_uint32(&v), 10);
+  ASSERT_EQ(value_uint32(&v), 10u);
 }
 
 TEST(value, i64) {
@@ -131,55 +132,116 @@ TEST(value, wstri64) {
 TEST(value, u64) {
   value_t v;
   ASSERT_EQ(&v, value_set_uint64(&v, 10));
-  ASSERT_EQ(value_uint64(&v), 10);
+  ASSERT_EQ(value_uint64(&v), 10u);
 }
 
 TEST(value, stru64) {
   value_t v;
   ASSERT_EQ(&v, value_set_str(&v, "10"));
-  ASSERT_EQ(value_uint64(&v), 10);
+  ASSERT_EQ(value_uint64(&v), 10u);
 }
 
 TEST(value, wstru64) {
   value_t v;
   ASSERT_EQ(&v, value_set_wstr(&v, L"10"));
-  ASSERT_EQ(value_uint64(&v), 10);
+  ASSERT_EQ(value_uint64(&v), 10u);
+}
+
+/* double 转 int64/uint64：须保留完整整型范围，不能经 value_int 截断为 32 位 */
+TEST(value, double_to_i64) {
+  value_t v;
+  const int64_t big = 8589934592LL; /* 2^33，超出 int32 */
+  ASSERT_EQ(&v, value_set_double(&v, (double)big));
+  ASSERT_EQ(value_int64(&v), big);
+
+  value_set_double(&v, -12345.9);
+  ASSERT_EQ(value_int64(&v), -12345);
+
+  ASSERT_EQ(&v, value_set_double(&v, INT64_MAX + 1.0));
+  ASSERT_EQ(value_int64(&v), INT64_MAX);
+  ASSERT_EQ(&v, value_set_double(&v, INT64_MIN - 1.0));
+  ASSERT_EQ(value_int64(&v), INT64_MIN);
+
+  ASSERT_EQ(&v, value_set_double(&v, INFINITY));
+  ASSERT_EQ(value_int64(&v), INT64_MAX);
+  ASSERT_EQ(&v, value_set_double(&v, -INFINITY));
+  ASSERT_EQ(value_int64(&v), INT64_MIN);
+
+  ASSERT_EQ(&v, value_set_double(&v, NAN));
+#if defined(NDEBUG)
+  ASSERT_EQ(value_int64(&v), 0);
+#else
+  ASSERT_DEATH(value_int64(&v), "");
+#endif /* NDEBUG */
+}
+
+TEST(value, double_to_u64) {
+  value_t v;
+  const uint64_t big = (uint64_t)1 << 40;
+  ASSERT_EQ(&v, value_set_double(&v, (double)big));
+  ASSERT_EQ(value_uint64(&v), big);
+
+  value_set_double(&v, 0.0);
+  ASSERT_EQ(value_uint64(&v), 0u);
+
+  ASSERT_EQ(&v, value_set_double(&v, UINT64_MAX + 1.0));
+  ASSERT_EQ(value_uint64(&v), UINT64_MAX);
+  ASSERT_EQ(&v, value_set_double(&v, -1.0));
+  ASSERT_EQ(value_uint64(&v), 0);
+
+  ASSERT_EQ(&v, value_set_double(&v, INFINITY));
+  ASSERT_EQ(value_uint64(&v), UINT64_MAX);
+  ASSERT_EQ(&v, value_set_double(&v, -INFINITY));
+  ASSERT_EQ(value_uint64(&v), 0);
+
+  ASSERT_EQ(&v, value_set_double(&v, NAN));
+#if defined(NDEBUG)
+  ASSERT_EQ(value_uint64(&v), 0);
+#else
+  ASSERT_DEATH(value_uint64(&v), "");
+#endif /* NDEBUG */
 }
 
 TEST(value, float) {
   value_t v;
   ASSERT_EQ(&v, value_set_float(&v, 10));
-  ASSERT_EQ(value_float(&v), 10);
+  ASSERT_EQ(value_float(&v), 10.0f);
 }
 
 TEST(value, strfloat) {
   value_t v;
   ASSERT_EQ(&v, value_set_str(&v, "10"));
-  ASSERT_EQ(value_float(&v), 10);
+  ASSERT_EQ(value_float(&v), 10.0f);
 }
 
 TEST(value, wstrfloat) {
   value_t v;
   ASSERT_EQ(&v, value_set_wstr(&v, L"10"));
-  ASSERT_EQ(value_float(&v), 10);
+  ASSERT_EQ(value_float(&v), 10.0f);
 }
 
 TEST(value, double) {
   value_t v;
   ASSERT_EQ(&v, value_set_double(&v, 10));
-  ASSERT_EQ(value_double(&v), 10);
+  ASSERT_EQ(value_double(&v), 10.0);
+}
+
+TEST(value, bool_to_double) {
+  value_t v;
+  ASSERT_EQ(&v, value_set_bool(&v, true));
+  ASSERT_EQ(value_double(&v), 1.0);
 }
 
 TEST(value, strdouble) {
   value_t v;
   ASSERT_EQ(&v, value_set_str(&v, "10"));
-  ASSERT_EQ(value_double(&v), 10);
+  ASSERT_EQ(value_double(&v), 10.0);
 }
 
 TEST(value, wstrdouble) {
   value_t v;
   ASSERT_EQ(&v, value_set_wstr(&v, L"10"));
-  ASSERT_EQ(value_double(&v), 10);
+  ASSERT_EQ(value_double(&v), 10.0);
 }
 
 TEST(ValueTest, str) {
@@ -188,6 +250,33 @@ TEST(ValueTest, str) {
 
   ASSERT_EQ(&v, value_set_str(&v, str));
   ASSERT_EQ(strcmp(value_str(&v), "str"), 0);
+}
+
+TEST(ValueTest, sized_str) {
+  value_t v;
+  const char* str = "str";
+  sized_str_t* sized_str = NULL;
+  ASSERT_EQ(&v, value_set_sized_str(&v, (char*)str, 2));
+  sized_str = value_sized_str(&v);
+  ASSERT_EQ(sized_str != NULL, true);
+  ASSERT_EQ(sized_str->size, 2u);
+}
+
+TEST(ValueTest, binary_data) {
+  value_t v;
+  const char* str = "str";
+  binary_data_t* binary_data = NULL;
+  ASSERT_EQ(&v, value_set_binary_data(&v, (void*)str, 2));
+  binary_data = value_binary_data(&v);
+  ASSERT_EQ(binary_data != NULL, true);
+  ASSERT_EQ(binary_data->size, 2u);
+}
+
+TEST(ValueTest, token) {
+  value_t v;
+
+  ASSERT_EQ(&v, value_set_token(&v, 123));
+  ASSERT_EQ(value_token(&v), 123u);
 }
 
 TEST(ValueTest, wstr) {
@@ -200,17 +289,29 @@ TEST(ValueTest, wstr) {
 
 TEST(ValueTest, object) {
   value_t v;
-  object_t* o = object_default_create();
+  tk_object_t* o = object_default_create();
 
   ASSERT_EQ(&v, value_set_object(&v, o));
   ASSERT_EQ(o, value_object(&v));
 
-  object_unref(o);
+  tk_object_unref(o);
 }
 
 TEST(value, int) {
   value_t v;
   ASSERT_EQ(value_int(value_set_uint64(&v, 10)), 10);
+}
+
+TEST(value, id) {
+  value_t v;
+  ASSERT_STREQ(value_id(value_set_id(&v, "abc", 3)), "abc");
+  value_reset(&v);
+}
+
+TEST(value, func) {
+  value_t v;
+  ASSERT_STREQ((char*)value_func(value_set_func(&v, (void*)"abc")), "abc");
+  value_reset(&v);
 }
 
 TEST(ValueTest, copy) {
@@ -243,6 +344,88 @@ TEST(ValueTest, deepcopy) {
   value_reset(&other);
 }
 
+TEST(ValueTest, deepcopy_binary) {
+  value_t v;
+  value_t other;
+  const char* str = "str";
+  binary_data_t* bin1 = NULL;
+  binary_data_t* bin2 = NULL;
+
+  ASSERT_EQ(&other, value_set_binary_data(&other, (void*)str, 4));
+  ASSERT_EQ(value_deep_copy(&v, &other), RET_OK);
+
+  bin1 = value_binary_data(&v);
+  bin2 = value_binary_data(&other);
+
+  ASSERT_STREQ((const char*)(bin1->data), str);
+  ASSERT_STREQ((const char*)(bin2->data), str);
+  ASSERT_EQ(bin1->data != bin2->data, true);
+
+  value_reset(&v);
+  value_reset(&other);
+}
+
+TEST(ValueTest, deepcopy_keep_type) {
+  value_t dst;
+  value_t src;
+
+  /* int32 */
+  value_set_int32(&dst, 0);
+  value_set_int32(&src, 12345);
+  ASSERT_EQ(value_deep_copy_keep_type(&dst, &src), RET_OK);
+  ASSERT_EQ(dst.type, VALUE_TYPE_INT32);
+  ASSERT_EQ(value_int32(&dst), 12345);
+  value_reset(&dst);
+  value_reset(&src);
+
+  /* float */
+  value_set_float(&dst, 0);
+  value_set_float(&src, 3.14f);
+  ASSERT_EQ(value_deep_copy_keep_type(&dst, &src), RET_OK);
+  ASSERT_EQ(dst.type, VALUE_TYPE_FLOAT);
+  ASSERT_DOUBLE_EQ(value_float(&dst), 3.14f);
+  value_reset(&dst);
+  value_reset(&src);
+
+  /* string - dst gets dup of src */
+  value_set_str(&dst, "");
+  value_set_str(&src, "hello");
+  ASSERT_EQ(value_deep_copy_keep_type(&dst, &src), RET_OK);
+  ASSERT_EQ(dst.type, VALUE_TYPE_STRING);
+  ASSERT_STREQ(value_str(&dst), "hello");
+  ASSERT_NE(value_str(&dst), value_str(&src));
+  value_reset(&dst);
+  value_reset(&src);
+
+  /* bool */
+  value_set_bool(&dst, FALSE);
+  value_set_bool(&src, TRUE);
+  ASSERT_EQ(value_deep_copy_keep_type(&dst, &src), RET_OK);
+  ASSERT_EQ(dst.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&dst), TRUE);
+  value_reset(&dst);
+  value_reset(&src);
+
+  /* type mismatch (object vs string) - should fail */
+  {
+    tk_object_t* obj = object_default_create();
+    value_set_object(&dst, obj);
+    value_set_str(&src, "string");
+    ASSERT_NE(value_deep_copy_keep_type(&dst, &src), RET_OK);
+    value_reset(&dst);
+    value_reset(&src);
+    TK_OBJECT_UNREF(obj);
+  }
+
+  /* null params */
+  value_set_int32(&dst, 0);
+  value_set_int32(&src, 0);
+  ASSERT_NE(value_deep_copy_keep_type(NULL, &src), RET_OK);
+  ASSERT_NE(value_deep_copy_keep_type(&dst, NULL), RET_OK);
+  value_reset(&dst);
+  value_reset(&src);
+}
+
 TEST(ValueTest, copy_str) {
   value_t v;
   value_t other;
@@ -252,4 +435,1880 @@ TEST(ValueTest, copy_str) {
 
   value_reset(&v);
   value_reset(&other);
+}
+
+TEST(ValueTest, replace) {
+  value_t v;
+  value_t other;
+
+  value_dup_str(&v, "hello");
+  value_dup_str(&other, "awtk");
+
+  ASSERT_EQ(value_replace(&v, &other, FALSE), RET_OK);
+  ASSERT_STREQ(value_str(&v), "awtk");
+  ASSERT_EQ(v.free_handle, FALSE);
+
+  ASSERT_NE(value_replace(&other, &v, FALSE), RET_OK);
+  ASSERT_EQ(value_replace(&other, &v, TRUE), RET_OK);
+
+  ASSERT_EQ(value_replace(&v, &other, TRUE), RET_OK);
+  ASSERT_STREQ(value_str(&v), "awtk");
+  ASSERT_EQ(v.free_handle, TRUE);
+
+  ASSERT_EQ(value_replace(&v, &other, TRUE), RET_OK);
+
+  value_reset(&v);
+  value_reset(&other);
+}
+
+TEST(ValueTest, ubjson) {
+  value_t v;
+  const char* str = "str";
+  binary_data_t* ubjson = NULL;
+  ASSERT_EQ(&v, value_set_ubjson(&v, (void*)str, 2));
+  ASSERT_EQ(v.type, (uint32_t)VALUE_TYPE_UBJSON);
+
+  ubjson = value_ubjson(&v);
+  ASSERT_EQ(ubjson != NULL, true);
+  ASSERT_EQ(ubjson->size, 2u);
+}
+
+TEST(ValueTest, gradient) {
+  value_t v;
+  const char* str = "str";
+  binary_data_t* gradient = NULL;
+  ASSERT_EQ(&v, value_set_gradient(&v, (void*)str, 2));
+  ASSERT_EQ(v.type, (uint32_t)VALUE_TYPE_GRADIENT);
+
+  gradient = value_gradient(&v);
+  ASSERT_EQ(gradient != NULL, true);
+  ASSERT_EQ(gradient->size, 2u);
+}
+
+TEST(value, i64_from_str) {
+  value_t v;
+  ASSERT_EQ(&v, value_set_str(&v, "12345678912345"));
+  ASSERT_EQ(value_int64(&v), 12345678912345);
+
+  ASSERT_EQ(&v, value_set_str(&v, "-12345678912345"));
+  ASSERT_EQ(value_int64(&v), -12345678912345);
+}
+
+TEST(value, ui64_from_str) {
+  value_t v;
+  ASSERT_EQ(&v, value_set_str(&v, "12345678912345"));
+  ASSERT_EQ(value_uint64(&v), 12345678912345u);
+}
+
+#include "tkc/utils.h"
+#include "tkc/rect.h"
+TEST(value, pointer) {
+  value_t v;
+  char* str = tk_strdup("abc");
+  ASSERT_EQ(&v, value_set_pointer_ex(&v, str, default_destroy));
+  ASSERT_STREQ((char*)value_pointer(&v), "abc");
+  value_reset(&v);
+}
+
+TEST(value, bitmap) {
+  value_t v;
+  void* bitmap = &v;
+  ASSERT_EQ(value_bitmap(value_set_bitmap(&v, bitmap)), bitmap);
+}
+
+TEST(value, rect) {
+  value_t v;
+  rect_t r1 = rect_init(10, 10, 20, 20);
+  rect_t* r2 = value_rect(value_set_rect(&v, r1));
+  ASSERT_EQ(r1.x, r2->x);
+  ASSERT_EQ(r1.y, r2->y);
+  ASSERT_EQ(r1.w, r2->w);
+  ASSERT_EQ(r1.h, r2->h);
+}
+
+TEST(value, lshift) {
+  value_t v;
+  value_t r;
+  uint32_t i = 0;
+
+  for (i = 0; i < 100; i++) {
+    int8_t i8 = 1;
+    value_set_int8(&v, i8);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_int8(&r), (int8_t)(i8 << i));
+
+    i8 = 0b10101010;
+    value_set_int8(&v, i8);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_INT8);
+    ASSERT_EQ(value_int8(&r), (int8_t)(i8 << i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    int16_t i16 = 1;
+    value_set_int16(&v, i16);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_int16(&r), (int16_t)(i16 << i));
+
+    i16 = 0b10101010;
+    value_set_int16(&v, i16);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_INT16);
+    ASSERT_EQ(value_int16(&r), (int16_t)(i16 << i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    int32_t i32 = 1;
+    value_set_int32(&v, i32);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_int32(&r), (int32_t)(i32 << i));
+
+    i32 = 0b10101010;
+    value_set_int32(&v, i32);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_INT32);
+    ASSERT_EQ(value_int32(&r), (int32_t)(i32 << i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    int64_t i64 = 1;
+    value_set_int64(&v, i64);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_int64(&r), (int64_t)(i64 << i));
+
+    i64 = 0b10101010;
+    value_set_int64(&v, i64);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_INT64);
+    ASSERT_EQ(value_int64(&r), (int64_t)(i64 << i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    uint8_t i8 = 1;
+    value_set_uint8(&v, i8);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_uint8(&r), (uint8_t)(i8 << i));
+
+    i8 = 0b10101010;
+    value_set_uint8(&v, i8);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+    ASSERT_EQ(value_uint8(&r), (uint8_t)(i8 << i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    uint16_t i16 = 1;
+    value_set_uint16(&v, i16);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_uint16(&r), (uint16_t)(i16 << i));
+
+    i16 = 0b10101010;
+    value_set_uint16(&v, i16);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+    ASSERT_EQ(value_uint16(&r), (uint16_t)(i16 << i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    uint32_t i32 = 1;
+    value_set_uint32(&v, i32);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_uint32(&r), (uint32_t)(i32 << i));
+
+    i32 = 0b10101010;
+    value_set_uint32(&v, i32);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+    ASSERT_EQ(value_uint32(&r), (uint32_t)(i32 << i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    uint64_t i64 = 1;
+    value_set_uint64(&v, i64);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_uint64(&r), (uint64_t)(i64 << i));
+
+    i64 = 0b10101010;
+    value_set_uint64(&v, i64);
+    ASSERT_EQ(value_lshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+    ASSERT_EQ(value_uint64(&r), (uint64_t)(i64 << i));
+  }
+}
+
+TEST(value, rshift) {
+  value_t v;
+  value_t r;
+  uint32_t i = 0;
+
+  for (i = 0; i < 100; i++) {
+    int8_t i8 = 0xf0;
+    value_set_int8(&v, i8);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_int8(&r), (int8_t)(i8 >> i));
+
+    i8 = 0b10101010;
+    value_set_int8(&v, i8);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_INT8);
+    ASSERT_EQ(value_int8(&r), (int8_t)(i8 >> i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    int16_t i16 = 0xfe00;
+    value_set_int16(&v, i16);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_int16(&r), (int16_t)(i16 >> i));
+
+    i16 = 0b10101010;
+    value_set_int16(&v, i16);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_INT16);
+    ASSERT_EQ(value_int16(&r), (int16_t)(i16 >> i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    int32_t i32 = 0xf0f01000;
+    value_set_int32(&v, i32);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_int32(&r), (int32_t)(i32 >> i));
+
+    i32 = 0b10101010;
+    value_set_int32(&v, i32);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_INT32);
+    ASSERT_EQ(value_int32(&r), (int32_t)(i32 >> i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    int64_t i64 = 0xf000f000f0001111;
+    value_set_int64(&v, i64);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_int64(&r), (int64_t)(i64 >> i));
+
+    i64 = 0b10101010;
+    value_set_int64(&v, i64);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_INT64);
+    ASSERT_EQ(value_int64(&r), (int64_t)(i64 >> i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    uint8_t i8 = 1;
+    value_set_uint8(&v, i8);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_uint8(&r), (uint8_t)(i8 >> i));
+
+    i8 = 0b10101010;
+    value_set_uint8(&v, i8);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+    ASSERT_EQ(value_uint8(&r), (uint8_t)(i8 >> i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    uint16_t i16 = 0xf123;
+    value_set_uint16(&v, i16);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_uint16(&r), (uint16_t)(i16 >> i));
+
+    i16 = 0b10101010;
+    value_set_uint16(&v, i16);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+    ASSERT_EQ(value_uint16(&r), (uint16_t)(i16 >> i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    uint32_t i32 = 0xfa0fa;
+    value_set_uint32(&v, i32);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_uint32(&r), (uint32_t)(i32 >> i));
+
+    i32 = 0b10101010;
+    value_set_uint32(&v, i32);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+    ASSERT_EQ(value_uint32(&r), (uint32_t)(i32 >> i));
+  }
+
+  for (i = 0; i < 100; i++) {
+    uint64_t i64 = 0x1000200030004000;
+    value_set_uint64(&v, i64);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_uint64(&r), (uint64_t)(i64 >> i));
+
+    i64 = 0b10101010;
+    value_set_uint64(&v, i64);
+    ASSERT_EQ(value_rshift(&v, &r, i), RET_OK);
+    ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+    ASSERT_EQ(value_uint64(&r), (uint64_t)(i64 >> i));
+  }
+}
+
+TEST(value, lshift_r) {
+  value_t v;
+  value_t r;
+
+  uint8_t u8 = 0b11000011;
+  value_set_uint8(&v, u8);
+  ASSERT_EQ(value_lshift_r(&v, &r, 3), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&r), (uint8_t)(0b00011110));
+
+  u8 = 0b11000011;
+  value_set_uint8(&v, u8);
+  ASSERT_EQ(value_lshift_r(&v, &r, 11), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&r), (uint8_t)(0b00011110));
+
+  uint16_t u16 = 0xf1f2;
+  value_set_uint16(&v, u16);
+  ASSERT_EQ(value_lshift_r(&v, &r, 4), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&r), 0x1f2fu);
+
+  u16 = 0xf1f2;
+  value_set_uint16(&v, u16);
+  ASSERT_EQ(value_lshift_r(&v, &r, 20), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&r), 0x1f2fu);
+
+  uint32_t u32 = 0xf1f2abcd;
+  value_set_uint32(&v, u32);
+  ASSERT_EQ(value_lshift_r(&v, &r, 4), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&r), 0x1f2abcdfu);
+
+  u32 = 0xf1f2abcd;
+  value_set_uint32(&v, u32);
+  ASSERT_EQ(value_lshift_r(&v, &r, 36), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&r), 0x1f2abcdfu);
+
+  uint64_t u64 = 0xf1f2abcdf1f2abcd;
+  value_set_uint64(&v, u64);
+  ASSERT_EQ(value_lshift_r(&v, &r, 4), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&r), 0x1f2abcdf1f2abcdfu);
+
+  u64 = 0xf1f2abcdf1f2abcd;
+  value_set_uint64(&v, u64);
+  ASSERT_EQ(value_lshift_r(&v, &r, 68), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&r), 0x1f2abcdf1f2abcdfu);
+}
+
+TEST(value, rshift_r) {
+  value_t v;
+  value_t r;
+
+  uint8_t u8 = 0b11000011;
+  value_set_uint8(&v, u8);
+  ASSERT_EQ(value_rshift_r(&v, &r, 3), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&r), (uint8_t)(0b01111000));
+
+  u8 = 0b11000011;
+  value_set_uint8(&v, u8);
+  ASSERT_EQ(value_rshift_r(&v, &r, 11), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&r), (uint8_t)(0b01111000));
+
+  uint16_t u16 = 0xf1f2;
+  value_set_uint16(&v, u16);
+  ASSERT_EQ(value_rshift_r(&v, &r, 4), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&r), 0x2f1fu);
+
+  u16 = 0xf1f2;
+  value_set_uint16(&v, u16);
+  ASSERT_EQ(value_rshift_r(&v, &r, 20), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&r), 0x2f1fu);
+
+  uint32_t u32 = 0xf1f2abcd;
+  value_set_uint32(&v, u32);
+  ASSERT_EQ(value_rshift_r(&v, &r, 4), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&r), 0xdf1f2abcu);
+
+  u32 = 0xf1f2abcd;
+  value_set_uint32(&v, u32);
+  ASSERT_EQ(value_rshift_r(&v, &r, 36), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&r), 0xdf1f2abcu);
+
+  uint64_t u64 = 0xf1f2abcdf1f2abcd;
+  value_set_uint64(&v, u64);
+  ASSERT_EQ(value_rshift_r(&v, &r, 4), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&r), 0xdf1f2abcdf1f2abcu);
+
+  u64 = 0xf1f2abcdf1f2abcd;
+  value_set_uint64(&v, u64);
+  ASSERT_EQ(value_rshift_r(&v, &r, 68), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&r), 0xdf1f2abcdf1f2abcu);
+}
+
+TEST(value, bits) {
+  value_t v;
+  value_t r;
+  uint32_t i = 0;
+
+  for (i = 0; i < sizeof(int8_t); i++) {
+    value_set_int8(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    ASSERT_EQ(value_int8(&r), 1 << i);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), FALSE);
+
+    value_set_int8(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    v = r;
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+  }
+
+  for (i = 0; i < sizeof(uint8_t); i++) {
+    value_set_uint8(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    ASSERT_EQ(value_uint8(&r), 1 << i);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), FALSE);
+
+    value_set_uint8(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    v = r;
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+  }
+
+  for (i = 0; i < sizeof(int16_t); i++) {
+    value_set_int16(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    ASSERT_EQ(value_int16(&r), 1 << i);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), FALSE);
+
+    value_set_int16(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    v = r;
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+  }
+
+  for (i = 0; i < sizeof(uint16_t); i++) {
+    value_set_uint16(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    ASSERT_EQ(value_uint16(&r), 1 << i);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), FALSE);
+
+    value_set_uint16(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    v = r;
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+  }
+
+  for (i = 0; i < sizeof(int32_t); i++) {
+    value_set_int32(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    ASSERT_EQ(value_int32(&r), 1 << i);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), FALSE);
+
+    value_set_int32(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    v = r;
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+  }
+
+  for (i = 0; i < sizeof(uint32_t); i++) {
+    value_set_uint32(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    ASSERT_EQ(value_uint32(&r), 1u << i);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), FALSE);
+
+    value_set_uint32(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    v = r;
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+  }
+
+  for (i = 0; i < sizeof(int64_t); i++) {
+    value_set_int64(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    ASSERT_EQ(value_int64(&r), 1 << i);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), FALSE);
+
+    value_set_int64(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    v = r;
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+  }
+
+  for (i = 0; i < sizeof(uint64_t); i++) {
+    value_set_uint64(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    ASSERT_EQ(value_uint64(&r), 1u << i);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    v = r;
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), FALSE);
+
+    value_set_uint64(&v, 0);
+    ASSERT_EQ(value_set_bit(&v, &r, i, TRUE), RET_OK);
+    v = r;
+    ASSERT_EQ(value_toggle_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_get_bit(&v, &r, i), RET_OK);
+    ASSERT_EQ(value_bool(&r), TRUE);
+  }
+  value_set_int8(&v, 0x70);
+  ASSERT_EQ(value_set_bit(&v, &r, 1, TRUE), RET_OK);
+  ASSERT_EQ(value_int8(&r), 0x72);
+
+  v = r;
+  ASSERT_EQ(value_get_bit(&v, &r, 1), RET_OK);
+  ASSERT_EQ(value_bool(&r), TRUE);
+
+  ASSERT_EQ(value_toggle_bit(&v, &r, 1), RET_OK);
+  ASSERT_EQ(value_int8(&r), 0x70);
+
+  v = r;
+  ASSERT_EQ(value_get_bit(&v, &r, 1), RET_OK);
+  ASSERT_EQ(value_bool(&r), FALSE);
+
+  ASSERT_EQ(value_toggle_bit(&v, &r, 1), RET_OK);
+  ASSERT_EQ(value_int8(&r), 0x72);
+  v = r;
+  ASSERT_EQ(value_get_bit(&v, &r, 1), RET_OK);
+  ASSERT_EQ(value_bool(&r), TRUE);
+
+  value_set_int8(&v, 0xf1);
+  ASSERT_EQ(value_bit_not(&v, &r), RET_OK);
+  ASSERT_EQ(value_int8(&r), ~value_int8(&v));
+
+  value_set_bool(&v, TRUE);
+  ASSERT_EQ(value_bit_not(&v, &r), RET_OK);
+  ASSERT_EQ(value_bool(&r), FALSE);
+
+  value_set_bool(&v, FALSE);
+  ASSERT_EQ(value_bit_not(&v, &r), RET_OK);
+  ASSERT_EQ(value_bool(&r), TRUE);
+}
+
+TEST(value, bit_and_or_xor) {
+  value_t v1;
+  value_t v2;
+  value_t r;
+
+  value_set_int8(&v1, 0xf0);
+  value_set_int8(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT8);
+  ASSERT_EQ(value_int8(&r), 0);
+
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT8);
+  ASSERT_EQ(value_int8(&r), (int8_t)0xff);
+
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT8);
+  ASSERT_EQ(value_int8(&r), (int8_t)0xff);
+
+  value_set_uint8(&v1, 0xf0);
+  value_set_uint8(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&r), 0);
+
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&r), (uint8_t)0xff);
+
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&r), (uint8_t)0xff);
+
+  value_set_int16(&v1, 0xf0);
+  value_set_int16(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT16);
+  ASSERT_EQ(value_int16(&r), 0);
+
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT16);
+  ASSERT_EQ(value_int16(&r), (int16_t)0xff);
+
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT16);
+  ASSERT_EQ(value_int16(&r), (int16_t)0xff);
+
+  value_set_uint16(&v1, 0xf0);
+  value_set_uint16(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&r), 0);
+
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&r), (uint16_t)0xff);
+
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&r), (uint16_t)0xff);
+
+  value_set_int32(&v1, 0xf0);
+  value_set_int32(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT32);
+  ASSERT_EQ(value_int32(&r), 0);
+
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT32);
+  ASSERT_EQ(value_int32(&r), (int32_t)0xff);
+
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT32);
+  ASSERT_EQ(value_int32(&r), (int32_t)0xff);
+
+  value_set_uint32(&v1, 0xf0);
+  value_set_uint32(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&r), 0u);
+
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&r), (uint32_t)0xff);
+
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&r), (uint32_t)0xff);
+
+  value_set_int64(&v1, 0xf0);
+  value_set_int64(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&r), 0);
+
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&r), (int64_t)0xff);
+
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&r), (int64_t)0xff);
+
+  value_set_uint64(&v1, 0xf0);
+  value_set_uint64(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&r), 0u);
+
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&r), (uint64_t)0xff);
+
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&r), (uint64_t)0xff);
+
+  value_set_int32(&v1, 0xf0);
+  value_set_int64(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&r), 0);
+
+  value_set_uint8(&v1, 0xf0);
+  value_set_uint32(&v2, 0x0f);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint64(&r), 0u);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, TRUE);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&r), TRUE);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, TRUE);
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&r), TRUE);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, TRUE);
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&r), FALSE);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, FALSE);
+  ASSERT_EQ(value_bit_and(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&r), FALSE);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, FALSE);
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&r), TRUE);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, FALSE);
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&r), TRUE);
+
+  value_set_bool(&v1, FALSE);
+  value_set_bool(&v2, FALSE);
+  ASSERT_EQ(value_bit_or(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&r), FALSE);
+
+  value_set_bool(&v1, FALSE);
+  value_set_bool(&v2, FALSE);
+  ASSERT_EQ(value_bit_xor(&v1, &v2, &r), RET_OK);
+  ASSERT_EQ(r.type, VALUE_TYPE_BOOL);
+  ASSERT_EQ(value_bool(&r), FALSE);
+}
+
+TEST(value, abs) {
+  value_t v;
+  value_t o;
+  value_set_int(&v, -10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_int(&o), 10);
+
+  value_set_int8(&v, -10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_int8(&o), 10);
+
+  value_set_int16(&v, -10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_int16(&o), 10);
+
+  value_set_int32(&v, -10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_int32(&o), 10);
+
+  value_set_uint32(&v, 10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_uint32(&o), 10u);
+
+  value_set_int64(&v, -10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_int64(&o), 10);
+
+  value_set_int64(&v, 10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_int64(&o), 10);
+
+  value_set_double(&v, 10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_double(&o), 10);
+
+  value_set_double(&v, -10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_double(&o), 10);
+
+  value_set_float(&v, 10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_float(&o), 10);
+
+  value_set_float(&v, -10);
+  ASSERT_EQ(value_abs(&v, &o), RET_OK);
+  ASSERT_EQ(o.type == v.type, TRUE);
+  ASSERT_EQ(value_float(&o), 10);
+}
+
+TEST(value, add_int8) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+  value_set_int8(&v1, -10);
+  value_set_int8(&v2, -8);
+
+  ASSERT_EQ(value_add(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int8(&o), -18);
+
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int8(&o), -2);
+
+  ASSERT_EQ(value_mul(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int8(&o), 80);
+
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int8(&o), 1);
+
+  value_set_int8(&v1, -120);
+  value_set_int8(&v2, -100);
+
+  ASSERT_EQ(value_add(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == VALUE_TYPE_INT16, TRUE);
+  ASSERT_EQ(value_int16(&o), -220);
+
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int8(&o), -20);
+
+  ASSERT_EQ(value_mul(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == VALUE_TYPE_INT16, TRUE);
+  ASSERT_EQ(value_int16(&o), 120 * 100);
+
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int8(&o), 1);
+}
+
+TEST(value, add_int16) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+  value_set_int16(&v1, -16);
+  value_set_int16(&v2, -10);
+
+  ASSERT_EQ(value_add(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int16(&o), -26);
+
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int16(&o), -6);
+
+  ASSERT_EQ(value_mul(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int16(&o), 160);
+
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int16(&o), 1);
+
+  value_set_int16(&v1, -30000);
+  value_set_int16(&v2, -20000);
+
+  ASSERT_EQ(value_add(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == VALUE_TYPE_INT32, TRUE);
+  ASSERT_EQ(value_int32(&o), -50000);
+
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int16(&o), -10000);
+
+  ASSERT_EQ(value_mul(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == VALUE_TYPE_INT32, TRUE);
+  ASSERT_EQ(value_int32(&o), 30000 * 20000);
+
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int16(&o), 1);
+}
+
+TEST(value, add_int32) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+  value_set_int32(&v1, -42);
+  value_set_int32(&v2, -10);
+
+  ASSERT_EQ(value_add(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int32(&o), -52);
+
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int32(&o), -32);
+
+  ASSERT_EQ(value_mul(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int32(&o), 420);
+
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int32(&o), 4);
+}
+
+TEST(value, add_int64) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+  value_set_int64(&v1, -42);
+  value_set_int64(&v2, -10);
+
+  ASSERT_EQ(value_add(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int64(&o), -52);
+
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int64(&o), -32);
+
+  ASSERT_EQ(value_mul(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int64(&o), 420);
+
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int64(&o), 4);
+}
+
+TEST(value, add_double) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+  value_set_double(&v1, -42);
+  value_set_double(&v2, -10);
+
+  ASSERT_EQ(value_add(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_double(&o), -52);
+
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_double(&o), -32);
+
+  ASSERT_EQ(value_mul(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_double(&o), 420);
+
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(tk_fequal(value_double(&o), 4.2), TRUE);
+  ;
+}
+
+TEST(value, mod) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+  value_set_int8(&v1, 10);
+  value_set_int8(&v2, 6);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int8(&o), 4);
+
+  value_set_uint8(&v1, 10);
+  value_set_uint8(&v2, 6);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_uint8(&o), 4);
+
+  value_set_int16(&v1, 10);
+  value_set_int16(&v2, 6);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int16(&o), 4);
+
+  value_set_uint16(&v1, 10);
+  value_set_uint16(&v2, 6);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_uint16(&o), 4);
+
+  value_set_int32(&v1, 10);
+  value_set_int32(&v2, 6);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int32(&o), 4);
+
+  value_set_uint32(&v1, 10);
+  value_set_uint32(&v2, 6);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_uint32(&o), 4u);
+
+  value_set_int64(&v1, 10);
+  value_set_int64(&v2, 6);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_int64(&o), 4);
+
+  value_set_uint64(&v1, 10);
+  value_set_uint64(&v2, 6);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type == v1.type, TRUE);
+  ASSERT_EQ(value_uint64(&o), 4u);
+}
+
+TEST(value, expt) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+  value_set_int8(&v1, 10);
+  value_set_int8(&v2, 3);
+  ASSERT_EQ(value_expt(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(tk_fequal(value_double(&o), 1000), TRUE);
+  ASSERT_EQ(o.type == VALUE_TYPE_DOUBLE, TRUE);
+
+  value_set_int8(&v1, 10);
+  value_set_int8(&v2, -3);
+  ASSERT_EQ(value_expt(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(tk_fequal(value_double(&o), 0.001), TRUE);
+  ASSERT_EQ(o.type == VALUE_TYPE_DOUBLE, TRUE);
+}
+
+TEST(value, min) {
+  uint32_t i = 0;
+  value_t v[10];
+  value_t o;
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_int8(v + i, i * ((i % 2 == 0) ? -1 : 1));
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT8);
+  ASSERT_EQ(value_int8(&o), -8);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_uint8(v + i, i + 1);
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&o), 1);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_int16(v + i, i * ((i % 2 == 0) ? -1 : 1));
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT16);
+  ASSERT_EQ(value_int16(&o), -8);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_uint16(v + i, i + 1);
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&o), 1);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_int32(v + i, i * ((i % 2 == 0) ? -1 : 1));
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT32);
+  ASSERT_EQ(value_int32(&o), -8);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_uint32(v + i, i + 1);
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&o), 1u);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_int64(v + i, (int)i * ((i % 2 == 0) ? -1 : 1));
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&o), -8);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_uint64(v + i, i + 1);
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&o), 1u);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_double(v + i, i + 1);
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_DOUBLE);
+  ASSERT_EQ(value_double(&o), 1);
+
+  const char* str[] = {"a", "b", "c", "0", "A", "B", "C", "1", "2", "3"};
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_str(v + i, str[i]);
+  }
+  ASSERT_EQ(value_min(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_STRING);
+  ASSERT_STREQ(value_str(&o), "0");
+}
+
+TEST(value, max) {
+  uint32_t i = 0;
+  value_t v[10];
+  value_t o;
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_int8(v + i, i * ((i % 2 == 0) ? -1 : 1));
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT8);
+  ASSERT_EQ(value_int8(&o), 9);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_uint8(v + i, i + 1);
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT8);
+  ASSERT_EQ(value_uint8(&o), 10);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_int16(v + i, i * ((i % 2 == 0) ? -1 : 1));
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT16);
+  ASSERT_EQ(value_int16(&o), 9);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_uint16(v + i, i + 1);
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT16);
+  ASSERT_EQ(value_uint16(&o), 10);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_int32(v + i, i * ((i % 2 == 0) ? -1 : 1));
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT32);
+  ASSERT_EQ(value_int32(&o), 9);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_uint32(v + i, i + 1);
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&o), 10u);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_int64(v + i, (int)i * ((i % 2 == 0) ? -1 : 1));
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&o), 9);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_uint64(v + i, i + 1);
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT64);
+  ASSERT_EQ(value_uint64(&o), 10u);
+
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_double(v + i, i + 1);
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_DOUBLE);
+  ASSERT_EQ(value_double(&o), 10);
+
+  const char* str[] = {"a", "b", "c", "0", "A", "B", "C", "1", "2", "3"};
+  for (i = 0; i < ARRAY_SIZE(v); i++) {
+    value_set_str(v + i, str[i]);
+  }
+  ASSERT_EQ(value_max(v, ARRAY_SIZE(v), &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_STRING);
+  ASSERT_STREQ(value_str(&o), "c");
+}
+
+TEST(value, dup_wstr) {
+  value_t v;
+  const wchar_t* wstr = L"hello";
+
+  ASSERT_EQ(value_dup_wstr(&v, wstr), &v);
+  ASSERT_EQ(value_wstr(&v) != wstr, true);
+  ASSERT_EQ(tk_wstr_eq(value_wstr(&v), wstr) == TRUE, true);
+  ASSERT_EQ(v.free_handle == TRUE, true);
+
+  value_reset(&v);
+
+  ASSERT_EQ(v.free_handle == FALSE, true);
+  ASSERT_EQ(v.value.wstr == NULL, true);
+}
+
+TEST(value, equal) {
+  value_t v1;
+  value_t v2;
+
+  value_set_int8(&v1, 10);
+  value_set_int8(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_uint8(&v1, 10);
+  value_set_uint8(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_int16(&v1, 10);
+  value_set_int16(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_uint16(&v1, 10);
+  value_set_uint16(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_int32(&v1, 10);
+  value_set_int32(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_uint32(&v1, 10);
+  value_set_uint32(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_int64(&v1, 10);
+  value_set_int64(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_uint64(&v1, 10);
+  value_set_uint64(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_double(&v1, 10);
+  value_set_double(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_float(&v1, 10);
+  value_set_float(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_float(&v1, 10000000000000);
+  value_set_float(&v2, 10000000000000);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, TRUE);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_float32(&v1, 10);
+  value_set_float32(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_float32(&v1, 10);
+  value_set_int(&v2, 10);
+  ASSERT_EQ(value_equal(&v1, &v2), FALSE);
+
+  value_set_str(&v1, "hello");
+  value_set_str(&v2, "hello");
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+
+  value_set_wstr(&v1, L"hello");
+  value_set_wstr(&v2, L"hello");
+  ASSERT_EQ(value_equal(&v1, &v2), TRUE);
+}
+
+TEST(value, compare) {
+  value_t v1;
+  value_t v2;
+
+  value_set_int8(&v1, 10);
+  value_set_int8(&v2, 11);
+  ASSERT_LT(value_compare(&v1, &v2), 0);
+
+  value_set_uint8(&v1, 10);
+  value_set_uint8(&v2, 9);
+  ASSERT_GT(value_compare(&v1, &v2), 0);
+
+  value_set_int16(&v1, 10);
+  value_set_int16(&v2, 10);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_uint16(&v1, 9);
+  value_set_uint16(&v2, 10);
+  ASSERT_LT(value_compare(&v1, &v2), 0);
+
+  value_set_int32(&v1, 9);
+  value_set_int32(&v2, 11);
+  ASSERT_LT(value_compare(&v1, &v2), 0);
+
+  value_set_uint32(&v1, 10);
+  value_set_uint32(&v2, 10);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_int64(&v1, 12);
+  value_set_int64(&v2, 11);
+  ASSERT_GT(value_compare(&v1, &v2), 0);
+
+  value_set_uint64(&v1, 9);
+  value_set_uint64(&v2, 10);
+  ASSERT_LT(value_compare(&v1, &v2), 0);
+
+  value_set_double(&v1, 10.000000098);
+  value_set_double(&v2, 10);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_float(&v1, 10.000099);
+  value_set_float(&v2, 10);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_float(&v1, 10000000000000);
+  value_set_float(&v2, 10000000000000);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, TRUE);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_float32(&v1, 10.01);
+  value_set_float32(&v2, 10);
+  ASSERT_GT(value_compare(&v1, &v2), 0);
+
+  value_set_str(&v1, "hello");
+  value_set_str(&v2, "hello");
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_wstr(&v1, L"hello");
+  value_set_wstr(&v2, L"hello");
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+}
+
+TEST(value, compare_uint64_large) {
+  value_t v1;
+  value_t v2;
+
+  value_set_uint64(&v1, UINT64_MAX);
+  value_set_uint64(&v2, UINT64_MAX);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_uint64(&v1, UINT64_MAX);
+  value_set_uint64(&v2, UINT64_MAX - 1);
+  ASSERT_EQ(value_compare(&v1, &v2), 1);
+
+  value_set_uint64(&v1, UINT64_MAX - 1);
+  value_set_uint64(&v2, UINT64_MAX);
+  ASSERT_EQ(value_compare(&v1, &v2), -1);
+
+  value_set_uint64(&v1, (uint64_t)INT_MAX + 2u);
+  value_set_uint64(&v2, (uint64_t)INT_MAX + 1u);
+  ASSERT_EQ(value_compare(&v1, &v2), 1);
+
+  value_set_uint64(&v1, 0);
+  value_set_uint64(&v2, UINT64_MAX);
+  ASSERT_EQ(value_compare(&v1, &v2), -1);
+
+  value_set_uint64(&v1, UINT64_MAX);
+  value_set_uint64(&v2, 0);
+  ASSERT_EQ(value_compare(&v1, &v2), 1);
+}
+
+TEST(value, bool_object) {
+  value_t v;
+  tk_object_t* o = object_default_create();
+
+  ASSERT_EQ(&v, value_set_object(&v, o));
+  ASSERT_EQ(value_bool(&v), TRUE);
+
+  tk_object_unref(o);
+}
+
+TEST(value, bool_pointer) {
+  value_t v;
+  value_set_pointer(&v, &v);
+  ASSERT_EQ(value_bool(&v), TRUE);
+}
+
+TEST(value, bool_pointer_ex) {
+  value_t v;
+  void* data = malloc(100);
+  value_set_pointer_ex(&v, data, default_destroy);
+  ASSERT_EQ(value_bool(&v), TRUE);
+  value_reset(&v);
+}
+
+TEST(value, bool_normalize) {
+  value_t v;
+
+  value_set_bool(&v, FALSE);
+  v.value.u8 = 2;
+  ASSERT_EQ(value_bool(&v), TRUE);
+
+  v.value.u8 = 0xff;
+  ASSERT_EQ(value_bool(&v), TRUE);
+
+  v.value.u8 = 0;
+  ASSERT_EQ(value_bool(&v), FALSE);
+}
+
+TEST(value, sub_int32_overflow) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+
+  value_set_int32(&v1, INT32_MIN);
+  value_set_int32(&v2, 1);
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&o), (int64_t)INT32_MIN - 1);
+
+  value_set_int32(&v1, INT32_MAX);
+  value_set_int32(&v2, INT32_MIN);
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&o), (int64_t)INT32_MAX - (int64_t)INT32_MIN);
+
+  value_set_int32(&v1, -10);
+  value_set_int32(&v2, 5);
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT32);
+  ASSERT_EQ(value_int32(&o), -15);
+}
+
+TEST(value, sub_uint32_underflow) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+
+  value_set_uint32(&v1, 0);
+  value_set_uint32(&v2, 1);
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&o), -1);
+
+  value_set_uint32(&v1, 10);
+  value_set_uint32(&v2, 20);
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_INT64);
+  ASSERT_EQ(value_int64(&o), -10);
+
+  value_set_uint32(&v1, 20);
+  value_set_uint32(&v2, 10);
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&o), 10u);
+
+  value_set_uint32(&v1, UINT32_MAX);
+  value_set_uint32(&v2, UINT32_MAX);
+  ASSERT_EQ(value_sub(&v1, &v2, &o), RET_OK);
+  ASSERT_EQ(o.type, VALUE_TYPE_UINT32);
+  ASSERT_EQ(value_uint32(&o), 0u);
+}
+
+static int s_pointer_destroy_count = 0;
+
+static ret_t test_pointer_destroy(void* data) {
+  (void)data;
+  s_pointer_destroy_count++;
+  return RET_OK;
+}
+
+TEST(value, is_null) {
+  value_t v;
+  memset(&v, 0, sizeof(v));
+
+  ASSERT_EQ(value_is_null(NULL), TRUE);
+  ASSERT_EQ(value_is_null(&v), TRUE);
+
+  value_set_int32(&v, 1);
+  ASSERT_EQ(value_is_null(&v), FALSE);
+}
+
+TEST(value, create_destroy) {
+  value_t* v = value_create();
+  ASSERT_NE(v, (value_t*)NULL);
+  ASSERT_EQ(v->type, VALUE_TYPE_INVALID);
+  ASSERT_EQ(value_destroy(v), RET_OK);
+}
+
+TEST(value, cast) {
+  value_t v;
+  value_set_int32(&v, 7);
+  ASSERT_EQ(value_cast(&v), &v);
+  ASSERT_EQ(value_int32(value_cast(&v)), 7);
+}
+
+TEST(value, type_meta) {
+  ASSERT_STREQ(value_type_name(VALUE_TYPE_BOOL), "bool");
+  ASSERT_STREQ(value_type_name(VALUE_TYPE_INT32), "int32");
+  ASSERT_STREQ(value_type_name(VALUE_TYPE_STRING), "char*");
+  ASSERT_STREQ(value_type_name(VALUE_TYPE_OBJECT), "object");
+
+  ASSERT_EQ(value_type_size(VALUE_TYPE_BOOL), sizeof(bool_t));
+  ASSERT_EQ(value_type_size(VALUE_TYPE_INT32), sizeof(int32_t));
+  ASSERT_EQ(value_type_size(VALUE_TYPE_DOUBLE), sizeof(double));
+  ASSERT_EQ(value_type_size(VALUE_TYPE_STRING), sizeof(void*));
+  ASSERT_EQ(value_type_size(VALUE_TYPE_BINARY), sizeof(binary_data_t));
+}
+
+TEST(value, str_ex) {
+  value_t v;
+  char buf[128];
+
+  value_set_int32(&v, 42);
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "42");
+
+  value_set_bool(&v, TRUE);
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "true");
+
+  value_set_bool(&v, FALSE);
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "false");
+
+  value_set_str(&v, "hello");
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "hello");
+
+  value_set_wstr(&v, L"hi");
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "hi");
+
+  value_set_uint64(&v, 123456789ULL);
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "123456789");
+
+  value_reset(&v);
+  memset(buf, 0, sizeof(buf));
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), TK_VALUE_UNDEFINED);
+}
+
+TEST(value, dup_str_with_len) {
+  value_t v;
+
+  ASSERT_EQ(value_dup_str_with_len(&v, "hello", 3), &v);
+  ASSERT_STREQ(value_str(&v), "hel");
+  ASSERT_EQ(v.free_handle, TRUE);
+  value_reset(&v);
+}
+
+TEST(value, dup_binary_data) {
+  value_t v;
+  const char data[] = "abcd";
+  binary_data_t* bin = NULL;
+
+  ASSERT_EQ(value_dup_binary_data(&v, data, sizeof(data)), &v);
+  bin = value_binary_data(&v);
+  ASSERT_NE(bin, (binary_data_t*)NULL);
+  ASSERT_EQ(bin->size, sizeof(data));
+  ASSERT_EQ(memcmp(bin->data, data, sizeof(data)), 0);
+  ASSERT_NE(bin->data, (void*)data);
+  ASSERT_EQ(v.free_handle, TRUE);
+  value_reset(&v);
+}
+
+TEST(value, func_def) {
+  value_t v;
+  int x = 99;
+
+  ASSERT_EQ(value_set_func_def(&v, &x), &v);
+  ASSERT_EQ(value_func_def(&v), &x);
+}
+
+TEST(value, compare_type_mismatch) {
+  value_t v1;
+  value_t v2;
+
+  value_set_int32(&v1, 1);
+  value_set_int64(&v2, 1);
+  ASSERT_EQ(value_compare(&v1, &v2), -1);
+  ASSERT_EQ(value_equal(&v1, &v2), FALSE);
+}
+
+TEST(value, bool_from_string) {
+  value_t v;
+
+  value_set_str(&v, "true");
+  ASSERT_EQ(value_bool(&v), TRUE);
+
+  value_set_str(&v, "false");
+  ASSERT_EQ(value_bool(&v), FALSE);
+
+  value_set_str(&v, "0");
+  ASSERT_EQ(value_bool(&v), FALSE);
+
+  value_set_wstr(&v, L"1");
+  ASSERT_EQ(value_bool(&v), TRUE);
+}
+
+TEST(value, pointer_ref_refcount) {
+  value_t v1;
+  value_t v2;
+  int data = 123;
+
+  s_pointer_destroy_count = 0;
+  value_set_pointer_ex(&v1, &data, test_pointer_destroy);
+  ASSERT_EQ(value_deep_copy(&v2, &v1), RET_OK);
+  ASSERT_EQ(value_pointer(&v1), &data);
+  ASSERT_EQ(value_pointer(&v2), &data);
+
+  value_reset(&v1);
+  ASSERT_EQ(value_pointer(&v2), &data);
+  ASSERT_EQ(s_pointer_destroy_count, 0);
+
+  value_reset(&v2);
+  ASSERT_EQ(s_pointer_destroy_count, 1);
+}
+
+TEST(value, copy_self) {
+  value_t v;
+  value_set_int32(&v, 100);
+  ASSERT_EQ(value_copy(&v, &v), RET_OK);
+  ASSERT_EQ(value_int32(&v), 100);
+}
+
+TEST(value, deepcopy_object) {
+  value_t v1;
+  value_t v2;
+  tk_object_t* o = object_default_create();
+
+  value_set_object(&v1, o);
+  ASSERT_EQ(value_deep_copy(&v2, &v1), RET_OK);
+  ASSERT_EQ(value_object(&v2), o);
+  ASSERT_EQ(v2.free_handle, TRUE);
+
+  value_reset(&v1);
+  ASSERT_EQ(value_object(&v2), o);
+
+  value_reset(&v2);
+  tk_object_unref(o);
+}
+
+TEST(value, compare_pointer) {
+  value_t v1;
+  value_t v2;
+  int arr[2] = {1, 2};
+
+  value_set_pointer(&v1, &arr[0]);
+  value_set_pointer(&v2, &arr[1]);
+  ASSERT_LT(value_compare(&v1, &v2), 0);
+
+  value_set_pointer(&v2, &arr[0]);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+}
+
+TEST(value, expt_edge) {
+  value_t base;
+  value_t exp;
+  value_t out;
+
+  value_set_double(&base, 0);
+  value_set_int32(&exp, 5);
+  ASSERT_EQ(value_expt(&base, &exp, &out), RET_OK);
+  ASSERT_EQ(value_double(&out), 0.0);
+
+  value_set_double(&base, 7);
+  value_set_int32(&exp, 0);
+  ASSERT_EQ(value_expt(&base, &exp, &out), RET_OK);
+  ASSERT_EQ(value_double(&out), 1.0);
+}
+
+TEST(value, int_unsupported) {
+  value_t v;
+  tk_object_t* o = object_default_create();
+  char data[] = "x";
+
+  value_set_object(&v, o);
+  ASSERT_EQ(value_int(&v), 0);
+
+  value_set_pointer(&v, &v);
+  ASSERT_EQ(value_int(&v), 0);
+
+  value_set_token(&v, 123);
+  ASSERT_EQ(value_int(&v), 0);
+
+  value_set_binary_data(&v, data, sizeof(data));
+  ASSERT_EQ(value_int(&v), 0);
+
+  TK_OBJECT_UNREF(o);
+}
+
+TEST(value, div_by_zero_int) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+
+  value_set_int32(&v1, 10);
+  value_set_int32(&v2, 0);
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_BAD_PARAMS);
+  ASSERT_EQ(value_mod(&v1, &v2, &o), RET_BAD_PARAMS);
+
+  value_set_int8(&v1, 10);
+  value_set_int8(&v2, 0);
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_BAD_PARAMS);
+
+  value_set_bool(&v1, TRUE);
+  value_set_bool(&v2, FALSE);
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_BAD_PARAMS);
+}
+
+TEST(value, div_by_zero_float) {
+  value_t v1;
+  value_t v2;
+  value_t o;
+
+  value_set_double(&v1, 1.0);
+  value_set_double(&v2, 0.0);
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_TRUE(std::isinf(value_double(&o)));
+
+  value_set_float(&v1, -2.0f);
+  value_set_float(&v2, 0.0f);
+  ASSERT_EQ(value_div(&v1, &v2, &o), RET_OK);
+  ASSERT_TRUE(std::isinf(value_double(&o)));
+}
+
+TEST(value, str_ex_complex) {
+  value_t v;
+  char buf[128];
+  tk_object_t* o = object_default_create();
+  const char bin[] = "data";
+
+  value_set_id(&v, "widget.name", 11);
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "widget.name");
+  value_reset(&v);
+
+  value_set_binary_data(&v, (void*)bin, 4);
+  ASSERT_NE(strstr(value_str_ex(&v, buf, sizeof(buf)), "binary("), (char*)NULL);
+  ASSERT_NE(strstr(buf, ":4)"), (char*)NULL);
+  value_reset(&v);
+
+  value_set_func(&v, (void*)0x1);
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "func");
+  value_reset(&v);
+
+  value_set_func_def(&v, (void*)0x2);
+  ASSERT_STREQ(value_str_ex(&v, buf, sizeof(buf)), "func_def");
+  value_reset(&v);
+
+  value_set_object(&v, o);
+  ASSERT_NE(strstr(value_str_ex(&v, buf, sizeof(buf)), "object("), (char*)NULL);
+  ASSERT_NE(strstr(buf, "object_default"), (char*)NULL);
+  value_reset(&v);
+
+  value_set_pointer(&v, (void*)0x1234);
+  ASSERT_NE(strstr(value_str_ex(&v, buf, sizeof(buf)), "1234"), (char*)NULL);
+
+  TK_OBJECT_UNREF(o);
+}
+
+TEST(value, compare_object) {
+  value_t v1;
+  value_t v2;
+  tk_object_t* o1 = object_default_create();
+  tk_object_t* o2 = object_default_create();
+
+  value_set_object(&v1, o1);
+  value_set_object(&v2, o1);
+  ASSERT_EQ(value_compare(&v1, &v2), 0);
+
+  value_set_object(&v2, o2);
+  ASSERT_NE(value_compare(&v1, &v2), 0);
+
+  TK_OBJECT_UNREF(o1);
+  TK_OBJECT_UNREF(o2);
+}
+
+TEST(value, min_max_wstr) {
+  value_t arr[3];
+  value_t out;
+
+  value_set_wstr(&arr[0], L"apple");
+  value_set_wstr(&arr[1], L"banana");
+  value_set_wstr(&arr[2], L"cherry");
+
+  ASSERT_EQ(value_min(arr, 3, &out), RET_OK);
+  ASSERT_EQ(out.type, VALUE_TYPE_WSTRING);
+  ASSERT_EQ(tk_wstrcmp(value_wstr(&out), L"apple"), 0);
+
+  ASSERT_EQ(value_max(arr, 3, &out), RET_OK);
+  ASSERT_EQ(out.type, VALUE_TYPE_WSTRING);
+  ASSERT_EQ(tk_wstrcmp(value_wstr(&out), L"cherry"), 0);
+}
+
+TEST(value, deepcopy_pointer_ref_twice) {
+  value_t v1;
+  value_t v2;
+  value_t v3;
+  int data = 7;
+
+  s_pointer_destroy_count = 0;
+  value_set_pointer_ex(&v1, &data, test_pointer_destroy);
+  ASSERT_EQ(value_deep_copy(&v2, &v1), RET_OK);
+  ASSERT_EQ(value_deep_copy(&v3, &v1), RET_OK);
+
+  value_reset(&v1);
+  value_reset(&v2);
+  ASSERT_EQ(value_pointer(&v3), &data);
+  ASSERT_EQ(s_pointer_destroy_count, 0);
+
+  value_reset(&v3);
+  ASSERT_EQ(s_pointer_destroy_count, 1);
+}
+
+TEST(value, dup_str_with_len_null) {
+  value_t v;
+
+  ASSERT_EQ(value_dup_str_with_len(&v, NULL, 0), &v);
+  ASSERT_EQ(value_str(&v), (const char*)NULL);
+  ASSERT_EQ(v.free_handle, FALSE);
+  value_reset(&v);
+}
+
+TEST(value, value_reset_id) {
+  value_t v;
+
+  value_set_id(&v, "test.id", 7);
+  ASSERT_EQ(v.free_handle, TRUE);
+  ASSERT_STREQ(value_id(&v), "test.id");
+  value_reset(&v);
+  ASSERT_EQ(value_is_null(&v), TRUE);
 }

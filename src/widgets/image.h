@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  image
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -52,7 +52,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [image.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/images.xml)
+ * [image.xml](https://github.com/zlgopen/awtk/blob/master/design/default/ui/images.xml)
  *
  * 在c代码中使用函数image\_create创建图片控件。如：
  *
@@ -87,7 +87,7 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme
- * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L313)
+ * default](https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L313)
  *
  */
 typedef struct _image_t {
@@ -114,6 +114,20 @@ typedef struct _image_t {
  * @return {widget_t*} 对象。
  */
 widget_t* image_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
+
+/**
+ * @method icon_create
+ * 创建icon对象
+ * @annotation ["constructor", "scriptable"]
+ * @param {widget_t*} parent 父控件
+ * @param {xy_t} x x坐标
+ * @param {xy_t} y y坐标
+ * @param {wh_t} w 宽度
+ * @param {wh_t} h 高度
+ *
+ * @return {widget_t*} 对象。
+ */
+widget_t* icon_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 
 /**
  * @method image_set_draw_type

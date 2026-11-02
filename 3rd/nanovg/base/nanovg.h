@@ -1,4 +1,4 @@
-//
+﻿//
 // Copyright (c) 2013 Mikko Mononen memon@inside.org
 //
 // This software is provided 'as-is', without any express or implied
@@ -144,6 +144,19 @@ enum NVGimageFlags {
 	NVG_IMAGE_NEAREST			= 1<<5,		// Image interpolation is Nearest instead Linear
 };
 
+enum NVGorientation {
+	NVG_ORIENTATION_0 = 0,
+	NVG_ORIENTATION_90 = 90,
+	NVG_ORIENTATION_180 = 180,
+	NVG_ORIENTATION_270 = 270
+};
+
+enum NVGFillMode {
+	NVG_FILLMODE_All = 0,
+	NVG_FILLMODE_NONZERO = 1,
+	NVG_FILLMODE_EVENODD = 2,
+};
+
 // Begin drawing a new frame
 // Calls to nanovg drawing API should be wrapped in nvgBeginFrame() & nvgEndFrame()
 // nvgBeginFrame() defines the size of the window to render to in relation currently
@@ -152,7 +165,11 @@ enum NVGimageFlags {
 // For example, GLFW returns two dimension for an opened window: window size and
 // frame buffer size. In that case you would set windowWidth/Height to the window size
 // devicePixelRatio to: frameBufferWidth / windowWidth.
-void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio);
+void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio, enum NVGorientation orientation);
+void nvgBeginFrameEx(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio, int reset, enum NVGorientation orientation);
+
+float nvgGetHeight(NVGcontext* ctx);
+float nvgGetWidth(NVGcontext* ctx);
 
 // Cancels drawing the current frame.
 void nvgCancelFrame(NVGcontext* ctx);
@@ -388,6 +405,9 @@ void nvgImageSize(NVGcontext* ctx, int image, int* w, int* h);
 // Deletes created image.
 void nvgDeleteImage(NVGcontext* ctx, int image);
 
+// Deletes font's assets for font's name.
+void nvgDeleteFontByName(NVGcontext* ctx, const char* name);
+
 //
 // Paints
 //
@@ -420,6 +440,9 @@ NVGpaint nvgRadialGradient(NVGcontext* ctx, float cx, float cy, float inr, float
 NVGpaint nvgImagePattern(NVGcontext* ctx, float ox, float oy, float ex, float ey,
 						 float angle, int image, float alpha);
 
+// get xfrom data
+void nvgGetStateXfrom(NVGcontext* ctx, float* xform);
+
 //
 // Scissoring
 //
@@ -438,8 +461,38 @@ void nvgScissor(NVGcontext* ctx, float x, float y, float w, float h);
 // transform space. The resulting shape is always rectangle.
 void nvgIntersectScissor(NVGcontext* ctx, float x, float y, float w, float h);
 
+/**
+ * @method nvgIntersectScissor_ex
+ * 设置一个与前一个裁剪区做交集的矩形裁剪区。
+ * 输入要设置的裁剪区，做交集后把新的裁剪区返回来给用户。
+ * 
+ * @annotation ["scriptable"]
+ * @param {NVGcontext*} ctx nanovg的对象
+ * @param {float_t} x 裁剪区x坐标。
+ * @param {float_t} y 裁剪区y坐标。
+ * @param {float_t} w 裁剪区宽度。
+ * @param {float_t} h 裁剪区高度。
+ *
+ */
+void nvgIntersectScissor_ex(NVGcontext* ctx, float* x, float* y, float* w, float* h);
+
 // Reset and disables scissoring.
 void nvgResetScissor(NVGcontext* ctx);
+
+/**
+ * @method nvgGetCurrScissor
+ * 获取当前裁剪区
+ * 
+ * @annotation ["scriptable"]
+ * @param {NVGcontext*} ctx nanovg的对象
+ * @param {float_t*} x 裁剪区x坐标。
+ * @param {float_t*} y 裁剪区y坐标。
+ * @param {float_t*} w 裁剪区宽度。
+ * @param {float_t*} h 裁剪区高度。
+ *
+ * @return {int} 返回成功返回 1，失败返回 0。
+ */
+int nvgGetCurrScissor(NVGcontext* ctx, float* x, float* y, float* w, float* h);
 
 //
 // Paths
@@ -481,6 +534,9 @@ void nvgClosePath(NVGcontext* ctx);
 
 // Sets the current sub-path winding, see NVGwinding and NVGsolidity.
 void nvgPathWinding(NVGcontext* ctx, int dir);
+
+// sets fill mode
+void nvgFillMode(NVGcontext* ctx, enum NVGFillMode fillMode);
 
 // Creates new circle arc shaped sub-path. The arc center is at cx,cy, the arc radius is r,
 // and the arc is drawn from angle a0 to a1, and swept in direction dir (NVG_CCW, or NVG_CW).
@@ -546,6 +602,10 @@ void nvgStroke(NVGcontext* ctx);
 // Returns handle to the font.
 int nvgCreateFont(NVGcontext* ctx, const char* name, const char* filename);
 
+// Creates empty font, glyph from the specified memory chunk.
+// Returns handle to the font.
+int nvgCreateEmptyFont(NVGcontext* ctx, const char* name);
+
 // Creates font by loading it from the specified memory chunk.
 // Returns handle to the font.
 int nvgCreateFontMem(NVGcontext* ctx, const char* name, unsigned char* data, int ndata, int freeData);
@@ -582,6 +642,9 @@ void nvgFontFace(NVGcontext* ctx, const char* font);
 
 // Draws text string at specified location. If end is specified only the sub-string up to the end is drawn.
 float nvgText(NVGcontext* ctx, float x, float y, const char* string, const char* end);
+
+// Draws a bitamp glyph.
+void nvgGlyph(NVGcontext* ctx, unsigned int codepoint, float fontSize, float x, float y, float w, float h, const unsigned char* data);
 
 // Draws multi-line text string at specified location wrapped at the specified width. If end is specified only the sub-string up to the end is drawn.
 // White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
@@ -622,7 +685,9 @@ enum NVGtexture {
 	NVG_TEXTURE_RGB  = 8,
 	NVG_TEXTURE_BGR  = 16,
 	NVG_TEXTURE_RGB565 = 32,
-	NVG_TEXTURE_BGR565 = 64
+	NVG_TEXTURE_BGR565 = 64,
+	NVG_TEXTURE_ARGB = 128,
+	NVG_TEXTURE_ABGR = 256,
 };
 
 struct NVGscissor {
@@ -646,6 +711,7 @@ struct NVGpath {
 	NVGvertex* stroke;
 	int nstroke;
 	int winding;
+	int path_winding;
 	int convex;
 };
 typedef struct NVGpath NVGpath;
@@ -657,15 +723,19 @@ struct NVGparams {
 	void (*setLineCap)(void* uptr, int lineCap);
 	void (*setLineJoin)(void* uptr, int lineJoin);
 
+	int (*clearCache)(void* uptr);
 	int (*renderCreate)(void* uptr);
-	int (*renderCreateTexture)(void* uptr, int type, int w, int h, int imageFlags, const unsigned char* data);
+	int (*findTexture)(void* uptr, const void* data);
+	void (*setStateXfrom)(void* uptr, float* xform);
+	int (*renderCreateTexture)(void* uptr, int type, int w, int h, int stride, int imageFlags, enum NVGorientation orientation, const unsigned char* data);
 	int (*renderDeleteTexture)(void* uptr, int image);
 	int (*renderUpdateTexture)(void* uptr, int image, int x, int y, int w, int h, const unsigned char* data);
 	int (*renderGetTextureSize)(void* uptr, int image, int* w, int* h);
 	void (*renderViewport)(void* uptr, float width, float height, float devicePixelRatio);
 	void (*renderCancel)(void* uptr);
 	void (*renderFlush)(void* uptr);
-	void (*renderFill)(void* uptr, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, const float* bounds, const NVGpath* paths, int npaths);
+	void (*globalSreenOrientation)(void* uptr, enum NVGorientation orientation);
+	void (*renderFill)(void* uptr, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, const float* bounds, const NVGpath* paths, int npaths, enum NVGFillMode fillMode);
 	void (*renderStroke)(void* uptr, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, float strokeWidth, const NVGpath* paths, int npaths);
 	void (*renderTriangles)(void* uptr, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, const NVGvertex* verts, int nverts);
 	void (*renderDelete)(void* uptr);
@@ -688,7 +758,11 @@ void nvgDebugDumpPathCache(NVGcontext* ctx);
 #define NVG_NOTUSED(v) for (;;) { (void)(1 ? (void)0 : ( (void)(v) ) ); break; }
 
 NVGparams* nvgGetParams(NVGcontext* ctx);
-int nvgCreateImageRaw(NVGcontext* ctx, int w, int h, int format, int imageFlags, const unsigned char* data);
+int nvgCreateImageRaw(NVGcontext* ctx, int w, int h, int format, int stride, int imageFlags, enum NVGorientation orientation, const unsigned char* data);
+
+int nvgFindTextureRaw(NVGcontext* ctx, const void* data);
+
+int nvgClearCache(NVGcontext* ctx);
 
 #ifdef __cplusplus
 }

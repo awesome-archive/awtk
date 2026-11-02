@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   color_picker.
  * Author: AWTK Develop Team
  * Brief:  color_picker
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -28,6 +28,7 @@
 #include "color_picker/color_picker.h"
 #include "color_picker/color_component.h"
 
+static ret_t color_picker_init(widget_t* widget);
 static ret_t color_picker_on_paint_begin(widget_t* widget, canvas_t* c);
 
 static ret_t color_picker_get_prop(widget_t* widget, const char* name, value_t* v) {
@@ -57,8 +58,9 @@ TK_DECL_VTABLE(color_picker) = {.size = sizeof(color_picker_t),
                                 .type = WIDGET_TYPE_COLOR_PICKER,
                                 .set_prop = color_picker_set_prop,
                                 .get_prop = color_picker_get_prop,
-                                .parent = TK_PARENT_VTABLE(widget),
+                                .get_parent_vt = TK_GET_PARENT_VTABLE(widget),
                                 .on_paint_begin = color_picker_on_paint_begin,
+                                .init = color_picker_init,
                                 .create = color_picker_create};
 
 static ret_t color_picker_update_child(void* ctx, const void* iter) {
@@ -99,8 +101,7 @@ static ret_t color_picker_update_child(void* ctx, const void* iter) {
       value = c.rgba.b;
       edit_set_int(child, value);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_H)) {
-      convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
-      value = h;
+      value = color_picker->last_hue;
       edit_set_int(child, value);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_S)) {
       convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
@@ -121,14 +122,13 @@ static ret_t color_picker_update_child(void* ctx, const void* iter) {
     }
   } else if (tk_str_eq(type, WIDGET_TYPE_SLIDER)) {
     if (tk_str_eq(name, COLOR_PICKER_CHILD_R)) {
-      value = c.rgba.r * 100 / 255;
+      value = color_picker->c_r_value * 100 / 255;
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_G)) {
-      value = c.rgba.g * 100 / 255;
+      value = color_picker->c_g_value * 100 / 255;
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_B)) {
-      value = c.rgba.b * 100 / 255;
+      value = color_picker->c_b_value * 100 / 255;
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_H)) {
-      convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
-      value = h * 100 / 360;
+      value = color_picker->last_hue * 100 / 360;
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_S)) {
       convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
       value = s * 100;
@@ -139,9 +139,11 @@ static ret_t color_picker_update_child(void* ctx, const void* iter) {
     widget_set_value(child, value);
   } else if (tk_str_eq(type, WIDGET_TYPE_COLOR_COMPONENT)) {
     if (tk_str_eq(name, COLOR_PICKER_CHILD_SV)) {
-      color_component_set_color(child, c);
+      convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
+      color_component_set_hsv(child, color_picker->last_hue, s, v);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_H)) {
-      color_component_set_color(child, c);
+      convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
+      color_component_set_hsv(child, color_picker->last_hue, s, v);
     }
   } else if (tk_str_eq(type, WIDGET_TYPE_COLOR_TILE)) {
     if (tk_str_eq(name, COLOR_PICKER_CHILD_NEW)) {
@@ -164,39 +166,42 @@ static ret_t color_picker_sync_children(widget_t* widget) {
   return RET_OK;
 }
 
-static ret_t color_picker_update_color(widget_t* widget, color_t color);
+static ret_t color_picker_update_color(widget_t* widget, color_t color, bool_t force);
 
-static ret_t color_picker_set_color_r(widget_t* widget, uint8_t r) {
+static ret_t color_picker_set_color_r(widget_t* widget, float_t r) {
   color_t c;
   color_picker_t* color_picker = COLOR_PICKER(widget);
   return_value_if_fail(widget != NULL && color_picker != NULL, RET_BAD_PARAMS);
 
   c = color_picker->c;
-  c.rgba.r = r;
+  c.rgba.r = (uint8_t)r;
+  color_picker->c_r_value = r;
 
-  return color_picker_update_color(widget, c);
+  return color_picker_update_color(widget, c, FALSE);
 }
 
-static ret_t color_picker_set_color_g(widget_t* widget, uint8_t g) {
+static ret_t color_picker_set_color_g(widget_t* widget, float_t g) {
   color_t c;
   color_picker_t* color_picker = COLOR_PICKER(widget);
   return_value_if_fail(widget != NULL && color_picker != NULL, RET_BAD_PARAMS);
 
   c = color_picker->c;
-  c.rgba.g = g;
+  c.rgba.g = (uint8_t)g;
+  color_picker->c_g_value = g;
 
-  return color_picker_update_color(widget, c);
+  return color_picker_update_color(widget, c, FALSE);
 }
 
-static ret_t color_picker_set_color_b(widget_t* widget, uint8_t b) {
+static ret_t color_picker_set_color_b(widget_t* widget, float_t b) {
   color_t c;
   color_picker_t* color_picker = COLOR_PICKER(widget);
   return_value_if_fail(widget != NULL && color_picker != NULL, RET_BAD_PARAMS);
 
   c = color_picker->c;
-  c.rgba.b = b;
+  c.rgba.b = (uint8_t)b;
+  color_picker->c_b_value = b;
 
-  return color_picker_update_color(widget, c);
+  return color_picker_update_color(widget, c, FALSE);
 }
 
 static ret_t color_picker_set_color_h(widget_t* widget, float hh) {
@@ -207,11 +212,16 @@ static ret_t color_picker_set_color_h(widget_t* widget, float hh) {
   color_picker_t* color_picker = COLOR_PICKER(widget);
   return_value_if_fail(widget != NULL && color_picker != NULL, RET_BAD_PARAMS);
 
-  c = color_picker->c;
-  convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
-  convertHSVtoRGB(hh, s, v, &(c.rgba.r), &(c.rgba.g), &(c.rgba.b));
+  if (color_picker->last_hue != hh) {
+    color_picker->last_hue = hh;
+    c = color_picker->c;
+    convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
+    convertHSVtoRGB(hh, s, v, &(c.rgba.r), &(c.rgba.g), &(c.rgba.b));
 
-  return color_picker_update_color(widget, c);
+    return color_picker_update_color(widget, c, TRUE);
+  }
+
+  return RET_OK;
 }
 
 static ret_t color_picker_set_color_s(widget_t* widget, float ss) {
@@ -226,7 +236,7 @@ static ret_t color_picker_set_color_s(widget_t* widget, float ss) {
   convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
   convertHSVtoRGB(h, ss, v, &(c.rgba.r), &(c.rgba.g), &(c.rgba.b));
 
-  return color_picker_update_color(widget, c);
+  return color_picker_update_color(widget, c, FALSE);
 }
 
 static ret_t color_picker_set_color_v(widget_t* widget, float vv) {
@@ -241,7 +251,7 @@ static ret_t color_picker_set_color_v(widget_t* widget, float vv) {
   convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
   convertHSVtoRGB(h, s, vv, &(c.rgba.r), &(c.rgba.g), &(c.rgba.b));
 
-  return color_picker_update_color(widget, c);
+  return color_picker_update_color(widget, c, FALSE);
 }
 
 static ret_t color_picker_set_color_sv(widget_t* widget, float ss, float vv) {
@@ -254,9 +264,10 @@ static ret_t color_picker_set_color_sv(widget_t* widget, float ss, float vv) {
 
   c = color_picker->c;
   convertRGBtoHSV(c.rgba.r, c.rgba.g, c.rgba.b, &h, &s, &v);
+  if (color_picker->last_hue != -1) h = color_picker->last_hue;
   convertHSVtoRGB(h, ss, vv, &(c.rgba.r), &(c.rgba.g), &(c.rgba.b));
 
-  return color_picker_update_color(widget, c);
+  return color_picker_update_color(widget, c, FALSE);
 }
 
 static ret_t color_picker_on_child_value_changing(void* ctx, event_t* e) {
@@ -267,6 +278,7 @@ static ret_t color_picker_on_child_value_changing(void* ctx, event_t* e) {
   color_picker_t* color_picker = COLOR_PICKER(ctx);
   return_value_if_fail(e != NULL && color_picker != NULL, RET_BAD_PARAMS);
 
+  color_picker->last_hue = -1;
   widget = WIDGET(ctx);
   child = WIDGET(e->target);
   name = child->name;
@@ -286,26 +298,30 @@ static ret_t color_picker_on_child_value_changing(void* ctx, event_t* e) {
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_H)) {
       color_picker_set_color_h(widget, v);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_S)) {
-      color_picker_set_color_s(widget, v);
+      color_picker_set_color_s(widget, (float)v / 100.0f);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_V)) {
-      color_picker_set_color_v(widget, v);
+      color_picker_set_color_v(widget, (float)v / 100.0f);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_NEW)) {
       char color[32];
+      uint32_t len = 0;
       memset(color, 0x00, sizeof(color));
       color[0] = '#';
       wstr_get_utf8(&(child->text), color + 1, sizeof(color) - 2);
-      if (strlen(color) == 7) {
+      len = strlen(color);
+      if (len == 1) {
+        color_picker_set_color(widget, "rgba(0,0,0,0)");
+      } else if (len == 7 || len == 9) {
         color_picker_set_color(widget, color);
       }
     }
   } else if (tk_str_eq(type, WIDGET_TYPE_SLIDER)) {
     int32_t v = widget_get_value(child);
     if (tk_str_eq(name, COLOR_PICKER_CHILD_R)) {
-      color_picker_set_color_r(widget, v * 255 / 100);
+      color_picker_set_color_r(widget, v * 255 / 100.0f);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_G)) {
-      color_picker_set_color_g(widget, v * 255 / 100);
+      color_picker_set_color_g(widget, v * 255 / 100.0f);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_B)) {
-      color_picker_set_color_b(widget, v * 255 / 100);
+      color_picker_set_color_b(widget, v * 255 / 100.0f);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_H)) {
       color_picker_set_color_h(widget, v * 360 / 100);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_S)) {
@@ -314,9 +330,12 @@ static ret_t color_picker_on_child_value_changing(void* ctx, event_t* e) {
       color_picker_set_color_v(widget, (float)v / 100.0f);
     }
   } else if (tk_str_eq(type, WIDGET_TYPE_COLOR_COMPONENT)) {
+    color_picker->c.rgba.a = 0xff;
     if (tk_str_eq(name, COLOR_PICKER_CHILD_SV)) {
+      color_component_t* color_cmp = COLOR_COMPONENT(child);
       float s = color_component_get_s(child);
       float v = color_component_get_v(child);
+      color_picker->last_hue = color_cmp->last_hue;
       color_picker_set_color_sv(widget, s, v);
     } else if (tk_str_eq(name, COLOR_PICKER_CHILD_H)) {
       float h = color_component_get_h(child);
@@ -341,36 +360,59 @@ static ret_t color_picker_hook_children(void* ctx, const void* iter) {
     if (tk_str_eq(type, WIDGET_TYPE_EDIT) || tk_str_eq(type, WIDGET_TYPE_SLIDER) ||
         tk_str_eq(type, WIDGET_TYPE_COLOR_COMPONENT) || tk_str_eq(type, WIDGET_TYPE_SPIN_BOX)) {
       widget_on(WIDGET(iter), EVT_VALUE_CHANGING, color_picker_on_child_value_changing, ctx);
+      widget_on(WIDGET(iter), EVT_VALUE_CHANGED, color_picker_on_child_value_changing, ctx);
     }
   }
 
   return RET_OK;
 }
 
-widget_t* color_picker_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {
-  widget_t* widget = widget_create(parent, TK_REF_VTABLE(color_picker), x, y, w, h);
+static ret_t color_picker_init(widget_t* widget) {
   color_picker_t* color_picker = COLOR_PICKER(widget);
-  return_value_if_fail(color_picker != NULL, NULL);
+  return_value_if_fail(color_picker != NULL, RET_BAD_PARAMS);
 
   color_picker->inited = FALSE;
   color_picker_set_color(widget, "gold");
+  return RET_OK;
+}
+
+widget_t* color_picker_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {
+  widget_t* widget = widget_create(parent, TK_REF_VTABLE(color_picker), x, y, w, h);
+  return_value_if_fail(color_picker_init(widget) == RET_OK, NULL);
 
   return widget;
 }
 
-static ret_t color_picker_update_color(widget_t* widget, color_t color) {
+static ret_t color_picker_update_color(widget_t* widget, color_t color, bool_t force) {
   color_picker_t* color_picker = COLOR_PICKER(widget);
   return_value_if_fail(widget != NULL && color_picker != NULL, RET_BAD_PARAMS);
 
-  if (color_picker->c.color != color.color) {
-    event_t e = event_init(EVT_VALUE_WILL_CHANGE, widget);
-    widget_dispatch(widget, &e);
-    color_picker->c = color;
-    color_hex_str(color_picker->c, color_picker->value);
-    color_picker_sync_children(widget);
-    e = event_init(EVT_VALUE_CHANGED, widget);
-    widget_dispatch(widget, &e);
-    widget_invalidate(widget, NULL);
+  if (color_picker->last_hue == -1) {
+    float h = 0;
+    float s = 0;
+    float v = 0;
+    convertRGBtoHSV(color.rgba.r, color.rgba.g, color.rgba.b, &h, &s, &v);
+    color_picker->last_hue = h;
+  }
+
+  if (force || color_picker->c.color != color.color) {
+    value_change_event_t evt;
+    value_change_event_init(&evt, EVT_VALUE_WILL_CHANGE, widget);
+    value_set_uint32(&(evt.old_value), color_picker->c.color);
+    value_set_uint32(&(evt.new_value), color.color);
+
+    if (widget_dispatch(widget, (event_t*)&evt) != RET_STOP) {
+      color_picker->c = color;
+      color_picker->c_r_value = color.rgba.r;
+      color_picker->c_g_value = color.rgba.g;
+      color_picker->c_b_value = color.rgba.b;
+      color_hex_str(color_picker->c, color_picker->value);
+      color_picker_sync_children(widget);
+
+      evt.e.type = EVT_VALUE_CHANGED;
+      widget_dispatch(widget, (event_t*)&evt);
+      widget_invalidate(widget, NULL);
+    }
   }
 
   return RET_OK;
@@ -380,9 +422,14 @@ ret_t color_picker_set_color(widget_t* widget, const char* color) {
   color_picker_t* color_picker = COLOR_PICKER(widget);
   return_value_if_fail(color_picker != NULL && color != NULL, RET_BAD_PARAMS);
 
+  float h = 0;
+  float s = 0;
+  float v = 0;
   color_picker->init_c = color_parse(color);
-  color_picker_update_color(widget, color_picker->init_c);
-
+  convertRGBtoHSV(color_picker->init_c.rgba.r, color_picker->init_c.rgba.g,
+                  color_picker->init_c.rgba.b, &h, &s, &v);
+  color_picker->last_hue = h;
+  color_picker_update_color(widget, color_picker->init_c, FALSE);
   return RET_OK;
 }
 

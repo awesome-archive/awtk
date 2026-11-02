@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  theme interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,123 +22,136 @@
 #ifndef TK_THEME_H
 #define TK_THEME_H
 
-#include "tkc/color.h"
-#include "base/widget_consts.h"
+#include "tkc/asset_info.h"
+#include "base/theme_data.h"
 
 BEGIN_C_DECLS
+
+struct _theme_t;
+typedef struct _theme_t theme_t;
+
+typedef ret_t (*theme_on_data_t)(void* ctx, const char* widget_type, const char* name,
+                                 const char* widget_state, const uint8_t* data);
+
+typedef ret_t (*theme_foreach_t)(theme_t* theme, theme_on_data_t on_data, void* ctx);
+typedef const uint8_t* (*theme_find_style_t)(theme_t* theme, const char* widget_type,
+                                             const char* name, const char* widget_state);
+typedef ret_t (*theme_set_stype_data_t)(theme_t* theme, const uint8_t* data);
+typedef const char* (*theme_get_style_type_t)(theme_t* theme);
+typedef ret_t (*theme_destroy_t)(theme_t* theme);
 
 /**
  * @class theme_t
  * @annotation ["scriptable"]
- * 主题。
- *
- * 负责管理缺省的主题数据，方便实现style\_const。
+ * 窗体样式。
  *
  */
-typedef struct _theme_t {
+struct _theme_t {
   const uint8_t* data;
-} theme_t;
+  bool_t need_free_data;
+  asset_info_t* info;
+
+  theme_foreach_t foreach;
+  theme_find_style_t find_style;
+  theme_set_stype_data_t set_style_data;
+  theme_get_style_type_t get_style_type;
+  theme_destroy_t theme_destroy;
+};
 
 /**
  * @method theme
- * 获取缺省的主题对象。
+ * 获取缺省的窗体样式对象。
  * @alias theme_instance
  * @annotation ["constructor", "scriptable"]
- * @return {theme_t*} 返回主题对象。
+ * @return {theme_t*} 返回窗体样式对象。
  */
 theme_t* theme(void);
 
 /**
  * @method theme_set
- * 设置缺省的主题对象。
- * @param {theme_t*} theme 主题对象。
+ * 设置缺省的窗体样式对象。
+ * @param {theme_t*} theme 窗体样式对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t theme_set(theme_t* theme);
 
 /**
- * @method theme_create
- * 创建主题对象。
- * @annotation ["constructor"]
- * @param {const uint8_t*} data 主题数据。
+ * @method theme_foreach
+ * 遍历全部数据。
+ * @param {theme_t*} theme 窗体样式对象。
+ * @param {theme_on_data_t} on_data 回调函数。
+ * @param {void*} ctx 回调函数的上下文。
  *
- * @return {theme_t*} 返回主题对象。
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-theme_t* theme_create(const uint8_t* data);
-
-/**
- * @method theme_init
- * 初始化主题对象。
- * @annotation ["constructor"]
- * @param {theme_t*} theme 主题对象。
- * @param {const uint8_t*} data 主题数据。
- *
- * @return {theme_t*} 返回主题对象。
- */
-theme_t* theme_init(theme_t* theme, const uint8_t* data);
+ret_t theme_foreach(theme_t* theme, theme_on_data_t on_data, void* ctx);
 
 /**
  * @method theme_find_style
  * 查找满足条件的style。
- * @param {theme_t*} data 主题对象。
+ * @param {theme_t*} theme 窗体样式对象。
  * @param {const char*} widget_type 控件的类型名。
  * @param {const char*} name style的名称。
  * @param {const char*} widget_state 控件的状态。
  *
- * @return {theme_t*} 返回主题对象。
+ * @return {const uint8_t*} 返回风格对象数据。
  */
-const uint8_t* theme_find_style(theme_t* t, const char* widget_type, const char* name,
+const uint8_t* theme_find_style(theme_t* theme, const char* widget_type, const char* name,
                                 const char* widget_state);
+
 /**
- * @method theme_deinit
- * 析构主题对象。
- * @param {theme_t*} theme 主题对象。
+ * @method theme_get_style_type
+ * 获取窗体样式的风格类型。
+ * @param {theme_t*} theme 窗体样式对象。
+ *
+ * @return {const char*} 返回风格类型。
+ */
+const char* theme_get_style_type(theme_t* theme);
+
+/**
+ * @method theme_set_theme_data
+ * 设置窗体样式的数据。
+ * @param {theme_t*} theme 窗体样式对象。
+ * @param {const uint8_t*} data 窗体样式数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t theme_deinit(theme_t* theme);
+ret_t theme_set_theme_data(theme_t* theme, const uint8_t* data);
 
 /**
  * @method theme_destroy
- * 析构并释放主题对象。
- * @param {theme_t*} theme 主题对象。
+ * 析构并释放窗体样式对象。
+ * @param {theme_t*} theme 窗体样式对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t theme_destroy(theme_t* theme);
 
-/*data related*/
-uint32_t style_data_get_int(const uint8_t* s, const char* name, uint32_t defval);
-color_t style_data_get_color(const uint8_t* s, const char* name, color_t defval);
-const char* style_data_get_str(const uint8_t* s, const char* name, const char* defval);
+/**
+ * @method theme_load_from_data
+ * 加载窗体样式对象。
+ * @annotation ["constructor"]
+ * @param {const char*} name 资源名。
+ * @param {const uint8_t*} data 窗体样式数据。
+ * @param {uint32_t} size 资源长度。
+ *
+ * @return {theme_t*} 返回窗体样式对象。
+ */
+theme_t* theme_load_from_data(const char* name, const uint8_t* data, uint32_t size);
 
-/*public for tools only*/
-#define THEME_MAGIC 0xFAFBFCFD
+/**
+ * @method theme_load_from_asset
+ * 加载窗体样式对象。
+ * @annotation ["constructor"]
+ * @param {asset_info_t*} info 资源对象。
+ *
+ * @return {theme_t*} 返回窗体样式对象。
+ */
+theme_t* theme_load_from_asset(asset_info_t* info);
+
 #define TK_DEFAULT_STYLE "default"
-
-typedef struct _theme_header_t {
-  uint32_t magic;
-  uint32_t version;
-  uint32_t nr;
-} theme_header_t;
-
-typedef struct _theme_item_t {
-  uint32_t offset;
-  char state[TK_NAME_LEN + 1];
-  char name[TK_NAME_LEN + 1];
-  char widget_type[TK_NAME_LEN + 1];
-} theme_item_t;
-
-typedef struct _style_int_data_t {
-  char name[TK_NAME_LEN + 1];
-  uint32_t value;
-} style_int_data_t;
-
-typedef struct _style_str_data_t {
-  char name[TK_NAME_LEN + 1];
-  char value[TK_NAME_LEN + 1];
-} style_str_data_t;
+#define THEME_DEFAULT_STYLE_TYPE "style_const"
 
 END_C_DECLS
 

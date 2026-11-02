@@ -1,7 +1,7 @@
 ﻿#include <string>
 #include "gtest/gtest.h"
 #include "widgets/button.h"
-#include "widgets/window.h"
+#include "base/window.h"
 #include "base/children_layouter_factory.h"
 #include "scroll_view/children_layouter_list_view.h"
 
@@ -74,6 +74,16 @@ TEST(ChildrenLayoutListView, keep_disable1) {
   ASSERT_EQ(children_layouter_get_param_int(layouter, "kd", 0), 0);
   ASSERT_EQ(children_layouter_get_param_int(layouter, "keep_invisible", 0), 0);
   ASSERT_EQ(children_layouter_get_param_int(layouter, "keep_disable", 0), 0);
+
+  children_layouter_destroy(layouter);
+}
+
+TEST(ChildrenLayoutListView, animating_time) {
+  const char* layout_params = "list_view(x=3,y=4,s=14,i=30,d=40,a=500)";
+  children_layouter_t* layouter = children_layouter_create(layout_params);
+
+  ASSERT_EQ(children_layouter_get_param_int(layouter, "a", 0), 500);
+  ASSERT_EQ(children_layouter_get_param_int(layouter, "animating_time", 0), 500);
 
   children_layouter_destroy(layouter);
 }

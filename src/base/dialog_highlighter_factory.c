@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  window highlighter factory
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -77,8 +77,13 @@ ret_t dialog_highlighter_factory_register(dialog_highlighter_factory_t* factory,
   return RET_OK;
 }
 
-static ret_t dialog_highlighter_on_dialog_destroy(void* ctx, event_t* e) {
+ret_t dialog_highlighter_on_dialog_destroy(void* ctx, event_t* e) {
   dialog_highlighter_t* h = (dialog_highlighter_t*)ctx;
+  rect_t r;
+  return_value_if_fail(h != NULL, RET_REMOVE);
+
+  r = rect_init(0, 0, h->img.w, h->img.h);
+  widget_invalidate_force(window_manager(), &r);
 
   dialog_highlighter_destroy(h);
 
@@ -89,16 +94,19 @@ static ret_t dialog_highlighter_on_dialog_destroy(void* ctx, event_t* e) {
 
 dialog_highlighter_t* dialog_highlighter_factory_create_highlighter(
     dialog_highlighter_factory_t* factory, const char* args, widget_t* dialog) {
+#ifndef WITHOUT_DIALOG_HIGHLIGHTER
+  tk_object_t* args_obj = NULL;
   dialog_highlighter_t* h = NULL;
   const creator_item_t* iter = NULL;
-  object_t* args_obj = func_call_parse(args, strlen(args));
-  return_value_if_fail(factory != NULL && args_obj != NULL, NULL);
+  return_value_if_fail(factory != NULL, NULL);
+  args_obj = func_call_parse(args, tk_strlen(args));
+  return_value_if_fail(args_obj != NULL, NULL);
 
   iter = darray_find(&(factory->creators), (void*)args_obj->name);
   if (iter != NULL) {
     h = iter->create(args_obj);
   }
-  object_unref(args_obj);
+  tk_object_unref(args_obj);
 
   if (h != NULL) {
     h->dialog = dialog;
@@ -108,6 +116,9 @@ dialog_highlighter_t* dialog_highlighter_factory_create_highlighter(
   }
 
   return h;
+#else
+  return NULL;
+#endif /*WITHOUT_DIALOG_HIGHLIGHTER*/
 }
 
 ret_t dialog_highlighter_factory_set(dialog_highlighter_factory_t* factory) {

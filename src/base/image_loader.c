@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  image_loader interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -60,10 +60,10 @@ ret_t image_loader_unregister(image_loader_t* loader) {
 }
 
 ret_t image_loader_load_image(const asset_info_t* asset, bitmap_t* bitmap) {
-  uint32_t i = 0;
+  int32_t i = ARRAY_SIZE(s_image_loaders) - 1;
   return_value_if_fail(asset != NULL && bitmap != NULL, RET_BAD_PARAMS);
 
-  for (i = 0; i < ARRAY_SIZE(s_image_loaders); i++) {
+  for (; i >= 0; i--) {
     image_loader_t* loader = s_image_loaders[i];
 
     if (loader != NULL && image_loader_load(loader, asset, bitmap) == RET_OK) {

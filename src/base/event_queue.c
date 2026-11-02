@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  event_queue
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,7 +23,7 @@
 #include "base/event_queue.h"
 
 event_queue_t* event_queue_create(uint16_t capacity) {
-  uint16_t size = 0;
+  uint32_t size = 0;
   event_queue_t* q = NULL;
   return_value_if_fail(capacity > 1, NULL);
 

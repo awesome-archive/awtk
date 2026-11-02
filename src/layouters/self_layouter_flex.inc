@@ -1,0 +1,501 @@
+﻿/**
+ * File:   self_layouter_flex.inc
+ * Author: AWTK Develop Team
+ * Brief:  self layouter flex
+ *
+ * Copyright (c) 2025 - 2025 Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * License file for more details.
+ *
+ */
+
+/**
+ * History:
+ * ================================================================
+ * 2025-06-11 Shen ZhaoKun <shenzhaokun@zlg.cn> created
+ *
+ */
+
+#ifndef TK_SELF_LAYOUTER_FLEX_INC
+#define TK_SELF_LAYOUTER_FLEX_INC
+
+#include "layouters/self_layouter_flex.h"
+
+#include "tkc/utils.h"
+#include "base/widget.h"
+#include "base/layout.h"
+
+#define SELF_LAYOUTER_FLEX_ATTR_NAME_FLEX "flex"
+#define SELF_LAYOUTER_FLEX_ATTR_NAME_FILL "fill"
+
+static ret_t self_layouter_flex_replace_param(self_layouter_t* layouter, const char* name,
+                                              const char* value) {
+  self_layouter_flex_t* layout = (self_layouter_flex_t*)layouter;
+  self_layouter_t* l = NULL;
+  const char* start = NULL;
+  char buff[64];
+  return_value_if_fail(layout != NULL && TK_STR_IS_NOT_EMPTY(name), RET_BAD_PARAMS);
+
+  l = (self_layouter_t*)layouter;
+
+  tk_snprintf(buff, sizeof(buff) - 1, "%s=", name);
+  start = strstr(l->params.str, name);
+  if (start != NULL) {
+    start += tk_strlen(buff);
+    const char* end = strchr(start, ',');
+    if (end == NULL) {
+      end = strchr(start, ')');
+    }
+    if (end == NULL) {
+      end = l->params.str + l->params.size;
+    }
+    str_remove(&l->params, start - l->params.str, end - start);
+    str_insert(&l->params, start - l->params.str, value);
+  } else {
+    if (l->params.size == (sizeof(SELF_LAYOUTER_FLEX "()") - 1) &&
+        tk_str_eq(l->params.str, SELF_LAYOUTER_FLEX "()")) {
+      tk_snprintf(buff, sizeof(buff) - 1, "%s=%s", name, value);
+    } else {
+      tk_snprintf(buff, sizeof(buff) - 1, "%s=%s,", name, value);
+    }
+    str_insert(&l->params, sizeof(SELF_LAYOUTER_FLEX "(") - 1, buff);
+  }
+
+  return RET_OK;
+}
+
+static const char* self_layouter_flex_to_string(self_layouter_t* layouter) {
+  str_t* str = &(layouter->params);
+  self_layouter_flex_t* layout = (self_layouter_flex_t*)layouter;
+  return_value_if_fail(layout != NULL, NULL);
+
+  if (self_layouter_default_vtable() != NULL && self_layouter_default_vtable()->to_string != NULL) {
+    self_layouter_default_vtable()->to_string(layouter);
+    str_remove(str, 0, sizeof(SELF_LAYOUTER_DEFAULT) - 1);
+    str_insert(str, 0, SELF_LAYOUTER_FLEX);
+    if (H_ATTR_FLEX == layout->layouter.h_attr) {
+      self_layouter_flex_replace_param(layouter, "h", SELF_LAYOUTER_FLEX_ATTR_NAME_FLEX);
+    } else if (H_ATTR_FILL == layout->layouter.h_attr) {
+      char buff[sizeof(SELF_LAYOUTER_FLEX_ATTR_NAME_FILL) + TK_NAME_LEN + 1] = {'\0'};
+      tk_snprintf(buff, sizeof(buff) - 1, SELF_LAYOUTER_FLEX_ATTR_NAME_FILL ":%.4lf",
+                  layout->layouter.h);
+      self_layouter_flex_replace_param(layouter, "h", buff);
+    }
+    if (W_ATTR_FLEX == layout->layouter.w_attr) {
+      self_layouter_flex_replace_param(layouter, "w", SELF_LAYOUTER_FLEX_ATTR_NAME_FLEX);
+    } else if (W_ATTR_FILL == layout->layouter.w_attr) {
+      char buff[sizeof(SELF_LAYOUTER_FLEX_ATTR_NAME_FILL) + TK_NAME_LEN + 1] = {'\0'};
+      tk_snprintf(buff, sizeof(buff) - 1, SELF_LAYOUTER_FLEX_ATTR_NAME_FILL ":%.4lf",
+                  layout->layouter.w);
+      self_layouter_flex_replace_param(layouter, "w", buff);
+    }
+  } else {
+    str_set(str, SELF_LAYOUTER_FLEX "(");
+    if (W_ATTR_FLEX == layout->layouter.w_attr) {
+      str_append(str, "w=" SELF_LAYOUTER_FLEX_ATTR_NAME_FLEX);
+      str_append_char(str, ',');
+    } else if (W_ATTR_FILL == layout->layouter.w_attr) {
+      str_append(str, "w=" SELF_LAYOUTER_FLEX_ATTR_NAME_FILL ":");
+      str_append_double(str, NULL, layout->layouter.w);
+    }
+    if (H_ATTR_FLEX == layout->layouter.h_attr) {
+      str_append(str, "h=" SELF_LAYOUTER_FLEX_ATTR_NAME_FLEX);
+    } else if (H_ATTR_FILL == layout->layouter.h_attr) {
+      str_append(str, "h=" SELF_LAYOUTER_FLEX_ATTR_NAME_FILL ":");
+      str_append_double(str, NULL, layout->layouter.h);
+    }
+    str_append_char(str, ')');
+  }
+
+  if (str_end_with(str, ",)")) {
+    str_remove(str, str->size - 2, 1);
+  }
+
+  return str->str;
+}
+
+static ret_t self_layouter_flex_get_param(self_layouter_t* layouter, const char* name, value_t* v) {
+  self_layouter_flex_t* l = (self_layouter_flex_t*)layouter;
+  return_value_if_fail(l != NULL, RET_BAD_PARAMS);
+
+  if (self_layouter_default_vtable() != NULL && self_layouter_default_vtable()->get_param != NULL) {
+    return self_layouter_default_vtable()->get_param(layouter, name, v);
+  } else {
+    return RET_OK;
+  }
+}
+
+static ret_t self_layouter_flex_set_param(self_layouter_t* layouter, const char* name,
+                                          const value_t* v) {
+  ret_t ret = RET_OK;
+  self_layouter_flex_t* layout = (self_layouter_flex_t*)layouter;
+  return_value_if_fail(layout != NULL, RET_BAD_PARAMS);
+
+  if (self_layouter_default_vtable() != NULL && self_layouter_default_vtable()->set_param != NULL) {
+    ret = self_layouter_default_vtable()->set_param(layouter, name, v);
+  } else {
+    ret = RET_OK;
+  }
+
+  if (RET_OK == ret) {
+    const char* value = value_str(v);
+    switch (*name) {
+      case 'w': {
+        if (tk_str_eq(value, SELF_LAYOUTER_FLEX_ATTR_NAME_FLEX)) {
+          layout->layouter.w_attr = W_ATTR_FLEX;
+        } else if (tk_str_start_with(value, SELF_LAYOUTER_FLEX_ATTR_NAME_FILL)) {
+          const char* s = tk_skip_chars(value + sizeof(SELF_LAYOUTER_FLEX_ATTR_NAME_FILL) - 1, " ");
+          if ('\0' == *s || ':' == *s) {
+            layout->layouter.w_attr = W_ATTR_FILL;
+            if (':' == *s) {
+              s = tk_skip_chars(s + 1, " ");
+              layout->layouter.w = tk_atof(s);
+            } else {
+              layout->layouter.w = 1;
+            }
+          }
+        }
+      } break;
+      case 'h': {
+        if (tk_str_eq(value, SELF_LAYOUTER_FLEX_ATTR_NAME_FLEX)) {
+          layout->layouter.h_attr = H_ATTR_FLEX;
+        } else if (tk_str_start_with(value, SELF_LAYOUTER_FLEX_ATTR_NAME_FILL)) {
+          const char* s = tk_skip_chars(value + sizeof(SELF_LAYOUTER_FLEX_ATTR_NAME_FILL) - 1, " ");
+          if ('\0' == *s || ':' == *s) {
+            layout->layouter.h_attr = H_ATTR_FILL;
+            if (':' == *s) {
+              s = tk_skip_chars(s + 1, " ");
+              layout->layouter.h = tk_atof(s);
+            } else {
+              layout->layouter.h = 1;
+            }
+          }
+        }
+      } break;
+      default: {
+      } break;
+    }
+  }
+
+  return ret;
+}
+
+static ret_t self_layouter_flex_layout_flex(self_layouter_flex_t* layout, widget_t* widget, wh_t* w,
+                                            wh_t* h) {
+  return_value_if_fail(layout != NULL && widget != NULL && w != NULL && h != NULL, RET_BAD_PARAMS);
+
+  if (W_ATTR_FLEX == layout->layouter.w_attr || H_ATTR_FLEX == layout->layouter.h_attr) {
+    widget_t* window_manager = widget_get_window_manager(widget);
+    wh_t x_margin = 0, y_margin = 0;
+    bool_t keep_invisible = FALSE, keep_disable = TRUE;
+
+    if (widget->children_layout != NULL) {
+      value_t v;
+      if (RET_OK == children_layouter_get_param(widget->children_layout, "xm", &v)) {
+        x_margin = value_int(&v);
+      }
+      if (RET_OK == children_layouter_get_param(widget->children_layout, "ym", &v)) {
+        y_margin = value_int(&v);
+      }
+      if (RET_OK == children_layouter_get_param(widget->children_layout, "ki", &v)) {
+        keep_invisible = value_bool(&v);
+      }
+      if (RET_OK == children_layouter_get_param(widget->children_layout, "kd", &v)) {
+        keep_disable = value_bool(&v);
+      }
+    }
+
+    /* 将容器尺寸改成一个很大的值，等子控件layout好之后再改回来 */
+    if (W_ATTR_FLEX == layout->layouter.w_attr) {
+      widget->w = window_manager->w;
+    }
+    if (H_ATTR_FLEX == layout->layouter.h_attr) {
+      widget->h = window_manager->h;
+    }
+    widget_layout_children(widget);
+    widget->w = *w;
+    widget->h = *h;
+
+    if (W_ATTR_FLEX == layout->layouter.w_attr) {
+      *w = 0;
+      WIDGET_FOR_EACH_CHILD_BEGIN(widget, child, i)
+      if ((keep_invisible || child->visible) && (keep_disable || child->enable)) {
+        *w = tk_max(*w, child->x + child->w);
+      }
+      WIDGET_FOR_EACH_CHILD_END()
+      *w += x_margin;
+    }
+
+    if (H_ATTR_FLEX == layout->layouter.h_attr) {
+      *h = 0;
+      WIDGET_FOR_EACH_CHILD_BEGIN(widget, child, i)
+      if ((keep_invisible || child->visible) && (keep_disable || child->enable)) {
+        *h = tk_max(*h, child->y + child->h);
+      }
+      WIDGET_FOR_EACH_CHILD_END()
+      *h += y_margin;
+    }
+    return RET_OK;
+  }
+  return RET_SKIP;
+}
+
+static ret_t self_layouter_flex_layout_fill(self_layouter_flex_t* layout, widget_t* widget, wh_t* w,
+                                            wh_t* h) {
+  return_value_if_fail(layout != NULL && widget != NULL && w != NULL && h != NULL, RET_BAD_PARAMS);
+
+  if (W_ATTR_FILL == layout->layouter.w_attr || H_ATTR_FILL == layout->layouter.h_attr) {
+    wh_t spacing = 0, x_margin = 0, y_margin = 0;
+    bool_t keep_invisible = FALSE, keep_disable = TRUE;
+    widget_t* parent = widget->parent;
+    return_value_if_fail(parent != NULL, RET_BAD_PARAMS);
+
+    if (parent->children_layout != NULL) {
+      value_t v;
+      if (RET_OK == children_layouter_get_param(parent->children_layout, "s", &v)) {
+        spacing = value_int(&v);
+      }
+      if (RET_OK == children_layouter_get_param(parent->children_layout, "xm", &v)) {
+        x_margin = value_int(&v);
+      }
+      if (RET_OK == children_layouter_get_param(parent->children_layout, "ym", &v)) {
+        y_margin = value_int(&v);
+      }
+      if (RET_OK == children_layouter_get_param(parent->children_layout, "ki", &v)) {
+        keep_invisible = value_bool(&v);
+      }
+      if (RET_OK == children_layouter_get_param(parent->children_layout, "kd", &v)) {
+        keep_disable = value_bool(&v);
+      }
+    }
+
+    if (!widget->floating &&
+        ((!keep_invisible && !widget->visible) || (!keep_disable && !widget->enable))) {
+      return RET_OK;
+    }
+
+    if (W_ATTR_FILL == layout->layouter.w_attr) {
+      if (layout->layouter.w > 0) {
+        wh_t occupy = 0;
+        uint32_t count = 1;
+        double total = layout->layouter.w;
+        WIDGET_FOR_EACH_CHILD_BEGIN(parent, child, i)
+        if (child == widget || child->floating || (!keep_invisible && !child->visible) ||
+            (!keep_disable && !child->enable)) {
+          continue;
+        }
+        if (child->self_layout != NULL &&
+            W_ATTR_FILL ==
+                self_layouter_get_param_int(child->self_layout, "w_attr", W_ATTR_PIXEL)) {
+          double portion = self_layouter_get_param_float(child->self_layout, "w", 1);
+          if (portion > 0) {
+            total += portion;
+          }
+        } else {
+          widget_ensure_layout_self(child);
+          if (child->w > 0) {
+            occupy += child->w;
+          }
+        }
+        count++;
+        WIDGET_FOR_EACH_CHILD_END()
+
+        {
+          wh_t remaining = widget_get_prop_int(parent, WIDGET_PROP_LAYOUT_W, parent->w) - occupy;
+          wh_t total_gap = spacing * (count - 1) + x_margin * 2;
+          double ratio = layout->layouter.w / total;
+          *w = (remaining - total_gap) * ratio;
+          *w = tk_max(0, *w);
+        }
+      } else {
+        *w = 0;
+      }
+    }
+
+    if (H_ATTR_FILL == layout->layouter.h_attr) {
+      if (layout->layouter.h > 0) {
+        wh_t occupy = 0;
+        uint32_t count = 1;
+        double total = layout->layouter.h;
+        WIDGET_FOR_EACH_CHILD_BEGIN(parent, child, i)
+        if (child == widget || child->floating || (!keep_invisible && !child->visible) ||
+            (!keep_disable && !child->enable)) {
+          continue;
+        }
+        if (child->self_layout != NULL &&
+            H_ATTR_FILL ==
+                self_layouter_get_param_int(child->self_layout, "h_attr", H_ATTR_PIXEL)) {
+          double portion = self_layouter_get_param_float(child->self_layout, "h", 1);
+          if (portion > 0) {
+            total += portion;
+          }
+        } else {
+          widget_ensure_layout_self(child);
+          if (child->h > 0) {
+            occupy += child->h;
+          }
+        }
+        count++;
+        WIDGET_FOR_EACH_CHILD_END()
+
+        {
+          wh_t remaining = widget_get_prop_int(parent, WIDGET_PROP_LAYOUT_H, parent->h) - occupy;
+          wh_t total_gap = spacing * (count - 1) + y_margin * 2;
+          double ratio = layout->layouter.h / total;
+          *h = (remaining - total_gap) * ratio;
+          *h = tk_max(0, *h);
+        }
+      } else {
+        *h = 0;
+      }
+    }
+    return RET_OK;
+  }
+  return RET_SKIP;
+}
+
+static ret_t self_layouter_flex_layout(self_layouter_t* layouter, widget_t* widget, rect_t* area) {
+  ret_t ret = RET_OK;
+  wh_t w, h;
+  bool_t w_is_changed, h_is_changed;
+  self_layouter_layout_t default_layout_func = NULL;
+  self_layouter_flex_t* layout = (self_layouter_flex_t*)layouter;
+  return_value_if_fail(widget != NULL && widget->parent != NULL, RET_BAD_PARAMS);
+
+  if (self_layouter_default_vtable() != NULL) {
+    default_layout_func = self_layouter_default_vtable()->layout;
+  }
+
+  if (default_layout_func != NULL) {
+    /* w 或 h 可能是 PERCENT 类型，需要先根据 area 获取 widget 正确的 w 或 h */
+    ret = default_layout_func(layouter, widget, area);
+    return_value_if_fail(ret == RET_OK, ret);
+  }
+
+  w = widget->w, h = widget->h;
+  self_layouter_flex_layout_flex(layout, widget, &w, &h);
+  self_layouter_flex_layout_fill(layout, widget, &w, &h);
+
+  w_is_changed = (w != widget->w);
+  h_is_changed = (h != widget->h);
+  if (w_is_changed || h_is_changed) {
+    ret = widget_move_resize_ex(widget, widget->x, widget->y, w, h, FALSE);
+
+    if (RET_OK == ret) {
+      if (default_layout_func != NULL) {
+        /* w 或 h 发生改变，需要调整 x 或 y */
+        /* flex 布局已经调整了 w 或 h，所以不能再对 w 或 h 做缺省的处理，否则替换掉 flex 的布局结果 */
+        uint8_t w_attr = layout->layouter.w_attr, h_attr = layout->layouter.h_attr;
+        if (w_is_changed) {
+          layout->layouter.w_attr = W_ATTR_UNDEF;
+        }
+        if (h_is_changed) {
+          layout->layouter.h_attr = H_ATTR_UNDEF;
+        }
+
+        ret = default_layout_func(layouter, widget, area);
+
+        if (w_is_changed) {
+          layout->layouter.w_attr = w_attr;
+        }
+        if (h_is_changed) {
+          layout->layouter.h_attr = h_attr;
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+static ret_t self_layouter_flex_destroy(self_layouter_t* layouter) {
+  return_value_if_fail(layouter != NULL, RET_BAD_PARAMS);
+
+  if (self_layouter_default_vtable() != NULL && self_layouter_default_vtable()->destroy != NULL) {
+    return self_layouter_default_vtable()->destroy(layouter);
+  } else {
+    return RET_OK;
+  }
+}
+
+static self_layouter_t* self_layouter_flex_clone(self_layouter_t* layouter) {
+  self_layouter_flex_t* l = NULL;
+
+  if (self_layouter_default_vtable() != NULL && self_layouter_default_vtable()->clone != NULL) {
+    l = (self_layouter_flex_t*)self_layouter_default_vtable()->clone(layouter);
+  } else {
+    l = TKMEM_ZALLOC(self_layouter_flex_t);
+    memcpy(l, layouter, sizeof(*l));
+  }
+  return_value_if_fail(l != NULL, NULL);
+
+  return (self_layouter_t*)l;
+}
+
+static ret_t self_layouter_flex_init(self_layouter_t* layouter) {
+  return_value_if_fail(layouter != NULL, RET_BAD_PARAMS);
+
+  if (self_layouter_default_vtable() != NULL && self_layouter_default_vtable()->init != NULL) {
+    return self_layouter_default_vtable()->init(layouter);
+  } else {
+    return RET_OK;
+  }
+}
+
+#ifdef __cplusplus
+static const struct self_layouter_flex_vtable_t : self_layouter_vtable_t {
+  self_layouter_flex_vtable_t() {
+    type = SELF_LAYOUTER_FLEX;
+    init = self_layouter_flex_init;
+    clone = self_layouter_flex_clone;
+    to_string = self_layouter_flex_to_string;
+    get_param = self_layouter_flex_get_param;
+    set_param = self_layouter_flex_set_param;
+    layout = self_layouter_flex_layout;
+    destroy = self_layouter_flex_destroy;
+  }
+} s_self_layouter_flex_vtable;
+#else
+static const self_layouter_vtable_t s_self_layouter_flex_vtable = {
+    .type = SELF_LAYOUTER_FLEX,
+    .init = self_layouter_flex_init,
+    .clone = self_layouter_flex_clone,
+    .to_string = self_layouter_flex_to_string,
+    .get_param = self_layouter_flex_get_param,
+    .set_param = self_layouter_flex_set_param,
+    .layout = self_layouter_flex_layout,
+    .destroy = self_layouter_flex_destroy,
+};
+#endif /* __cplusplus */
+
+inline static bool_t self_layouter_flex_is_valid(self_layouter_t* layouter) {
+  return layouter && layouter->vt == &s_self_layouter_flex_vtable;
+}
+
+/**
+ * @method self_layouter_flex_create
+ * @annotation ["constructor"]
+ * @export none
+ *
+ * 创建控件自身布局对象。
+ *
+ * @return {self_layouter_t*} 返回创建控件自身布局对象。
+ *
+ */
+inline static self_layouter_t* self_layouter_flex_create(void) {
+  self_layouter_t* l = NULL;
+  self_layouter_flex_t* layouter = TKMEM_ZALLOC(self_layouter_flex_t);
+  return_value_if_fail(layouter != NULL, NULL);
+
+  l = (self_layouter_t*)layouter;
+
+  l->vt = &s_self_layouter_flex_vtable;
+  self_layouter_flex_init(l);
+
+  return l;
+}
+
+#endif /*TK_SELF_LAYOUTER_FLEX_INC*/

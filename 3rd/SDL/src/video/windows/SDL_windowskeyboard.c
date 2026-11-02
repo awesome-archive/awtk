@@ -1,4 +1,4 @@
-/*
+ï»¿/*
   Simple DirectMedia Layer
   Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
 
@@ -244,11 +244,40 @@ WIN_SetTextInputRect(_THIS, SDL_Rect *rect)
     himc = ImmGetContext(videodata->ime_hwnd_current);
     if (himc)
     {
-        COMPOSITIONFORM cf;
-        cf.ptCurrentPos.x = videodata->ime_rect.x;
-        cf.ptCurrentPos.y = videodata->ime_rect.y;
-        cf.dwStyle = CFS_FORCE_POSITION;
-        ImmSetCompositionWindow(himc, &cf);
+        COMPOSITIONFORM cof;
+        CANDIDATEFORM caf;
+
+        LOGFONTW font;
+        SDL_zero(font);
+        font.lfHeight = rect->h;
+        font.lfWidth = 0;
+        font.lfWeight = FW_NORMAL;
+        font.lfCharSet = DEFAULT_CHARSET;
+        font.lfQuality = ANTIALIASED_QUALITY;
+        wcscpy_s(font.lfFaceName, LF_FACESIZE, L"Segoe UI");
+        ImmSetCompositionFontW(himc, &font);
+
+        SDL_zero(cof);
+        cof.dwStyle = CFS_RECT;
+        cof.ptCurrentPos.x = rect->x;
+        cof.ptCurrentPos.y = rect->y;
+        cof.rcArea.left = rect->x;
+        cof.rcArea.right = (LONG)rect->x + rect->w;
+        cof.rcArea.top = rect->y;
+        cof.rcArea.bottom = (LONG)rect->y + rect->h;
+        ImmSetCompositionWindow(himc, &cof);
+
+        SDL_zero(caf);
+        caf.dwIndex = 0;
+        caf.dwStyle = CFS_EXCLUDE;
+        caf.ptCurrentPos.x = rect->x;
+        caf.ptCurrentPos.y = rect->y;
+        caf.rcArea.left = rect->x;
+        caf.rcArea.right = (LONG)rect->x + rect->w;
+        caf.rcArea.top = rect->y;
+        caf.rcArea.bottom = (LONG)rect->y + rect->h;
+        ImmSetCandidateWindow(himc, &caf);
+
         ImmReleaseContext(videodata->ime_hwnd_current, himc);
     }
 }
@@ -370,7 +399,7 @@ IME_Init(SDL_VideoData *videodata, HWND hwnd)
     videodata->ime_available = SDL_TRUE;
     IME_UpdateInputLocale(videodata);
     IME_SetupAPI(videodata);
-    //videodata->ime_uiless = UILess_SetupSinks(videodata);//win10 ²»ÏÔÊ¾ÎÊÌâ
+    //videodata->ime_uiless = UILess_SetupSinks(videodata);//win10 ä¸æ˜¾ç¤ºé—®é¢˜
     IME_UpdateInputLocale(videodata);
     IME_Disable(videodata, hwnd);
 }
@@ -879,7 +908,7 @@ IME_HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM *lParam, SDL_VideoD
         IME_InputLangChanged(videodata);
         break;
     case WM_IME_SETCONTEXT:
-        //*lParam = 0;  //win7 ´°¿ÚÇĞ»»ºóÊäÈë¿ò²»ÏÔÊ¾ÎÊÌâ
+        //*lParam = 0;  //win7 çª—å£åˆ‡æ¢åè¾“å…¥æ¡†ä¸æ˜¾ç¤ºé—®é¢˜
         break;
     case WM_IME_STARTCOMPOSITION:
         //trap = SDL_TRUE;

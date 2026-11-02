@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  color_picker
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -47,7 +47,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [color\_picker](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/color_picker.xml)
+ * [color\_picker](https://github.com/zlgopen/awtk/blob/master/design/default/ui/color_picker.xml)
  *
  * 其中的子控件必须按下列规则命名：
  *
@@ -66,26 +66,30 @@ typedef struct _color_picker_t {
   widget_t widget;
 
   /**
-   * @property {const char*} value
-   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * @property {char*} value
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable","inputable"]
    * 颜色。
    */
   char value[TK_COLOR_HEX_LEN + 1];
 
   /*private*/
   color_t c;
+  float_t c_r_value;
+  float_t c_g_value;
+  float_t c_b_value;
   bool_t inited;
   color_t init_c;
+  int32_t last_hue;
   widget_t* trigger_child;
 } color_picker_t;
 
 /**
- * @event {event_t} EVT_VALUE_WILL_CHANGE
+ * @event {value_change_event_t} EVT_VALUE_WILL_CHANGE
  * 值(颜色)即将改变事件。
  */
 
 /**
- * @event {event_t} EVT_VALUE_CHANGED
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
  * 值(颜色)改变事件。
  */
 

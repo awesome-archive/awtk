@@ -10,6 +10,8 @@ def joinPath(root, subdir):
   return os.path.normpath(os.path.join(root, subdir))
 
 # XXX: make sure no no ascii chars in the path name.
+# NOTE: local patches in vendor nanovg/agge backend:
+# - agge/nanovg_agge.cpp (add NVG_TEXTURE_ALPHA render path for soft text)
 
 SRC_ROOT_DIR=joinPath(os.getcwd(), '../../../3rd/nanovg/');
 DST_ROOT_DIR=os.getcwd();
@@ -35,15 +37,4 @@ GL_FILES=['nanovg_gl.h', 'nanovg_gl_utils.h']
 for f in GL_FILES:
     src=os.path.join('src', f);
     dst=os.path.join('gl', f);
-    copyFile(src, dst)
-
-
-SRC_ROOT_DIR=joinPath(os.getcwd(), '../../../3rd/bgfx-awtk/nanovg/');
-BGFX_FILES=['fs_nanovg_fill.sc', 'nanovg_bgfxEx.h', 'vs_nanovg_fill.sc',
-        'fontstash.h','nanovg_bgfx.cpp','varying.def.sc',
-        'fs_nanovg_fill.bin.h','nanovg_bgfx.h','vs_nanovg_fill.bin.h'];
-
-for f in BGFX_FILES:
-    src=os.path.join('bgfx', f);
-    dst=os.path.join('bgfx', f);
     copyFile(src, dst)

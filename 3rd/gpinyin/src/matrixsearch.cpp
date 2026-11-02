@@ -46,6 +46,7 @@ MatrixSearch::MatrixSearch() {
 }
 
 MatrixSearch::~MatrixSearch() {
+  LpiCache::free_instance();
   free_resource();
 }
 
@@ -954,7 +955,7 @@ void MatrixSearch::prepare_candidates() {
   // lemma. Remove the lemma candidate in this case.
   char16 fullsent[kMaxLemmaSize + 1];
   char16* pfullsent = NULL;
-  uint16 sent_len;
+  uint16 sent_len = 0;
   pfullsent = get_candidate0(fullsent, kMaxLemmaSize + 1, &sent_len, true);
 
   // If the unfixed part contains more than one ids, it is not necessary to
@@ -1214,7 +1215,7 @@ unsigned MatrixSearch::extend_dmi(DictExtPara* dep, DictMatchInfo* dmi_s) {
   if (handles[0] > 0) lpi_total_ = lpi_num;
 
   if (NULL == dmi_s) {  // from root
-    assert(0 != handles[0]);
+    //assert(0 != handles[0]);
     //    mtrx_dmi_fr = dmi_pool_used_;
   }
 
@@ -1423,8 +1424,16 @@ unsigned MatrixSearch::get_lpis(const uint16* splid_str, unsigned splid_str_len,
     for (unsigned pos = 0; pos < lpsi_num; pos++) {
       if (pos > 0 && utf16_strcmp(lpsis[pos].str, lpsis[pos - 1].str) == 0) {
         if (lpsis[pos].lpi.psb < lpsis[pos - 1].lpi.psb) {
-          assert(remain_num > 0);
-          lma_buf[remain_num - 1] = lpsis[pos].lpi;
+          //
+          // Jim: input nishis will trigger this assert.
+          // https://github.com/zlgopen/awtk/issues/563
+          //
+          //assert(remain_num > 0);
+          //lma_buf[remain_num - 1] = lpsis[pos].lpi;
+          //
+          if (remain_num > 0) {
+            lma_buf[remain_num - 1] = lpsis[pos].lpi;
+          }
         }
         continue;
       }

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  ui_loader interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -56,6 +56,8 @@ typedef ret_t (*ui_loader_load_t)(ui_loader_t* loader, const uint8_t* data, uint
  */
 struct _ui_loader_t {
   ui_loader_load_t load;
+  bool_t support_bin;
+  bool_t support_xml;
 };
 
 /**
@@ -86,6 +88,44 @@ ret_t ui_loader_load(ui_loader_t* loader, const uint8_t* data, uint32_t size,
  *
  */
 widget_t* ui_loader_load_widget(const char* name);
+
+/**
+ * @method ui_loader_load_widget_with_parent
+ *
+ * 从指定的资源加载widget对象，并为widget对象指定父控件对象，通常用于加载非窗口的widget。
+ *
+ * @param {const char*} name 资源名。
+ * @param {widget_t*} parent 父控件对象。
+ *
+ * @return {widget_t*} 返回widget对象。
+ *
+ */
+widget_t* ui_loader_load_widget_with_parent(const char* name, widget_t* parent);
+
+/**
+ * @method ui_loader_load_widget_from_xml
+ *
+ * 从xml数据创建widget。
+ *
+ *>需要自己将widget加入窗口后，再调用widget\_layout。
+ *
+ * @param {widget_t*} parent 父控件对象。
+ * @param {const char*} xml XML数据。
+ * @param {uint32_t} size XML数据长度。
+ *
+ * @return {widget_t*} 返回widget对象。
+ *
+ */
+widget_t* ui_loader_load_widget_from_xml(widget_t* parent, const char* xml, uint32_t size);
+
+/**
+ * @method ui_loader_set
+ * 设置缺省的UI加载器，默认为 default_ui_loader()。
+ * @param {ui_loader_t*} loader loader对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t ui_loader_set(ui_loader_t* loader);
 
 END_C_DECLS
 

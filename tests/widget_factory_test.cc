@@ -23,6 +23,7 @@ TEST(WidgetFactory, button) {
   widget_t* button = NULL;
   widget_factory_t* factory = widget_factory_create();
 
+  widget_factory_register(factory, "button", button_create);
   button = widget_factory_create_widget(factory, "button", NULL, 10, 20, 30, 40);
   ASSERT_EQ(button != NULL, true);
   ASSERT_EQ(button->x, 10);
@@ -48,6 +49,20 @@ TEST(WidgetFactory, custom) {
   ASSERT_EQ(custom->y, 20);
   ASSERT_EQ(custom->w, 30);
   ASSERT_EQ(custom->h, 40);
+
+  widget_destroy(custom);
+  widget_factory_destroy(factory);
+}
+
+TEST(WidgetFactory, over_write) {
+  widget_t* custom = NULL;
+  widget_factory_t* factory = widget_factory_create();
+
+  widget_factory_register(factory, "button", button_create);
+  widget_factory_register(factory, "button", custom_widget_create);
+  custom = widget_factory_create_widget(factory, "button", NULL, 10, 20, 30, 40);
+
+  ASSERT_EQ(custom->vt, &s_custom_vtable);
 
   widget_destroy(custom);
   widget_factory_destroy(factory);

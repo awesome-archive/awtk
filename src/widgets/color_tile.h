@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  color_tile
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -32,7 +32,7 @@ BEGIN_C_DECLS
  * @annotation ["scriptable","design","widget"]
  * 色块控件。
  *
- * 用来显示一个颜色块，它通过属性而不是主题来设置颜色，方便在运行时动态改变颜色。
+ * 用来显示一个颜色块，它通过属性而不是窗体样式来设置颜色，方便在运行时动态改变颜色。
  *
  * 可以使用value属性访问背景颜色的颜色值。
  *
@@ -45,7 +45,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [color_tile](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/color_picker_rgb.xml)
+ * [color_tile](https://github.com/zlgopen/awtk/blob/master/design/default/ui/color_picker_rgb.xml)
  *
  * 在c代码中使用函数color_tile\_create创建色块控件。如：
  *
@@ -60,14 +60,14 @@ typedef struct _color_tile_t {
   widget_t widget;
 
   /**
-   * @property {const char*} bg_color
+   * @property {char*} bg_color
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 背景颜色。
    */
   char bg_color[TK_COLOR_HEX_LEN + 1];
 
   /**
-   * @property {const char*} border_color
+   * @property {char*} border_color
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 边框颜色。
    */
@@ -76,6 +76,16 @@ typedef struct _color_tile_t {
   color_t bg;
   color_t border;
 } color_tile_t;
+
+/**
+ * @event {value_change_event_t} EVT_VALUE_WILL_CHANGE
+ * 值(颜色)即将改变事件。
+ */
+
+/**
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
+ * 值(颜色)改变事件。
+ */
 
 /**
  * @method color_tile_create
@@ -131,6 +141,26 @@ ret_t color_tile_set_border_color(widget_t* widget, const char* color);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t color_tile_set_value(widget_t* widget, color_t color);
+
+/**
+ * @method color_tile_get_bg_color
+ * 获取背景颜色。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {const char*} 返回背景颜色。
+ */
+const char* color_tile_get_bg_color(widget_t* widget);
+
+/**
+ * @method color_tile_get_border_color
+ * 获取边框颜色。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {const char*} 返回边框颜色。
+ */
+const char* color_tile_get_border_color(widget_t* widget);
 
 #define COLOR_TILE(widget) ((color_tile_t*)(color_tile_cast(WIDGET(widget))))
 

@@ -60,13 +60,13 @@ TEST(FuncCallParser, basic) {
 }
 
 static void parser_test_object(const char* str) {
-  object_t* obj = func_call_parse(str, strlen(str));
+  tk_object_t* obj = func_call_parse(str, strlen(str));
 
   ASSERT_STREQ(obj->name, "move");
-  ASSERT_EQ(object_get_prop_int(obj, "x", 0), 10);
-  ASSERT_EQ(object_get_prop_int(obj, "y", 0), 20);
+  ASSERT_EQ(tk_object_get_prop_int(obj, "x", 0), 10);
+  ASSERT_EQ(tk_object_get_prop_int(obj, "y", 0), 20);
 
-  object_unref(obj);
+  tk_object_unref(obj);
 }
 
 TEST(FuncCallParser, object) {
@@ -74,4 +74,19 @@ TEST(FuncCallParser, object) {
   parser_test_object("move   (x=10, y=20)");
   parser_test_object("move(x = 10, y = 20 )");
   parser_test_object("  move(x = 10, y = 20 )");
+  parser_test_object("  move(x = 10, \r\ny \t= 20 )");
+}
+
+TEST(FuncCallParser, str) {
+  const char* str =
+      "path(w=1024,h=1028,data='m420.5,522l-247.5,-113l177,3l157,19l-86,-60l-0.5,151z')";
+  tk_object_t* obj = func_call_parse(str, strlen(str));
+
+  ASSERT_STREQ(obj->name, "path");
+  ASSERT_EQ(tk_object_get_prop_int(obj, "w", 0), 1024);
+  ASSERT_EQ(tk_object_get_prop_int(obj, "h", 0), 1028);
+  ASSERT_STREQ(tk_object_get_prop_str(obj, "data"),
+               "m420.5,522l-247.5,-113l177,3l157,19l-86,-60l-0.5,151z");
+
+  tk_object_unref(obj);
 }

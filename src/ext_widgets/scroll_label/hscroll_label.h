@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  hscroll_label
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -36,13 +36,8 @@ BEGIN_C_DECLS
  *
  hscroll\_label\_t是[widget\_t](widget_t.md)的子类控件，widget\_t的函数均适用于hscroll\_label\_t控件。
  *
- * 在xml中使用"hscroll\_label"标签创建行号控件，一般配合mledit使用。如：
- *
- * ```xml
- * ```
- *
- * > 更多用法请参考：[mledit.xml](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/mledit.xml)
+ * > 更多用法请参考：[hscroll_label.xml](
+ *https://github.com/zlgopen/awtk/blob/master/design/default/ui/hscroll_label.xml)
  *
  * 可用通过style来设置控件的显示风格，如字体的大小和颜色等等。如：
  *
@@ -55,7 +50,7 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme default](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml)
  *
  */
 typedef struct _hscroll_label_t {
@@ -64,15 +59,20 @@ typedef struct _hscroll_label_t {
   /**
    * @property {bool_t} only_focus
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   *
    * 只有处于focus时才滚动(缺省否)。
    */
   bool_t only_focus;
 
   /**
+   * @property {bool_t} only_parent_focus
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 只有父控件处于focus时才滚动(缺省否)。
+   */
+  bool_t only_parent_focus;
+
+  /**
    * @property {bool_t} loop
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   *
    * loop是否循环滚动(缺省FALSE)。
    */
   bool_t loop;
@@ -80,7 +80,6 @@ typedef struct _hscroll_label_t {
   /**
    * @property {bool_t} yoyo
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   *
    * 是否往返滚动(缺省FALSE)。
    */
   bool_t yoyo;
@@ -88,25 +87,37 @@ typedef struct _hscroll_label_t {
   /**
    * @property {bool_t} ellipses
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   *
-   * 文本显示不下时，在行尾显示ellipses(缺省FALSE)。
+   * 文本显示不下时，在行尾显示省略号(缺省FALSE)。
    */
   bool_t ellipses;
 
   /**
    * @property {int32_t} lull
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   *
-   * 滚动之间的间歇时间(ms)，缺省3000ms。
+   * 滚动之间的间歇时间(毫秒)，缺省3000ms。
    */
   int32_t lull;
 
   /**
    * @property {int32_t} duration
    * @annotation ["set_prop","get_prop","readable","scriptable"]
-   * 完整的滚动一次需要的时间(ms)，缺省5000ms。
+   * 滚动一次需要的时间(毫秒)，缺省5000ms。
    */
   int32_t duration;
+
+  /**
+   * @property {uint32_t} delay
+   * @annotation ["set_prop","get_prop","readable","scriptable"]
+   * 延迟多久才开始滚动，缺省0ms。
+   */
+  uint32_t delay;
+
+  /**
+   * @property {float_t} speed
+   * @annotation ["set_prop","get_prop","readable","scriptable"]
+   * 滚动速度(px/ms)（设置后 duration 不生效）。
+   */
+  float_t speed;
 
   /**
    * @property {int32_t} xoffset
@@ -122,9 +133,26 @@ typedef struct _hscroll_label_t {
    */
   int32_t text_w;
 
+  /**
+   * @property {bool_t} stop_at_begin
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 滚动完毕后停在文本开头(缺省FALSE)。
+   * > 注：yoyo 为 TRUE 时，该功能失效。
+   */
+  bool_t stop_at_begin;
+
+  /**
+   * @property {int32_t} loop_interval_distance
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 滚动文本结尾和文本开头间隔距离(缺省值为 -1，小于 0 视为使用控件宽度作为间隔距离)。
+   */
+  int32_t loop_interval_distance;
+
   /*private*/
+  int32_t old_text_w;
   uint32_t timer_id;
-  uint32_t start_time;
+  uint32_t elapsed;
+  bool_t paused;
   bool_t pressed;
   bool_t reversed;
 } hscroll_label_t;
@@ -148,7 +176,7 @@ widget_t* hscroll_label_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h)
  * 设置lull。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {int32_t}  lull 间歇时间(ms)。
+ * @param {int32_t}  lull 间歇时间(毫秒)。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -159,11 +187,22 @@ ret_t hscroll_label_set_lull(widget_t* widget, int32_t lull);
  * 设置duration。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {int32_t}  duration 滚动时间(ms)。
+ * @param {int32_t}  duration 滚动时间(毫秒)。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t hscroll_label_set_duration(widget_t* widget, int32_t duration);
+
+/**
+ * @method hscroll_label_set_speed
+ * 设置speed（设置后 duration 不生效）。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {float_t}  speed 滚动速度(px/ms)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t hscroll_label_set_speed(widget_t* widget, float_t speed);
 
 /**
  * @method hscroll_label_set_only_focus
@@ -175,6 +214,17 @@ ret_t hscroll_label_set_duration(widget_t* widget, int32_t duration);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t hscroll_label_set_only_focus(widget_t* widget, bool_t only_focus);
+
+/**
+ * @method hscroll_label_set_only_parent_focus
+ * 设置only_parent_focus。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  only_parent_focus 是否只有处于focus时才滚动。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t hscroll_label_set_only_parent_focus(widget_t* widget, bool_t only_parent_focus);
 
 /**
  * @method hscroll_label_set_loop
@@ -208,6 +258,39 @@ ret_t hscroll_label_set_yoyo(widget_t* widget, bool_t yoyo);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t hscroll_label_set_ellipses(widget_t* widget, bool_t ellipses);
+
+/**
+ * @method hscroll_label_set_stop_at_begin
+ * 设置stop_at_begin。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t} stop_at_begin 是否在滚动完毕后停在文本结尾。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t hscroll_label_set_stop_at_begin(widget_t* widget, bool_t stop_at_begin);
+
+/**
+ * @method hscroll_label_set_delay
+ * 设置开始延迟时间。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {uint32_t} delay 开始延迟时间。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t hscroll_label_set_delay(widget_t* widget, uint32_t delay);
+
+/**
+ * @method hscroll_label_set_loop_interval_distance
+ * 设置滚动文本结尾和文本开头间隔距离
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {int32_t} loop_interval_distance 间隔距离。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t hscroll_label_set_loop_interval_distance(widget_t* widget, int32_t loop_interval_distance);
 
 /**
  * @method hscroll_label_set_xoffset
@@ -255,8 +338,12 @@ widget_t* hscroll_label_cast(widget_t* widget);
 #define HSCROLL_LABEL_PROP_LULL "lull"
 #define HSCROLL_LABEL_PROP_XOFFSET "xoffset"
 #define HSCROLL_LABEL_PROP_DURATION "duration"
+#define HSCROLL_LABEL_PROP_SPEED "speed"
 #define HSCROLL_LABEL_PROP_ELLIPSES "ellipses"
 #define HSCROLL_LABEL_PROP_ONLY_FOCUS "only_focus"
+#define HSCROLL_LABEL_PROP_ONLY_PARENT_FOCUS "only_parent_focus"
+#define HSCROLL_LABEL_PROP_STOP_AT_BEGIN "stop_at_begin"
+#define HSCROLL_LABEL_PROP_LOOP_INTERVAL_DISTANCE "loop_interval_distance"
 
 #define WIDGET_TYPE_HSCROLL_LABEL "hscroll_label"
 #define HSCROLL_LABEL(widget) ((hscroll_label_t*)(hscroll_label_cast(WIDGET(widget))))

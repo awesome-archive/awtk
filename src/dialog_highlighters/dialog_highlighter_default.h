@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  default dialog_highlighter
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied highlighterrranty of
@@ -51,21 +51,52 @@ struct _dialog_highlighter_default_t {
    * 结束alpha，打开对话框的动画结束(直到对话框被关闭)时的alpha值。
    */
   uint8_t end_alpha;
+
+  /**
+   * @property {uint8_t} system_bar_alpha
+   * 由于在没有过度动画的情况下，截图中已经包括黑色色块，为了让 system_bar 也同步高亮部分的色块透明。
+   */
+  uint8_t system_bar_alpha;
+
+  /**
+   * @property {bool_t} update_background
+   * 是否刷新底层窗口的截图。
+   */
+  bool_t update_background;
+
+  /**
+   * @property {darray_t} system_bar_top_clip_rects
+   * 截图的顶部 system_bar 显示裁减区列表
+   */
+  darray_t system_bar_top_clip_rects;
+
+  /**
+   * @property {darray_t} system_bar_bottom_clip_rects
+   * 截图的底部 system_bar 显示裁减区列表
+   */
+  darray_t system_bar_bottom_clip_rects;
+
+  /**
+   * @property {slist_t} win_mask_rect_list
+   * 窗口 mask 区域
+   */
+  slist_t win_mask_rect_list;
 };
 
 /**
  * @method dialog_highlighter_default_create
  * 创建缺省的对话框高亮策略。
  * @annotation ["constructor"]
- * @param {object_t*} args 参数。
+ * @param {tk_object_t*} args 参数。
  *
  * @return {dialog_highlighter_t*} 返回对话框高亮策略对象。
  */
-dialog_highlighter_t* dialog_highlighter_default_create(object_t* args);
+dialog_highlighter_t* dialog_highlighter_default_create(tk_object_t* args);
 
 #define DIALOG_HIGHLIGHTER_DEFAULT_ARG_START_ALPHA "start_alpha"
 #define DIALOG_HIGHLIGHTER_DEFAULT_ARG_END_ALPHA "end_alpha"
 #define DIALOG_HIGHLIGHTER_DEFAULT_ARG_ALPHA "alpha"
+#define DIALOG_HIGHLIGHTER_DEFAULT_ARG_UPDATE_BACKGROUND "update_background"
 
 END_C_DECLS
 

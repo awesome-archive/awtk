@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   mutable_image.h
  * Author: AWTK Develop Team
  * Brief:  mutable_image
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,20 +26,43 @@
 #include "base/widget_vtable.h"
 #include "mutable_image/mutable_image.h"
 
+static ret_t mutable_image_init_impl(widget_t* widget);
+static ret_t mutable_image_invalidate(const timer_info_t* info);
+
+static bitmap_format_t mutable_image_get_disire_format(widget_t* widget, canvas_t* c) {
+  bitmap_format_t format = BITMAP_FMT_NONE;
+  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  return_value_if_fail(mutable_image != NULL, format);
+
+  if (mutable_image->fb != NULL) {
+    format = (bitmap_format_t)(mutable_image->fb->format);
+  } else {
+    format = lcd_get_desired_bitmap_format(c->lcd);
+  }
+
+  return format;
+}
+
 static bitmap_t* mutable_image_prepare_image(widget_t* widget, canvas_t* c) {
   mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  bitmap_format_t format = mutable_image_get_disire_format(widget, c);
   return_value_if_fail(mutable_image != NULL && mutable_image->prepare_image != NULL, NULL);
 
+  if (mutable_image->create_image != NULL) {
+    void* ctx = mutable_image->create_image_ctx;
+    /*
+     * 由create_image函数决定是否重新创建image:
+     * 一般情况下(比如大小和格式不变时)，create_image 可以重用 mutable_image->image，直接返回 mutable_image->image。
+     * 如果重新创建新的图片，则create_image必须销毁mutable_image->image。
+     * 所以此处并不销毁 mutable_image->image。
+     */
+    mutable_image->image = mutable_image->create_image(ctx, format, mutable_image->image);
+  } else if (mutable_image->image == NULL) {
+    mutable_image->image = bitmap_create_ex(widget->w, widget->h, 0, format);
+  }
+
   if (mutable_image->image == NULL) {
-    bitmap_format_t format = BITMAP_FMT_NONE;
-
-    if (mutable_image->fb != NULL) {
-      format = (bitmap_format_t)(mutable_image->fb->format);
-    } else {
-      format = lcd_get_desired_bitmap_format(c->lcd);
-    }
-
-    mutable_image->image = bitmap_create_ex(widget->w, widget->h, widget->w * 2, format);
+    return NULL;
   }
 
   if (mutable_image->prepare_image != NULL) {
@@ -47,17 +70,28 @@ static bitmap_t* mutable_image_prepare_image(widget_t* widget, canvas_t* c) {
     void* ctx = mutable_image->prepare_image_ctx;
 
     return_value_if_fail(mutable_image->prepare_image(ctx, image) == RET_OK, NULL);
-    image->flags |= BITMAP_FLAG_CHANGED;
+    bitmap_set_dirty(image, TRUE);
   }
 
   return mutable_image->image;
 }
 
-static ret_t mutable_image_on_paint_self(widget_t* widget, canvas_t* canvas) {
+ret_t mutable_image_on_paint_self(widget_t* widget, canvas_t* canvas) {
+  bitmap_t* bitmap = NULL;
   mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
-  bitmap_t* bitmap = mutable_image_prepare_image(widget, canvas);
+  ENSURE(mutable_image);
 
-  return_value_if_fail(bitmap != NULL, RET_BAD_PARAMS);
+  if (!mutable_image->is_need_redraw) {
+    bitmap = mutable_image->user_image != NULL ? mutable_image->user_image : mutable_image->image;
+  } else {
+    bitmap = mutable_image->user_image != NULL ? mutable_image->user_image
+                                               : mutable_image_prepare_image(widget, canvas);
+    mutable_image->is_need_redraw = FALSE;
+  }
+
+  if (bitmap == NULL) {
+    return RET_FAIL;
+  }
 
   if (mutable_image->fb != NULL) {
     rect_t r = rect_init(0, 0, bitmap->w, bitmap->h);
@@ -75,10 +109,9 @@ static ret_t mutable_image_on_paint_self(widget_t* widget, canvas_t* canvas) {
       }
     }
 
-    if (bitmap->data != NULL) {
-      rect_t src = rect_init(0, 0, bitmap->w, bitmap->h);
+    if (bitmap->buffer != NULL) {
       rect_t dst = rect_init(0, 0, widget->w, widget->h);
-      canvas_draw_image(canvas, bitmap, &src, &dst);
+      canvas_draw_image_center(canvas, bitmap, &dst);
     }
   }
 
@@ -89,45 +122,97 @@ static const char* s_mutable_image_clone_properties[] = {WIDGET_PROP_SCALE_X,  W
                                                          WIDGET_PROP_ANCHOR_X, WIDGET_PROP_ANCHOR_Y,
                                                          WIDGET_PROP_ROTATION, NULL};
 
-static ret_t mutable_image_on_destroy(widget_t* widget) {
+ret_t mutable_image_on_destroy(widget_t* widget) {
   mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
   return_value_if_fail(widget != NULL && mutable_image != NULL, RET_BAD_PARAMS);
 
-  if (mutable_image->fb != NULL) {
-    bitmap_destroy(mutable_image->fb);
-  }
-
-  bitmap_destroy(mutable_image->image);
+  BITMAP_DESTROY(mutable_image->fb);
+  BITMAP_DESTROY(mutable_image->image);
 
   return image_base_on_destroy(widget);
+}
+
+ret_t mutable_image_on_attach_parent(widget_t* widget, widget_t* parent) {
+  widget_t* win = widget_get_window(parent);
+  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  return_value_if_fail(mutable_image != NULL, RET_BAD_PARAMS);
+  if (widget_is_designing_window(win)) {
+    widget_remove_timer(widget, mutable_image->timer_id);
+  }
+  return RET_OK;
+}
+
+static ret_t mutable_image_set_prop(widget_t* widget, const char* name, const value_t* v) {
+  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  ENSURE(mutable_image);
+  if (tk_str_eq(name, WIDGET_PROP_IMAGE) || tk_str_eq(name, WIDGET_PROP_VALUE)) {
+    mutable_image->user_image = (bitmap_t*)value_bitmap(v);
+    if (mutable_image->user_image != NULL) {
+      BITMAP_DESTROY(mutable_image->image);
+    }
+    return mutable_image->user_image != NULL ? RET_OK : RET_BAD_PARAMS;
+  }
+  return image_base_set_prop(widget, name, v);
 }
 
 TK_DECL_VTABLE(mutable_image) = {.size = sizeof(mutable_image_t),
                                  .type = WIDGET_TYPE_MUTABLE_IMAGE,
                                  .clone_properties = s_mutable_image_clone_properties,
-                                 .parent = TK_PARENT_VTABLE(image_base),
+                                 .get_parent_vt = TK_GET_PARENT_VTABLE(image_base),
                                  .create = mutable_image_create,
+                                 .init = mutable_image_init_impl,
                                  .on_destroy = mutable_image_on_destroy,
                                  .on_event = image_base_on_event,
                                  .on_paint_self = mutable_image_on_paint_self,
                                  .on_paint_background = widget_on_paint_null,
-                                 .set_prop = image_base_set_prop,
+                                 .on_attach_parent = mutable_image_on_attach_parent,
+                                 .set_prop = mutable_image_set_prop,
                                  .get_prop = image_base_get_prop};
 
+static ret_t mutable_image_init_impl(widget_t* widget) {
+  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  return_value_if_fail(mutable_image != NULL, RET_BAD_PARAMS);
+  image_base_init(widget);
+  mutable_image->is_need_redraw = TRUE;
+  mutable_image->timer_id = widget_add_timer(widget, mutable_image_invalidate, 16);
+
+  if (widget != NULL && widget->parent != NULL) {
+    mutable_image_on_attach_parent(widget, widget->parent);
+  }
+  return RET_OK;
+}
+
+ret_t mutable_image_invalidate_force(widget_t* widget) {
+  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  return_value_if_fail(mutable_image != NULL, RET_BAD_PARAMS);
+
+  mutable_image->is_need_redraw = TRUE;
+  return widget_invalidate_force(widget, NULL);
+}
+
 static ret_t mutable_image_invalidate(const timer_info_t* info) {
-  widget_invalidate_force(WIDGET(info->ctx), NULL);
+  widget_t* widget = WIDGET(info->ctx);
+  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  ENSURE(mutable_image);
+  return_value_if_fail(widget->visible, RET_REPEAT);
+
+  if (mutable_image->need_redraw == NULL ||
+      mutable_image->need_redraw(mutable_image->need_redraw_ctx)) {
+    mutable_image_invalidate_force(widget);
+  }
 
   return RET_REPEAT;
 }
 
 widget_t* mutable_image_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {
   widget_t* widget = widget_create(parent, TK_REF_VTABLE(mutable_image), x, y, w, h);
-  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
-  return_value_if_fail(mutable_image != NULL, NULL);
+  return_value_if_fail(mutable_image_init_impl(widget) == RET_OK, NULL);
 
-  image_base_init(widget);
-  widget_add_timer(widget, mutable_image_invalidate, 16);
+  return widget;
+}
 
+widget_t* mutable_image_init(widget_t* widget) {
+  return_value_if_fail(mutable_image_init_impl(widget) == RET_OK, NULL);
   return widget;
 }
 
@@ -142,11 +227,34 @@ ret_t mutable_image_set_prepare_image(widget_t* widget, mutable_image_prepare_im
   return RET_OK;
 }
 
+ret_t mutable_image_set_need_redraw(widget_t* widget, mutable_image_need_redraw_t need_redraw,
+                                    void* need_redraw_ctx) {
+  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  return_value_if_fail(mutable_image != NULL && need_redraw != NULL, RET_BAD_PARAMS);
+
+  mutable_image->need_redraw = need_redraw;
+  mutable_image->need_redraw_ctx = need_redraw_ctx;
+
+  return RET_OK;
+}
+
+ret_t mutable_image_set_create_image(widget_t* widget, mutable_image_create_image_t create_image,
+                                     void* create_image_ctx) {
+  mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
+  return_value_if_fail(mutable_image != NULL && create_image != NULL, RET_BAD_PARAMS);
+
+  mutable_image->create_image = create_image;
+  mutable_image->create_image_ctx = create_image_ctx;
+
+  return RET_OK;
+}
+
 ret_t mutable_image_set_framebuffer(widget_t* widget, uint32_t w, uint32_t h,
                                     bitmap_format_t format, uint8_t* buff) {
   mutable_image_t* mutable_image = MUTABLE_IMAGE(widget);
   return_value_if_fail(mutable_image != NULL && buff != NULL, RET_BAD_PARAMS);
 
+  BITMAP_DESTROY(mutable_image->fb);
   mutable_image->fb = bitmap_create();
   return_value_if_fail(mutable_image->fb != NULL, RET_OOM);
 

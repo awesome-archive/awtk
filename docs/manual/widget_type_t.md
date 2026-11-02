@@ -1,6 +1,6 @@
 ## widget\_type\_t
 ### 概述
- 控件的类型。
+控件的类型。
 ### 常量
 <p id="widget_type_t_consts">
 
@@ -14,12 +14,14 @@
 | WIDGET\_TYPE\_DIALOG | 对话框。 |
 | WIDGET\_TYPE\_POPUP | 弹出窗口。 |
 | WIDGET\_TYPE\_SYSTEM\_BAR | system bar window |
+| WIDGET\_TYPE\_SYSTEM\_BAR\_BOTTOM | system bar window ato bottom |
 | WIDGET\_TYPE\_SPRITE | 精灵窗口。 |
 | WIDGET\_TYPE\_KEYBOARD | 键盘窗口。 |
 | WIDGET\_TYPE\_DND | 拖放状态窗口。 |
 | WIDGET\_TYPE\_LABEL | 文本控件。 |
 | WIDGET\_TYPE\_BUTTON | 按钮控件。 |
 | WIDGET\_TYPE\_IMAGE | 图片控件。 |
+| WIDGET\_TYPE\_ICON | 图标控件。 |
 | WIDGET\_TYPE\_EDIT | 文本编辑控件。 |
 | WIDGET\_TYPE\_PROGRESS\_BAR | 进度条控件。 |
 | WIDGET\_TYPE\_GROUP\_BOX | 分组控件。 |
@@ -29,6 +31,7 @@
 | WIDGET\_TYPE\_DIALOG\_CLIENT | 对话框客户区域。 |
 | WIDGET\_TYPE\_SLIDER | 滑块控件。 |
 | WIDGET\_TYPE\_VIEW | 视图控件。 |
+| WIDGET\_TYPE\_PAGE | page控件。 |
 | WIDGET\_TYPE\_COMBO\_BOX | 下拉选择框控件。 |
 | WIDGET\_TYPE\_COMBO\_BOX\_ITEM | 下拉选择框的列表项控件。 |
 | WIDGET\_TYPE\_SLIDE\_VIEW | 滑动视图控件。 |
@@ -52,6 +55,7 @@
 | WIDGET\_TYPE\_COLOR\_PICKER | 颜色选择器控件。 |
 | WIDGET\_TYPE\_COLOR\_COMPONENT | 颜色选择器组件控件。 |
 | WIDGET\_TYPE\_COLOR\_TILE | 颜色块控件。 |
+| WIDGET\_TYPE\_CLIP\_VIEW | 裁剪控件。 |
 | WIDGET\_TYPE\_RICH\_TEXT | 富文本控件。 |
 | WIDGET\_TYPE\_APP\_BAR | AppBar控件。 |
 | WIDGET\_TYPE\_GRID | 网格控件。 |

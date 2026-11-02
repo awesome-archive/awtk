@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  dragger
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -68,7 +68,23 @@ typedef struct _dragger_t {
   xy_t down_x;
   xy_t down_y;
   bool_t dragging;
+  bool_t moving;
 } dragger_t;
+
+/**
+ * @event {event_t} EVT_DRAG_START
+ * 开始拖动事件。
+ */
+
+/**
+ * @event {event_t} EVT_DRAG
+ * 拖动事件。
+ */
+
+/**
+ * @event {event_t} EVT_DRAG_END
+ * 结束拖动事件。
+ */
 
 /**
  * @method dragger_create
@@ -104,7 +120,7 @@ widget_t* dragger_cast(widget_t* widget);
  * @param {xy_t} x_max x坐标最大值。
  * @param {xy_t} y_max y坐标最大值。
  *
- * @return {widget_t*} 对象。
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t dragger_set_range(widget_t* widget, xy_t x_min, xy_t y_min, xy_t x_max, xy_t y_max);
 

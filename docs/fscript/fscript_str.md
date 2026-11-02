@@ -1,0 +1,377 @@
+# 字符串扩展函数
+
+## ulen
+
+> 获取 unicode 字符个数。
+----------------------------
+
+### 原型
+
+```js
+ulen(str) => int
+```
+
+### 示例
+
+```js
+print(ulen('致远电子'))
+```
+
+## char\_at
+
+> 获取指定位置的字符。
+----------------------------
+
+### 原型
+
+```js
+char_at(str, index) => str
+```
+
+> index 为负数时，从后往前取。比如-1 表示最后一个元素。
+
+### 示例
+
+```js
+print(char_at('致远电子', 1))
+print(char_at('ZLG', 1))
+```
+
+## index\_of
+
+> 查找指定子串的位置，如果没有找到返回-1。
+----------------------------
+
+### 原型
+
+```js
+index_of(str, substr) => int
+```
+
+### 示例
+
+```js
+print(index_of('hello AWTK and AWTK', 'AWTK'))
+```
+
+## last\_index\_of
+
+> 反向查找指定子串的位置，如果没有找到返回-1。
+----------------------------
+
+### 原型
+
+```js
+last_index_of(str, substr) => int
+```
+
+### 示例
+
+```js
+print(last_index_of('hello AWTK and AWTK', 'AWTK'))
+```
+
+## trim\_left
+
+> 去掉字符串左边的空白字符。
+----------------------------
+
+### 原型
+
+```js
+trim_left(str) => str
+```
+
+### 示例
+
+```js
+print(trim_left('   AWTK  '))
+```
+
+## trim\_right
+
+> 去掉字符串右边的空白字符。
+----------------------------
+
+### 原型
+
+```js
+trim_right(str) => str
+```
+
+### 示例
+
+```js
+print(trim_right('   AWTK  ') + "1234")
+```
+
+## totitle
+
+> 将字符串中单词的首字母转换成大写。
+
+----------------------------
+
+### 原型
+
+```js
+totitle(str) => str
+```
+
+### 示例
+
+```js
+print(totitle("it is ok!"))
+```
+
+## prompt
+
+> 在控制台提示用户输入字符串（仅当定义了 HAS\_STIOD 时有效）。
+----------------------------
+
+### 原型
+
+```js
+prompt(tips) => str
+```
+
+### 示例
+
+```js
+var a = prompt('input a number:');
+print(int(a)+100);
+```
+
+## usubstr
+
+> 取子字符串(unicode)。
+----------------------------
+
+### 原型
+
+```js
+usubstr(str, start, end) => str
+```
+
+> * 不包括end
+> * start 为负数时，从后往前取。比如-1 表示最后一个元素。
+> * end 为负数时，从后往前取。比如-1 表示最后一个元素。
+> * end 省略表示到最后全部元素。
+
+### 示例
+
+```js
+var a="致远电子"
+assert(usubstr(a) == '致远电子');
+assert(usubstr(a,0) == '致远电子');
+assert(usubstr(a,0,1) == '致');
+assert(usubstr(a,0,-1) == '致远电');
+assert(usubstr(a,-2,-1) == '电');
+assert(usubstr(a, -3) == '远电子');
+```
+
+## text\_reverse
+
+> 字符串反向
+----------------------------
+
+### 原型
+
+```js
+text_reverse(str) => str
+```
+
+### 示例
+
+```js
+print(text_reverse("hello"));
+```
+
+## text\_count
+
+> 统计子串出现的次数。
+----------------------------
+
+### 原型
+
+```js
+text_count(str, substr) => int
+```
+
+### 示例
+
+```js
+print(text_count("hello zlg!", "zlg"));
+```
+
+## str\_len
+
+> 计算字符串的长度。
+----------------------------
+
+### 原型
+
+```js
+str_len(str) => uint32
+```
+
+### 示例
+
+```js
+print(str_len("hello"));
+```
+
+## str\_is\_empty
+
+> 判断字符串是否为空。
+----------------------------
+
+### 原型
+
+```js
+str_is_empty(str) => bool
+```
+
+### 示例
+
+```js
+print(str_is_empty(""));
+print(str_is_empty("zlg"));
+```
+
+## str\_append
+
+> 追加字符串。
+----------------------------
+
+### 原型
+
+```js
+str_append(str, append_str) => str
+```
+
+### 示例
+
+```js
+print(str_append("hello ", "zlg"));
+```
+
+## char\_at\_first
+
+> 获取首字符。
+----------------------------
+
+### 原型
+
+```js
+char_at_first(str) => str
+```
+
+### 示例
+
+```js
+print(char_at_first("hello"));
+```
+
+## char\_at\_last
+
+> 获取尾字符。
+----------------------------
+
+### 原型
+
+```js
+char_at_last(str) => str
+```
+
+### 示例
+
+```js
+print(char_at_last("hello"));
+```
+
+## char\_at\_random
+
+> 获取随机位置的字符。
+----------------------------
+
+### 原型
+
+```js
+char_at_random(str) => str
+```
+
+### 示例
+
+```js
+print(char_at_random("hello"));
+```
+
+## str_start_with
+
+> 检查字符串是否以指定的字符串开头。
+----------------------------
+
+### 原型
+
+```js
+str_start_with(str, prefix) => bool
+```
+
+### 示例
+
+```js
+str_start_with('AWTK', 'AW')
+```
+
+## str_end_with
+
+> 检查字符串是否以指定的字符串结尾。
+----------------------------
+
+### 原型
+
+```js
+str_end_with(str, prefix) => bool
+```
+
+### 示例
+
+```js
+str_end_with('AWTK', 'TK')
+```
+
+## strcasecmp
+
+> 按当前 locale 对两字符串做大小写不敏感比较，语义与 C 的 `strcasecmp` 一致；返回值与 `strcmp` 同类（小于 0、等于 0、大于 0）。对 UTF-8 多字节字符不一定具备完整 Unicode 语义级大小写折叠，行为与底层 `tk_stricmp` 一致。
+----------------------------
+
+### 原型
+
+```js
+strcasecmp(a, b) => int
+```
+
+### 示例
+
+```js
+assert(strcasecmp('AbC', 'abc') == 0);
+assert(strcasecmp('a', 'b') < 0);
+```
+
+## strncasecmp
+
+> 至多比较前 n 个字符（大小写不敏感），语义与 C 的 `strncasecmp` 一致；返回值同 `strcasecmp`。locale / UTF-8 限制同上。
+----------------------------
+
+### 原型
+
+```js
+strncasecmp(a, b, n) => int
+```
+
+### 示例
+
+```js
+assert(strncasecmp('AbC', 'ab', 2) == 0);
+assert(strncasecmp('AbC', 'ab', 3) != 0);
+```

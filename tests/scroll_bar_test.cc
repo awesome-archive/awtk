@@ -1,6 +1,9 @@
 ﻿#include "scroll_view/scroll_bar.h"
 #include "base/canvas.h"
+#include "base/events.h"
+#include "base/window.h"
 #include "base/widget.h"
+#include "base/shortcut.h"
 #include "font_dummy.h"
 #include "lcd_log.h"
 #include "gtest/gtest.h"
@@ -37,10 +40,20 @@ TEST(ScrollBar, basic) {
   ASSERT_EQ(value_bool(&v1), value_bool(&v2));
 
   w1 = widget_clone(w, NULL);
-  ASSERT_EQ(widget_equal(w, w1), TRUE);
+  str_t str1;
+  str_t str2;
+  str_init(&str1, 100);
+  str_init(&str2, 100);
+
+  widget_to_xml(w, &str1);
+  widget_to_xml(w1, &str2);
+  ASSERT_STREQ(str1.str, str2.str);
+  str_reset(&str1);
+  str_reset(&str2);
 
   widget_destroy(w);
   widget_destroy(w1);
+  idle_manager_dispatch(idle_manager());
 }
 
 TEST(ScrollBar, to_xml) {
@@ -49,7 +62,8 @@ TEST(ScrollBar, to_xml) {
   str_init(&str, 1024);
 
   ASSERT_EQ(widget_to_xml(w, &str), RET_OK);
-  ASSERT_EQ(string(str.str), string("<scroll_bar_d x=\"10\" y=\"20\" w=\"30\" h=\"400\" "
+  ASSERT_EQ(string(str.str), string("<?xml version='1.0' encoding='UTF-8' standalone='yes' "
+                                    "?>\r\n<scroll_bar_d x=\"10\" y=\"20\" w=\"30\" h=\"400\" "
                                     "animatable=\"true\">\n</scroll_bar_d>\n"));
 
   str_reset(&str);
@@ -62,4 +76,209 @@ TEST(ScrollBar, cast) {
   ASSERT_EQ(w, scroll_bar_cast(w));
 
   widget_destroy(w);
+}
+
+TEST(ScrollBar, auto_hide) {
+  widget_t* w = scroll_bar_create_mobile(NULL, 10, 20, 30, 40);
+
+  ASSERT_EQ(SCROLL_BAR(w)->auto_hide, TRUE);
+  scroll_bar_set_auto_hide(w, FALSE);
+  ASSERT_EQ(SCROLL_BAR(w)->auto_hide, FALSE);
+
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_AUTO_HIDE, TRUE), RET_OK);
+  ASSERT_EQ(SCROLL_BAR(w)->auto_hide, TRUE);
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_AUTO_HIDE, FALSE), TRUE);
+
+  widget_destroy(w);
+}
+
+TEST(ScrollBar, animator_time) {
+  widget_t* w = scroll_bar_create_mobile(NULL, 10, 20, 30, 40);
+
+  ASSERT_EQ(SCROLL_BAR(w)->animator_time, (uint32_t)TK_ANIMATING_TIME);
+  scroll_bar_set_animator_time(w, 0);
+  ASSERT_EQ(SCROLL_BAR(w)->animator_time, 0u);
+
+  ASSERT_EQ(widget_set_prop_int(w, SCROLL_BAR_PROP_ANIMATOR_TIME, 200), RET_OK);
+  ASSERT_EQ(SCROLL_BAR(w)->auto_hide, TRUE);
+  ASSERT_EQ(widget_get_prop_int(w, SCROLL_BAR_PROP_ANIMATOR_TIME, 0) == 200, TRUE);
+
+  widget_destroy(w);
+}
+
+TEST(ScrollBar, is_mobile_prop) {
+  widget_t* w = scroll_bar_create_mobile(NULL, 10, 20, 30, 40);
+
+  ASSERT_EQ(widget_set_prop_bool(w, SCROLL_BAR_PROP_IS_MOBILE, TRUE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, SCROLL_BAR_PROP_IS_MOBILE, FALSE), TRUE);
+
+  ASSERT_EQ(widget_set_prop_bool(w, SCROLL_BAR_PROP_IS_MOBILE, FALSE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, SCROLL_BAR_PROP_IS_MOBILE, TRUE), FALSE);
+
+  widget_destroy(w);
+}
+
+#define CHILD_UP "up"
+#define CHILD_DOWN "down"
+#define CHILD_DRAGGER "dragger"
+
+TEST(ScrollBar, clone) {
+  widget_t* w = scroll_bar_create_mobile(NULL, 10, 20, 30, 40);
+
+  widget_t* w1 = widget_clone(w, NULL);
+  ASSERT_EQ(widget_equal(w, w1), TRUE);
+  ASSERT_EQ(widget_lookup(w, CHILD_UP, FALSE) == widget_lookup(w1, CHILD_UP, FALSE), TRUE);
+  ASSERT_EQ(widget_lookup(w, CHILD_DOWN, FALSE) == widget_lookup(w1, CHILD_DOWN, FALSE), TRUE);
+  ASSERT_EQ(widget_lookup(w, CHILD_DRAGGER, FALSE) == widget_lookup(w1, CHILD_DRAGGER, FALSE),
+            TRUE);
+  widget_destroy(w1);
+
+  ASSERT_EQ(widget_set_prop_bool(w, SCROLL_BAR_PROP_IS_MOBILE, FALSE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, SCROLL_BAR_PROP_IS_MOBILE, TRUE), FALSE);
+
+  w1 = widget_clone(w, NULL);
+  ASSERT_EQ(widget_equal(w, w1), TRUE);
+  ASSERT_EQ(widget_equal(widget_lookup(w, CHILD_UP, FALSE), widget_lookup(w1, CHILD_UP, FALSE)),
+            TRUE);
+  ASSERT_EQ(widget_equal(widget_lookup(w, CHILD_DOWN, FALSE), widget_lookup(w1, CHILD_DOWN, FALSE)),
+            TRUE);
+  ASSERT_EQ(
+      widget_equal(widget_lookup(w, CHILD_DRAGGER, FALSE), widget_lookup(w1, CHILD_DRAGGER, FALSE)),
+      TRUE);
+  widget_destroy(w1);
+
+  widget_destroy(w);
+}
+
+TEST(ScrollBar, wheel_modifier_key_mobile_rejects_set) {
+  widget_t* w = scroll_bar_create_mobile(NULL, 10, 20, 30, 40);
+  value_t v;
+  value_set_str(&v, "shift");
+  ASSERT_EQ(widget_set_prop(w, SCROLL_BAR_PROP_WHEEL_MODIFIER_KEY, &v), RET_BAD_PARAMS);
+  widget_destroy(w);
+}
+
+TEST(ScrollBar, wheel_modifier_key_desktop_prop) {
+  widget_t* win = window_create(NULL, 0, 0, 800, 600);
+  widget_t* bar = scroll_bar_create_desktop(win, 0, 0, 30, 400);
+  value_t v;
+
+  widget_resize(bar, 30, 400);
+  ASSERT_EQ(widget_get_prop(bar, SCROLL_BAR_PROP_WHEEL_MODIFIER_KEY, &v), RET_OK);
+  ASSERT_STREQ(value_str(&v), "");
+
+  value_set_str(&v, "ctrl");
+  ASSERT_EQ(widget_set_prop(bar, SCROLL_BAR_PROP_WHEEL_MODIFIER_KEY, &v), RET_OK);
+  ASSERT_EQ(widget_get_prop(bar, SCROLL_BAR_PROP_WHEEL_MODIFIER_KEY, &v), RET_OK);
+  ASSERT_STREQ(value_str(&v), "ctrl");
+
+  widget_destroy(win);
+}
+
+TEST(ScrollBar, wheel_modifier_key_desktop_auto_horizontal_shift) {
+  widget_t* win = window_create(NULL, 0, 0, 800, 600);
+  widget_t* bar = scroll_bar_create_desktop(win, 0, 0, 30, 400);
+  value_t v;
+
+  widget_resize(bar, 400, 30);
+  ASSERT_EQ(widget_get_prop(bar, SCROLL_BAR_PROP_WHEEL_MODIFIER_KEY, &v), RET_OK);
+  ASSERT_STREQ(value_str(&v), "shift");
+
+  widget_destroy(win);
+}
+
+TEST(ScrollBar, wheel_modifier_key_desktop_parent_wheel_vertical) {
+  widget_t* win = window_create(NULL, 0, 0, 800, 600);
+  widget_t* bar = scroll_bar_create_desktop(win, 0, 0, 30, 400);
+  value_t v;
+
+  widget_resize(bar, 30, 400);
+  value_set_int(&v, 2000);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_MAX, &v), RET_OK);
+  value_set_int(&v, 20);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_ROW, &v), RET_OK);
+  value_set_int(&v, 0);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_VALUE, &v), RET_OK);
+
+  int32_t old = SCROLL_BAR(bar)->value;
+  wheel_event_t we;
+  wheel_event_init(&we, EVT_WHEEL_BEFORE_CHILDREN, win, -120);
+  we.x = 600;
+  we.y = 600;
+  widget_dispatch(win, (event_t*)&we);
+  ASSERT_GT(SCROLL_BAR(bar)->value, old);
+
+  widget_destroy(win);
+}
+
+TEST(ScrollBar, wheel_modifier_key_desktop_parent_wheel_horizontal_requires_shift) {
+  widget_t* win = window_create(NULL, 0, 0, 800, 600);
+  widget_t* bar = scroll_bar_create_desktop(win, 0, 0, 30, 400);
+
+  widget_resize(bar, 400, 30);
+  value_t v;
+  value_set_int(&v, 2000);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_MAX, &v), RET_OK);
+  value_set_int(&v, 20);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_ROW, &v), RET_OK);
+  value_set_int(&v, 0);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_VALUE, &v), RET_OK);
+
+  int32_t old = SCROLL_BAR(bar)->value;
+  wheel_event_t we;
+
+  wheel_event_init(&we, EVT_WHEEL_BEFORE_CHILDREN, win, -120);
+  we.x = 600;
+  we.y = 600;
+  widget_dispatch(win, (event_t*)&we);
+  ASSERT_EQ(SCROLL_BAR(bar)->value, old);
+
+  wheel_event_init(&we, EVT_WHEEL_BEFORE_CHILDREN, win, -120);
+  we.x = 600;
+  we.y = 600;
+  we.shift = TRUE;
+  widget_dispatch(win, (event_t*)&we);
+  ASSERT_GT(SCROLL_BAR(bar)->value, old);
+
+  widget_destroy(win);
+}
+
+TEST(ScrollBar, wheel_modifier_key) {
+  value_t v;
+  widget_t* win = window_create(NULL, 0, 0, 800, 600);
+  widget_t* bar = scroll_bar_create_desktop(win, 0, 0, 30, 400);
+
+  value_set_int(&v, 2000);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_MAX, &v), RET_OK);
+  value_set_int(&v, 20);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_ROW, &v), RET_OK);
+  value_set_int(&v, 0);
+  ASSERT_EQ(widget_set_prop(bar, WIDGET_PROP_VALUE, &v), RET_OK);
+
+  int32_t old = SCROLL_BAR(bar)->value;
+  static const char* s_wheel_modifier_key[] = {
+      "", "shift", "ctrl", "alt", "shift + ctrl", "shift + alt", "ctrl + alt", "shift + ctrl + alt",
+  };
+  for (uint32_t i = 0; i < ARRAY_SIZE(s_wheel_modifier_key); i++) {
+    shortcut_t shortcut;
+    shortcut_init_with_str(&shortcut, s_wheel_modifier_key[i]);
+
+    ASSERT_EQ(widget_set_prop(bar, SCROLL_BAR_PROP_WHEEL_MODIFIER_KEY,
+                              value_set_str(&v, s_wheel_modifier_key[i])),
+              RET_OK);
+
+    wheel_event_t we;
+    wheel_event_init(&we, EVT_WHEEL_BEFORE_CHILDREN, win, -120);
+    we.x = 600;
+    we.y = 600;
+    we.alt = shortcut.alt;
+    we.ctrl = shortcut.ctrl;
+    we.shift = shortcut.shift;
+
+    widget_dispatch(win, (event_t*)&we);
+    ASSERT_GT(SCROLL_BAR(bar)->value, old);
+    SCROLL_BAR(bar)->value = old;
+  }
+
+  widget_destroy(win);
 }

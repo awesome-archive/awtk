@@ -1,19 +1,16 @@
 ## ui\_loader\_t
 ### 概述
+UI加载器。
 
- UI加载器。
+负责从资源加载界面描述数据，然后分发给ui\_builder，由ui\_builder进一步处理。
 
- 负责从资源加载界面描述数据，然后分发给ui\_builder，由ui\_builder进一步处理。
+常见的实现有两种：
 
- 常见的实现有两种：
+* XML格式的加载器。
 
- * XML格式的加载器。
+* 二进制格式的加载器。
 
- * 二进制格式的加载器。
-
- ![image](images/ui_loader_t_0.png)
-
-
+![image](images/ui_loader_t_0.png)
 
 ----------------------------------
 ### 函数
@@ -22,17 +19,15 @@
 | 函数名称 | 说明 | 
 | -------- | ------------ | 
 | <a href="#ui_loader_t_ui_loader_load">ui\_loader\_load</a> | 加载界面描述数据，然后分发给ui\_builder，由ui\_builder进一步处理。 |
-| <a href="#ui_loader_t_ui_loader_load_widget">ui\_loader\_load\_widget</a> |  |
+| <a href="#ui_loader_t_ui_loader_load_widget">ui\_loader\_load\_widget</a> | 从指定的资源加载widget对象，通常用于加载非窗口的widget。 |
+| <a href="#ui_loader_t_ui_loader_load_widget_from_xml">ui\_loader\_load\_widget\_from\_xml</a> | 从xml数据创建widget。 |
+| <a href="#ui_loader_t_ui_loader_load_widget_with_parent">ui\_loader\_load\_widget\_with\_parent</a> | 从指定的资源加载widget对象，并为widget对象指定父控件对象，通常用于加载非窗口的widget。 |
 #### ui\_loader\_load 函数
 -----------------------
 
 * 函数功能：
 
-> <p id="ui_loader_t_ui_loader_load"> 加载界面描述数据，然后分发给ui\_builder，由ui\_builder进一步处理。
-
-
-
-
+> <p id="ui_loader_t_ui_loader_load">加载界面描述数据，然后分发给ui\_builder，由ui\_builder进一步处理。
 
 * 函数原型：
 
@@ -54,14 +49,9 @@ ret_t ui_loader_load (ui_loader_t* loader, const uint8_t* data, uint32_t size, u
 
 * 函数功能：
 
-> <p id="ui_loader_t_ui_loader_load_widget">
- 从指定的资源加载widget对象，通常用于加载非窗口的widget。
+> <p id="ui_loader_t_ui_loader_load_widget">从指定的资源加载widget对象，通常用于加载非窗口的widget。
 
 >需要自己将widget加入窗口后，再调用widget\_layout。
-
-
-
-
 
 * 函数原型：
 
@@ -75,3 +65,46 @@ widget_t* ui_loader_load_widget (const char* name);
 | -------- | ----- | --------- |
 | 返回值 | widget\_t* | 返回widget对象。 |
 | name | const char* | 资源名。 |
+#### ui\_loader\_load\_widget\_from\_xml 函数
+-----------------------
+
+* 函数功能：
+
+> <p id="ui_loader_t_ui_loader_load_widget_from_xml">从xml数据创建widget。
+
+>需要自己将widget加入窗口后，再调用widget\_layout。
+
+* 函数原型：
+
+```
+widget_t* ui_loader_load_widget_from_xml (widget_t* parent, const char* xml, uint32_t size);
+```
+
+* 参数说明：
+
+| 参数 | 类型 | 说明 |
+| -------- | ----- | --------- |
+| 返回值 | widget\_t* | 返回widget对象。 |
+| parent | widget\_t* | 父控件对象。 |
+| xml | const char* | XML数据。 |
+| size | uint32\_t | XML数据长度。 |
+#### ui\_loader\_load\_widget\_with\_parent 函数
+-----------------------
+
+* 函数功能：
+
+> <p id="ui_loader_t_ui_loader_load_widget_with_parent">从指定的资源加载widget对象，并为widget对象指定父控件对象，通常用于加载非窗口的widget。
+
+* 函数原型：
+
+```
+widget_t* ui_loader_load_widget_with_parent (const char* name, widget_t* parent);
+```
+
+* 参数说明：
+
+| 参数 | 类型 | 说明 |
+| -------- | ----- | --------- |
+| 返回值 | widget\_t* | 返回widget对象。 |
+| name | const char* | 资源名。 |
+| parent | widget\_t* | 父控件对象。 |

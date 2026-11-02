@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   lcd.c
  * Author: AWTK Develop Team
  * Brief:  lcd interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,10 +19,15 @@
  *
  */
 
+#include "tkc/mem.h"
+#include "tkc/utils.h"
 #include "base/lcd.h"
+#include "tkc/time_now.h"
 #include "base/system_info.h"
+#include "base/lcd_fb_dirty_rects.inc"
 
-ret_t lcd_begin_frame(lcd_t* lcd, rect_t* dirty_rect, lcd_draw_mode_t draw_mode) {
+ret_t lcd_begin_frame(lcd_t* lcd, const dirty_rects_t* dirty_rects, lcd_draw_mode_t draw_mode) {
+  const rect_t* dirty_rect = dirty_rects != NULL ? &(dirty_rects->max) : NULL;
   return_value_if_fail(lcd != NULL && lcd->begin_frame != NULL, RET_BAD_PARAMS);
 
   lcd->draw_mode = draw_mode;
@@ -35,11 +40,41 @@ ret_t lcd_begin_frame(lcd_t* lcd, rect_t* dirty_rect, lcd_draw_mode_t draw_mode)
     lcd->dirty_rect = *dirty_rect;
     rect_fix(&(lcd->dirty_rect), lcd->w, lcd->h);
   }
+  lcd->dirty_rects = dirty_rects;
 
-  return lcd->begin_frame(lcd, dirty_rect);
+  return lcd->begin_frame(lcd, dirty_rects);
 }
 
-ret_t lcd_set_clip_rect(lcd_t* lcd, rect_t* rect) {
+ret_t lcd_set_canvas(lcd_t* lcd, canvas_t* c) {
+  return_value_if_fail(lcd != NULL, RET_BAD_PARAMS);
+  if (lcd->set_canvas != NULL) {
+    lcd->set_canvas(lcd, c);
+  }
+  return RET_OK;
+}
+
+const dirty_rects_t* lcd_get_dirty_rects(lcd_t* lcd) {
+  return_value_if_fail(lcd != NULL, NULL);
+  if (lcd->get_dirty_rects != NULL) {
+    return lcd->get_dirty_rects(lcd);
+  }
+  return lcd->dirty_rects;
+}
+
+ret_t lcd_get_dirty_rect(lcd_t* lcd, rect_t* r) {
+  return_value_if_fail(lcd != NULL, RET_BAD_PARAMS);
+  if (lcd->get_dirty_rect != NULL) {
+    return lcd->get_dirty_rect(lcd, r);
+  } else {
+    r->x = lcd->dirty_rect.x;
+    r->y = lcd->dirty_rect.y;
+    r->w = lcd->dirty_rect.w;
+    r->h = lcd->dirty_rect.h;
+  }
+  return RET_OK;
+}
+
+ret_t lcd_set_clip_rect(lcd_t* lcd, const rect_t* rect) {
   return_value_if_fail(lcd != NULL && lcd->set_clip_rect != NULL, RET_BAD_PARAMS);
 
   return lcd->set_clip_rect(lcd, rect);
@@ -98,7 +133,7 @@ ret_t lcd_set_fill_color(lcd_t* lcd, color_t color) {
 ret_t lcd_set_font_name(lcd_t* lcd, const char* name) {
   return_value_if_fail(lcd != NULL, RET_BAD_PARAMS);
 
-  lcd->font_name = name;
+  lcd->font_name = tk_str_copy(lcd->font_name, name);
   if (lcd->set_font_name != NULL) {
     lcd->set_font_name(lcd, name);
   }
@@ -146,6 +181,15 @@ ret_t lcd_fill_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h) {
   return lcd->fill_rect(lcd, x, y, w, h);
 }
 
+ret_t lcd_clear_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h) {
+  return_value_if_fail(lcd != NULL && lcd->clear_rect != NULL, RET_BAD_PARAMS);
+  if (w == 0 || h == 0) {
+    return RET_BAD_PARAMS;
+  }
+
+  return lcd->clear_rect(lcd, x, y, w, h);
+}
+
 ret_t lcd_stroke_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h) {
   return_value_if_fail(lcd != NULL && lcd->stroke_rect != NULL, RET_BAD_PARAMS);
 
@@ -173,7 +217,7 @@ color_t lcd_get_point_color(lcd_t* lcd, xy_t x, xy_t y) {
   }
 }
 
-ret_t lcd_draw_image(lcd_t* lcd, bitmap_t* img, rect_t* src, rect_t* dst) {
+ret_t lcd_draw_image(lcd_t* lcd, bitmap_t* img, const rectf_t* src, const rectf_t* dst) {
   return_value_if_fail(lcd != NULL && lcd->draw_image != NULL && src != NULL && dst != NULL,
                        RET_BAD_PARAMS);
 
@@ -190,7 +234,7 @@ ret_t lcd_draw_image_matrix(lcd_t* lcd, draw_image_info_t* info) {
   return RET_NOT_IMPL;
 }
 
-ret_t lcd_draw_glyph(lcd_t* lcd, glyph_t* glyph, rect_t* src, xy_t x, xy_t y) {
+ret_t lcd_draw_glyph(lcd_t* lcd, glyph_t* glyph, const rect_t* src, xy_t x, xy_t y) {
   return_value_if_fail(lcd != NULL && lcd->draw_glyph != NULL && glyph != NULL && src != NULL,
                        RET_BAD_PARAMS);
 
@@ -211,10 +255,20 @@ ret_t lcd_draw_text(lcd_t* lcd, const wchar_t* str, uint32_t nr, xy_t x, xy_t y)
   return lcd->draw_text(lcd, str, nr, x, y);
 }
 
+ret_t lcd_draw_text_by_glyphs(lcd_t* lcd, glyphs_t* glyphs, uint32_t start, uint32_t len, xy_t x, xy_t y) {
+  uint32_t nr = len + start;
+
+  return_value_if_fail(lcd != NULL && lcd->draw_text_by_glyphs != NULL && glyphs != NULL, RET_OK);
+  return_value_if_fail(glyphs != NULL && nr <= glyphs_get_length(glyphs), RET_BAD_PARAMS);
+
+  return lcd->draw_text_by_glyphs(lcd, glyphs, start, len, x, y);
+}
+
 ret_t lcd_end_frame(lcd_t* lcd) {
   return_value_if_fail(lcd != NULL && lcd->end_frame != NULL, RET_BAD_PARAMS);
 
   return_value_if_fail(lcd->end_frame(lcd) == RET_OK, RET_FAIL);
+  lcd->last_update_time = time_now_ms();
 
   return RET_OK;
 }
@@ -253,6 +307,11 @@ bool_t lcd_is_swappable(lcd_t* lcd) {
   return_value_if_fail(lcd != NULL, FALSE);
 
   if (lcd->swap != NULL) {
+#ifdef WITH_FAST_LCD_PORTRAIT
+    if (system_info()->flags & SYSTEM_INFO_FLAG_FAST_LCD_PORTRAIT) {
+      return TRUE;
+    }
+#endif
     return system_info()->lcd_orientation == LCD_ORIENTATION_0;
   }
 
@@ -261,20 +320,18 @@ bool_t lcd_is_swappable(lcd_t* lcd) {
 
 ret_t lcd_destroy(lcd_t* lcd) {
   return_value_if_fail(lcd != NULL && lcd->destroy != NULL, RET_BAD_PARAMS);
-
+  TKMEM_FREE(lcd->font_name);
   return lcd->destroy(lcd);
 }
 
 vgcanvas_t* lcd_get_vgcanvas(lcd_t* lcd) {
-  return_value_if_fail(lcd != NULL && lcd->get_vgcanvas != NULL, NULL);
+  return_value_if_fail(lcd != NULL, NULL);
 
-  return lcd->get_vgcanvas(lcd);
-}
+  if (lcd->get_vgcanvas != NULL) {
+    return lcd->get_vgcanvas(lcd);
+  }
 
-ret_t lcd_take_snapshot(lcd_t* lcd, bitmap_t* img, bool_t auto_rotate) {
-  return_value_if_fail(lcd != NULL && lcd->take_snapshot != NULL, RET_BAD_PARAMS);
-
-  return lcd->take_snapshot(lcd, img, auto_rotate);
+  return NULL;
 }
 
 bitmap_format_t lcd_get_desired_bitmap_format(lcd_t* lcd) {
@@ -285,14 +342,24 @@ bitmap_format_t lcd_get_desired_bitmap_format(lcd_t* lcd) {
 
 ret_t lcd_resize(lcd_t* lcd, wh_t w, wh_t h, uint32_t line_length) {
   return_value_if_fail(lcd != NULL, RET_BAD_PARAMS);
-  lcd->w = w;
-  lcd->h = h;
-
   if (lcd->resize != NULL) {
-    lcd->resize(lcd, w, h, line_length);
+    if (lcd->resize(lcd, w, h, line_length) == RET_OK) {
+      lcd->w = w;
+      lcd->h = h;
+      return RET_OK;
+    }
   }
 
-  return RET_OK;
+  return RET_FAIL;
+}
+
+ret_t lcd_set_orientation(lcd_t* lcd, lcd_orientation_t old_orientation,
+                          lcd_orientation_t new_orientation) {
+  return_value_if_fail(lcd != NULL, RET_BAD_PARAMS);
+  if (lcd->set_orientation != NULL) {
+    return lcd->set_orientation(lcd, old_orientation, new_orientation);
+  }
+  return RET_FAIL;
 }
 
 wh_t lcd_get_width(lcd_t* lcd) {
@@ -313,4 +380,62 @@ wh_t lcd_get_height(lcd_t* lcd) {
   } else {
     return lcd->h;
   }
+}
+
+wh_t lcd_get_physical_width(lcd_t* lcd) {
+  return_value_if_fail(lcd != NULL, 0);
+
+  if (lcd->get_physical_width != NULL) {
+    return lcd->get_physical_width(lcd);
+  } else {
+    return lcd_get_width(lcd);
+  }
+}
+
+wh_t lcd_get_physical_height(lcd_t* lcd) {
+  return_value_if_fail(lcd != NULL, 0);
+
+  if (lcd->get_physical_height != NULL) {
+    return lcd->get_physical_height(lcd);
+  } else {
+    return lcd_get_height(lcd);
+  }
+}
+
+ret_t lcd_get_text_metrics(lcd_t* lcd, float_t* ascent, float_t* descent, float_t* line_hight) {
+  return_value_if_fail(lcd != NULL && lcd->get_text_metrics != NULL, RET_BAD_PARAMS);
+
+  return lcd->get_text_metrics(lcd, ascent, descent, line_hight);
+}
+
+lcd_type_t lcd_get_type(lcd_t* lcd) {
+  return_value_if_fail(lcd != NULL, LCD_FRAMEBUFFER);
+  if (lcd->get_type != NULL) {
+    return (lcd_type_t)lcd->get_type(lcd);
+  }
+  return lcd->type;
+}
+
+ret_t lcd_set_vgcanvas(lcd_t* lcd, vgcanvas_t* vgcanvas) {
+  return_value_if_fail(lcd != NULL, RET_BAD_PARAMS);
+  if (lcd->set_vgcanvas != NULL) {
+    return lcd->set_vgcanvas(lcd, vgcanvas);
+  }
+  return RET_FAIL;
+}
+
+ret_t lcd_set_line_length(lcd_t* lcd, uint32_t line_length) {
+  return_value_if_fail(lcd != NULL, RET_BAD_PARAMS);
+  if (lcd->set_line_length != NULL) {
+    return lcd->set_line_length(lcd, line_length);
+  }
+  return RET_FAIL;
+}
+
+bool_t lcd_is_support_dirty_rect(lcd_t* lcd) {
+  return_value_if_fail(lcd != NULL, FALSE);
+  if (lcd->is_support_dirty_rect != NULL) {
+    return lcd->is_support_dirty_rect(lcd);
+  }
+  return lcd->support_dirty_rect;
 }

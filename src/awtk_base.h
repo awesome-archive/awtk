@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  awtk toolkit c libs
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,10 +21,13 @@
 
 #ifndef TK_BASE_H
 #define TK_BASE_H
+#include "base/bidi.h"
+#include "base/ui_feedback.h"
 #include "base/assets_manager.h"
 #include "base/awtk_config_sample.h"
 #include "base/bitmap.h"
 #include "base/canvas.h"
+#include "base/canvas_offline.h"
 #include "base/children_layouter.h"
 #include "base/children_layouter_factory.h"
 #include "base/clip_board.h"
@@ -39,8 +42,6 @@
 #include "base/g2d.h"
 #include "base/glyph_cache.h"
 #include "base/idle.h"
-#include "base/idle_info.h"
-#include "base/idle_manager.h"
 #include "base/image_base.h"
 #include "base/image_loader.h"
 #include "base/image_manager.h"
@@ -54,10 +55,10 @@
 #include "base/lcd_profile.h"
 #include "base/line_break.h"
 #include "base/locale_info.h"
+#include "base/locale_info_xml.h"
 #include "base/main_loop.h"
 #include "base/pixel.h"
 #include "base/pixel_pack_unpack.h"
-#include "base/rom_fs.h"
 #include "base/self_layouter.h"
 #include "base/self_layouter_factory.h"
 #include "base/shortcut.h"
@@ -68,8 +69,6 @@
 #include "base/system_info.h"
 #include "base/theme.h"
 #include "base/timer.h"
-#include "base/timer_info.h"
-#include "base/timer_manager.h"
 #include "base/types_def.h"
 #include "base/ui_builder.h"
 #include "base/ui_loader.h"
@@ -81,10 +80,11 @@
 #include "base/widget_animator_manager.h"
 #include "base/widget_consts.h"
 #include "base/widget_factory.h"
-#include "base/widget_pool.h"
 #include "base/widget_vtable.h"
 #include "base/window_animator.h"
 #include "base/window_animator_factory.h"
 #include "base/window_base.h"
 #include "base/window_manager.h"
+#include "base/style_mutable.h"
+#include "base/opengl.h"
 #endif /*TK_BASE_H*/

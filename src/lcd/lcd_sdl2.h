@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  sdl2 implemented lcd interface/
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,11 +23,14 @@
 #define LCD_SDL_H
 
 #include "base/lcd.h"
-#include <SDL.h>
+#include "platforms/pc/sdl_api.h"
 
 BEGIN_C_DECLS
 
 lcd_t* lcd_sdl2_init(SDL_Renderer* render);
+
+// 用于重置 SDL 绘图画布
+ret_t lcd_sdl2_texture_reset(lcd_t* lcd);
 
 END_C_DECLS
 

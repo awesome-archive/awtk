@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   enums.c
  * Author: AWTK Develop Team
  * Brief:  enumerations
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,10 +20,12 @@
  */
 
 #include "tkc/utils.h"
+#include "tkc/darray.h"
+#include "tkc/easing.h"
 #include "base/keys.h"
 #include "base/enums.h"
 #include "base/widget.h"
-#include "widgets/edit.h"
+#include "base/input_method.h"
 #include "base/window_animator.h"
 #include "base/assets_manager.h"
 
@@ -36,10 +38,22 @@ static const key_type_value_t align_v_name_value[] = {
     {"top", 0, ALIGN_V_TOP}, {"middle", 0, ALIGN_V_MIDDLE}, {"bottom", 0, ALIGN_V_BOTTOM}};
 
 static const key_type_value_t input_type_name_value[] = {
-    {"int", 0, INPUT_INT},       {"float", 0, INPUT_FLOAT}, {"uint", 0, INPUT_UINT},
-    {"ufloat", 0, INPUT_UFLOAT}, {"text", 0, INPUT_TEXT},   {"password", 0, INPUT_PASSWORD},
-    {"hex", 0, INPUT_HEX},       {"email", 0, INPUT_EMAIL}, {"phone", 0, INPUT_PHONE},
+    {"int", 0, INPUT_INT},
+    {"float", 0, INPUT_FLOAT},
+    {"uint", 0, INPUT_UINT},
+    {"ufloat", 0, INPUT_UFLOAT},
+    {"text", 0, INPUT_TEXT},
+    {"password", 0, INPUT_PASSWORD},
+    {"hex", 0, INPUT_HEX},
+    {"email", 0, INPUT_EMAIL},
+    {"phone", 0, INPUT_PHONE},
+    {"date", 0, INPUT_DATE},
+    {"time", 0, INPUT_TIME},
+    {"time_full", 0, INPUT_TIME_FULL},
+    {"ipv4", 0, INPUT_IPV4},
     {"custom", 0, INPUT_CUSTOM},
+    {"custom_password", 0, INPUT_CUSTOM_PASSWORD},
+    {"ascii", 0, INPUT_ASCII},
 };
 
 static const key_type_value_t align_h_name_value[] = {
@@ -49,7 +63,8 @@ static const key_type_value_t asset_type_value[] = {
     {"font", 0, ASSET_TYPE_FONT},       {"image", 0, ASSET_TYPE_IMAGE},
     {"style", 0, ASSET_TYPE_STYLE},     {"ui", 0, ASSET_TYPE_UI},
     {"strings", 0, ASSET_TYPE_STRINGS}, {"xml", 0, ASSET_TYPE_XML},
-    {"data", 0, ASSET_TYPE_DATA},       {"script", 0, ASSET_TYPE_SCRIPT},
+    {"flow", 0, ASSET_TYPE_FLOW},       {"data", 0, ASSET_TYPE_DATA},
+    {"script", 0, ASSET_TYPE_SCRIPT},
 };
 
 static const key_type_value_t image_draw_type_name_value[] = {
@@ -60,16 +75,21 @@ static const key_type_value_t image_draw_type_name_value[] = {
     {"auto", 0, IMAGE_DRAW_SCALE_AUTO},
     {"scale_auto", 0, IMAGE_DRAW_SCALE_AUTO},
     {"scale_down", 0, IMAGE_DRAW_SCALE_DOWN},
+    {"fill", 0, IMAGE_DRAW_FILL},
     {"scale_w", 0, IMAGE_DRAW_SCALE_W},
     {"scale_h", 0, IMAGE_DRAW_SCALE_H},
     {"repeat", 0, IMAGE_DRAW_REPEAT},
     {"repeat_x", 0, IMAGE_DRAW_REPEAT_X},
     {"repeat_y", 0, IMAGE_DRAW_REPEAT_Y},
+    {"repeat_y_inverse", 0, IMAGE_DRAW_REPEAT_Y_INVERSE},
     {"patch9", 0, IMAGE_DRAW_PATCH9},
     {"patch3_x", 0, IMAGE_DRAW_PATCH3_X},
     {"patch3_y", 0, IMAGE_DRAW_PATCH3_Y},
     {"patch3_x_scale_y", 0, IMAGE_DRAW_PATCH3_X_SCALE_Y},
-    {"patch3_y_scale_x", 0, IMAGE_DRAW_PATCH3_Y_SCALE_X}};
+    {"patch3_y_scale_x", 0, IMAGE_DRAW_PATCH3_Y_SCALE_X},
+    {"repeat9", 0, IMAGE_DRAW_REPEAT9},
+    {"repeat3_x", 0, IMAGE_DRAW_REPEAT3_X},
+    {"repeat3_y", 0, IMAGE_DRAW_REPEAT3_Y}};
 
 static const key_type_value_t easing_type_name_value[] = {
     {"linear", 0, EASING_LINEAR},
@@ -103,21 +123,25 @@ static const key_type_value_t keys_type_name_value[] = {
     {"BACKSPACE", 0, TK_KEY_BACKSPACE},
     {"TAB", 0, TK_KEY_TAB},
     {"SPACE", 0, TK_KEY_SPACE},
-    {"EXCLAIM", 0, TK_KEY_EXCLAIM},
-    {"QUOTEDBL", 0, TK_KEY_QUOTEDBL},
-    {"HASH", 0, TK_KEY_HASH},
-    {"PERCENT", 0, TK_KEY_PERCENT},
-    {"DOLLAR", 0, TK_KEY_DOLLAR},
-    {"AMPERSAND", 0, TK_KEY_AMPERSAND},
-    {"QUOTE", 0, TK_KEY_QUOTE},
-    {"LEFTPAREN", 0, TK_KEY_LEFTPAREN},
-    {"RIGHTPAREN", 0, TK_KEY_RIGHTPAREN},
-    {"ASTERISK", 0, TK_KEY_ASTERISK},
     {"PLUS", 0, TK_KEY_PLUS},
     {"COMMA", 0, TK_KEY_COMMA},
     {"MINUS", 0, TK_KEY_MINUS},
     {"PERIOD", 0, TK_KEY_PERIOD},
     {"SLASH", 0, TK_KEY_SLASH},
+    {"RIGHTPAREN", 0, TK_KEY_RIGHTPAREN},
+    {"LEFTBRACKET", 0, TK_KEY_LEFTBRACKET},
+    {"ASTERISK", 0, TK_KEY_ASTERISK},
+#ifndef AWTK_WEB /*web上key冲突，去掉一些不常用的键*/
+    {"PERCENT", 0, TK_KEY_PERCENT},
+    {"AMPERSAND", 0, TK_KEY_AMPERSAND},
+    {"QUOTE", 0, TK_KEY_QUOTE},
+    {"LEFTBRACE", 0, TK_KEY_LEFTBRACE},
+    {"LEFTPAREN", 0, TK_KEY_LEFTPAREN},
+    {"QUOTEDBL", 0, TK_KEY_QUOTEDBL},
+    {"EXCLAIM", 0, TK_KEY_EXCLAIM},
+    {"HASH", 0, TK_KEY_HASH},
+    {"DOLLAR", 0, TK_KEY_DOLLAR},
+#endif /*AWTK_WEB*/
     {"0", 0, TK_KEY_0},
     {"1", 0, TK_KEY_1},
     {"2", 0, TK_KEY_2},
@@ -135,7 +159,6 @@ static const key_type_value_t keys_type_name_value[] = {
     {"GREATER", 0, TK_KEY_GREATER},
     {"QUESTION", 0, TK_KEY_QUESTION},
     {"AT", 0, TK_KEY_AT},
-    {"LEFTBRACKET", 0, TK_KEY_LEFTBRACKET},
     {"BACKSLASH", 0, TK_KEY_BACKSLASH},
     {"RIGHTBRACKET", 0, TK_KEY_RIGHTBRACKET},
     {"CARET", 0, TK_KEY_CARET},
@@ -195,13 +218,14 @@ static const key_type_value_t keys_type_name_value[] = {
     {"Z", 0, TK_KEY_Z},
     {"DOT", 0, TK_KEY_DOT},
     {"DELETE", 0, TK_KEY_DELETE},
-    {"LEFTBRACE", 0, TK_KEY_LEFTBRACE},
     {"RIGHTBRACE", 0, TK_KEY_RIGHTBRACE},
-#ifdef SDL2
+    {"BACK", 0, TK_KEY_BACK},
+    {"CANCEL", 0, TK_KEY_CANCEL},
+    {"NUMLOCKCLEAR", 0, TK_KEY_NUMLOCKCLEAR},
+#ifdef WITH_SDL
     {"PRINTSCREEN", 0, TK_KEY_PRINTSCREEN},
     {"SCROLLLOCK", 0, TK_KEY_SCROLLLOCK},
     {"PAUSE", 0, TK_KEY_PAUSE},
-    {"NUMLOCKCLEAR", 0, TK_KEY_NUMLOCKCLEAR},
     {"APPLICATION", 0, TK_KEY_APPLICATION},
     {"POWER", 0, TK_KEY_POWER},
     {"F13", 0, TK_KEY_F13},
@@ -232,7 +256,6 @@ static const key_type_value_t keys_type_name_value[] = {
     {"VOLUMEDOWN", 0, TK_KEY_VOLUMEDOWN},
     {"ALTERASE", 0, TK_KEY_ALTERASE},
     {"SYSREQ", 0, TK_KEY_SYSREQ},
-    {"CANCEL", 0, TK_KEY_CANCEL},
     {"CLEAR", 0, TK_KEY_CLEAR},
     {"PRIOR", 0, TK_KEY_PRIOR},
     {"RETURN2", 0, TK_KEY_RETURN2},
@@ -277,7 +300,7 @@ static const key_type_value_t keys_type_name_value[] = {
     {"APP1", 0, TK_KEY_APP1},
     {"APP2", 0, TK_KEY_APP2},
 
-#endif /*SDL2*/
+#endif /*WITH_SDL*/
     {"LCTRL", 0, TK_KEY_LCTRL},
     {"RCTRL", 0, TK_KEY_RCTRL},
     {"LSHIFT", 0, TK_KEY_LSHIFT},
@@ -307,13 +330,18 @@ static const key_type_value_t keys_type_name_value[] = {
     {"F11", 0, TK_KEY_F11},
     {"F12", 0, TK_KEY_F12}};
 
+static const key_type_value_t* s_last_key_type_name_value = NULL;
+
+static const key_type_value_t* s_custom_keys_type_name_value = NULL;
+static uint32_t s_custom_keys_type_name_value_nr = 0;
+
 const key_type_value_t* find_item(const key_type_value_t* items, uint32_t nr, const char* name) {
   uint32_t i = 0;
   return_value_if_fail(items != NULL && name != NULL, NULL);
 
   for (i = 0; i < nr; i++) {
     const key_type_value_t* iter = items + i;
-    if (strcmp(iter->name, name) == 0) {
+    if (tk_str_eq(iter->name, name)) {
       return iter;
     }
   }
@@ -370,36 +398,97 @@ const key_type_value_t* input_type_find(const char* name) {
 }
 
 const key_type_value_t* easing_type_find(const char* name) {
-  return find_item(easing_type_name_value, ARRAY_SIZE(easing_type_name_value), name);
+  const key_type_value_t* kv =
+      find_item(easing_type_name_value, ARRAY_SIZE(easing_type_name_value), name);
+  if (kv != NULL) {
+    return kv;
+  } else {
+    easing_name_func_t* easing_name_func = darray_find(easing_name_func_darray(), (void*)name);
+    if (easing_name_func != NULL) {
+      return easing_name_func->type_name_value;
+    } else {
+      return NULL;
+    }
+  }
 }
 
 const key_type_value_t* easing_type_find_by_value(uint32_t value) {
-  return find_item_by_value(easing_type_name_value, ARRAY_SIZE(easing_type_name_value), value);
-}
-
-static const char* key_name_fix(char fixed_name[TK_NAME_LEN + 1], const char* name) {
-  uint32_t len = strlen(name);
-  tk_strncpy(fixed_name, name, TK_NAME_LEN);
-
-  if (len > 1) {
-    uint32_t i = 0;
-    for (i = 0; i < len; i++) {
-      fixed_name[i] = toupper(fixed_name[i]);
+  const key_type_value_t* kv =
+      find_item_by_value(easing_type_name_value, ARRAY_SIZE(easing_type_name_value), value);
+  if (kv != NULL) {
+    return kv;
+  } else {
+    easing_name_func_t* easing_name_func =
+        darray_get(easing_name_func_darray(), value - EASING_FUNC_NR - 1);
+    if (easing_name_func != NULL) {
+      return easing_name_func->type_name_value;
+    } else {
+      return NULL;
     }
   }
-
-  return fixed_name;
 }
 
 const key_type_value_t* keys_type_find(const char* name) {
   char fixed_name[TK_NAME_LEN + 1];
+  const key_type_value_t* ret = NULL;
   return_value_if_fail(name != NULL, NULL);
 
   memset(fixed_name, 0x00, sizeof(fixed_name));
-  return find_item(keys_type_name_value, ARRAY_SIZE(keys_type_name_value),
-                   key_name_fix(fixed_name, name));
+  tk_normalize_key_name(name, fixed_name);
+
+  if (s_last_key_type_name_value != NULL &&
+      tk_str_eq(fixed_name, s_last_key_type_name_value->name)) {
+    return s_last_key_type_name_value;
+  }
+
+  if (s_custom_keys_type_name_value != NULL) {
+    ret = find_item(s_custom_keys_type_name_value, s_custom_keys_type_name_value_nr, fixed_name);
+  }
+
+  if (ret == NULL) {
+    ret = find_item(keys_type_name_value, ARRAY_SIZE(keys_type_name_value), fixed_name);
+  }
+
+  if (ret != NULL) {
+    s_last_key_type_name_value = ret;
+  }
+
+  return ret;
 }
 
 const key_type_value_t* keys_type_find_by_value(uint32_t value) {
-  return find_item_by_value(keys_type_name_value, ARRAY_SIZE(keys_type_name_value), value);
+  const key_type_value_t* ret = NULL;
+
+  if (s_last_key_type_name_value != NULL && value == s_last_key_type_name_value->value) {
+    return s_last_key_type_name_value;
+  }
+
+  if (s_custom_keys_type_name_value != NULL) {
+    ret =
+        find_item_by_value(s_custom_keys_type_name_value, s_custom_keys_type_name_value_nr, value);
+  }
+
+  if (ret == NULL) {
+    ret = find_item_by_value(keys_type_name_value, ARRAY_SIZE(keys_type_name_value), value);
+  }
+
+  if (ret != NULL) {
+    s_last_key_type_name_value = ret;
+  }
+
+  return ret;
+}
+
+ret_t keys_type_set_custom_keys(const key_type_value_t* table, uint32_t nr) {
+  s_custom_keys_type_name_value = table;
+  s_custom_keys_type_name_value_nr = nr;
+  log_debug("Set custom keys : %p, nr = %d\n", table, nr);
+
+  s_last_key_type_name_value = NULL;
+
+  return RET_OK;
+}
+
+bool_t keys_type_have_custom_keys(void) {
+  return s_custom_keys_type_name_value != NULL && s_custom_keys_type_name_value_nr > 0;
 }

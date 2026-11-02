@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  suggest_words
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,6 +20,7 @@
  */
 
 #include "tkc/mem.h"
+#include "tkc/utils.h"
 #include "tkc/utf8.h"
 #include "tkc/buffer.h"
 #include "base/suggest_words.h"
@@ -36,31 +37,22 @@ typedef struct _suggest_words_header_t {
   uint32_t nr;
 } suggest_words_header_t;
 
+static int suggest_words_bsearch_cmp(const void* key, const void* iter) {
+  wchar_t c = *(const wchar_t*)(key);
+  const suggest_words_index_t* index = (const suggest_words_index_t*)(iter);
+  return c - index->code;
+}
+
 static const uint8_t* suggest_words_find_data(const asset_info_t* res, wchar_t c) {
-  int low = 0;
-  int mid = 0;
-  int high = 0;
-  int result = 0;
-  uint32_t header_size = sizeof(suggest_words_header_t);
   const suggest_words_header_t* header = (suggest_words_header_t*)(res->data);
-  const suggest_words_index_t* index = (suggest_words_index_t*)(res->data + header_size);
-  uint32_t data_offset = header_size + header->nr * sizeof(suggest_words_index_t);
+  const suggest_words_index_t* index =
+      (suggest_words_index_t*)(res->data + sizeof(suggest_words_header_t));
+  uint32_t data_offset =
+      sizeof(suggest_words_header_t) + header->nr * sizeof(suggest_words_index_t);
+  const suggest_words_index_t* iter = (const suggest_words_index_t*)tk_bsearch(
+      &c, index, header->nr, sizeof(suggest_words_index_t), suggest_words_bsearch_cmp, NULL);
 
-  high = header->nr - 1;
-  while (low <= high) {
-    mid = low + ((high - low) >> 1);
-    result = index[mid].code - c;
-
-    if (result == 0) {
-      return res->data + data_offset + index[mid].offset;
-    } else if (result < 0) {
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-
-  return NULL;
+  return iter != NULL ? res->data + data_offset + iter->offset : NULL;
 }
 
 static const uint16_t* get_str(const uint16_t* p16, wchar_t* str, uint32_t max_chars) {
@@ -98,16 +90,10 @@ static ret_t suggest_words_update(suggest_words_t* suggest_words, const uint8_t*
       memset(word, 0x00, sizeof(word));
       p16 = get_str(p16, word, ARRAY_SIZE(word) - 1);
 
-      utf8_from_utf16(word, sword, sizeof(sword));
+      tk_utf8_from_utf16(word, sword, sizeof(sword));
       if (wbuffer_write_string(&wb, sword) != RET_OK) {
         break;
       }
-      suggest_words->words_nr++;
-    }
-  }
-
-  if (suggest_words->words_nr < 5) {
-    if (wbuffer_write_string(&wb, "的") == RET_OK) {
       suggest_words->words_nr++;
     }
   }
@@ -138,9 +124,9 @@ suggest_words_t* suggest_words_create(const asset_info_t* res) {
 }
 
 ret_t suggest_words_destroy(suggest_words_t* suggest_words) {
-  return_value_if_fail(suggest_words != NULL, RET_BAD_PARAMS);
-
-  TKMEM_FREE(suggest_words);
+  if (suggest_words != NULL) {
+    TKMEM_FREE(suggest_words);
+  }
 
   return RET_OK;
 }

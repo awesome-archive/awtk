@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  spin_box
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -46,7 +46,7 @@ BEGIN_C_DECLS
  * ```
  *
  * >
- * 更多用法请参考：[spin_box.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/spinbox.xml)
+ * 更多用法请参考：[spin_box.xml](https://github.com/zlgopen/awtk/blob/master/design/default/ui/spinbox.xml)
  *
  * 在c代码中使用函数spin_box\_create创建spinbox控件。如：
  *
@@ -77,10 +77,44 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[theme
- * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L128)
+ * default](https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L128)
  *
  */
-typedef edit_t spin_box_t;
+typedef struct _spin_box_t {
+  edit_t edit;
+
+  /**
+   * @property {bool_t} easy_touch_mode
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否启用易点击模式(在电容屏设备上建议启用)。
+   * > 在该模式下：
+   * > * 1.当高度大于font size的3倍时，inc按钮在顶部(style名为spinbox_top)，dec按钮在底部(style名为spinbox_bottom)。
+   * > * 2.当高度正常时，dec按钮在左边(style名为spinbox_left)，inc按钮在右边(style名为spinbox_right)。
+   * > 不在该模式下：
+   * > inc按钮在右上角(style名为spinbox_up)，dec按钮在右下角(style名为spinbox_down)。
+   */
+  bool_t easy_touch_mode;
+
+  /**
+   * @property {char*} button_position
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 按钮位置样式选择，优先级高于easy_touch_mode，各模式对应样式如下,默认为none。
+   * none：按照easy_touch_mode选择样式
+   * default：inc按钮在右上角，dec按钮在右下角。
+   * left_right：dec按钮在左边，inc按钮在右边。
+   * top_bottom：inc按钮在顶部，dec按钮在底部。
+   */
+  char* button_position;
+
+  /**
+   * @property {int32_t} repeat
+   * @annotation ["set_prop","get_prop","readable","persitent","design","fake"]
+   * 重复触发EVT\_CLICK事件的时间间隔。
+   *
+   * 为0则不重复触发EVT\_CLICK事件。
+   */
+
+} spin_box_t;
 
 /**
  * @method spin_box_create
@@ -106,7 +140,47 @@ widget_t* spin_box_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
  */
 widget_t* spin_box_cast(widget_t* widget);
 
+/**
+ * @method spin_box_set_easy_touch_mode
+ * 设置是否启用易点击模式。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {bool_t} easy_touch_mode 易点击模式。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t spin_box_set_easy_touch_mode(widget_t* widget, bool_t easy_touch_mode);
+
+/**
+ * @method spin_box_set_button_position
+ * 设置按钮位置样式。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {const char*} button_position 按钮位置样式。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t spin_box_set_button_position(widget_t* widget, const char* button_position);
+
+/**
+ * @method spin_set_repeat
+ * 设置连击的时间间隔。
+ * 备注：时间间隔越低，速度越快。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget widget对象。
+ * @param {int32_t} repeat 连击的时间间隔。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t spin_set_repeat(widget_t* widget, int32_t repeat);
+
 #define SPIN_BOX(widget) ((spin_box_t*)(spin_box_cast(WIDGET(widget))))
+#define WIDGET_PROP_BUTTON_POSITION "button_position"
+
+#define SPIN_BOX_BUTTON_POSITION_NONE "none"
+#define SPIN_BOX_BUTTON_POSITION_DEFAULT "default"
+#define SPIN_BOX_BUTTON_POSITION_LEFT_RIGHT "left_right"
+#define SPIN_BOX_BUTTON_POSITION_TOP_BOTTOM "top_bottom"
 
 /*public for subclass and runtime type check*/
 TK_EXTERN_VTABLE(spin_box);

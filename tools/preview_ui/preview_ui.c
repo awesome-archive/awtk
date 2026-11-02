@@ -1,0 +1,693 @@
+﻿/**
+ * File:   preview_ui.c
+ * Author: AWTK Develop Team
+ * Brief:  preview_ui
+ *
+ * Copyright (c) 2018 - 2024  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * License file for more details.
+ *
+ */
+
+/**
+ * History:
+ * ================================================================
+ * 2018-02-16 Li XianJing <xianjimli@hotmail.com> created
+ *
+ */
+
+#ifdef WITH_VLD
+#include "vld.h"
+#endif
+
+#include "awtk.h"
+#include "conf_io/conf_utils.h"
+#include "base/locale_info_xml.h"
+#include "ui_loader/ui_loader_xml.h"
+#include "ui_loader/ui_loader_default.h"
+#include "ui_loader/ui_builder_default.h"
+
+#define DEFAULT_UI "./demos/assets/raw/ui/main.xml"
+
+#define MAX_ARGV 14
+
+#ifndef tk_isalpha
+#define tk_isalpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' || c <= 'Z'))
+#endif
+
+#ifndef APP_RES_ROOT_DEFAULT_VALUE
+#define APP_RES_ROOT_DEFAULT_VALUE NULL
+#endif /*APP_RES_ROOT_DEFAULT_VALUE*/
+
+static const char* s_ui = DEFAULT_UI;
+static const char* s_system_bar = NULL;
+static const char* s_system_bar_bottom = NULL;
+static const char* s_res_root = APP_RES_ROOT_DEFAULT_VALUE;
+static const char* s_plugins_path = NULL;
+static const char* s_render_mode = "OpenGL";
+static const char* s_language = NULL;
+static const char* s_theme = NULL;
+static const char* s_log_level = NULL;
+static const char* s_fps = NULL;
+static bool_t s_enable_std_font = FALSE;
+static locale_info_t* s_old_locale_info = NULL;
+const char window_tag[][TK_NAME_LEN] = {WIDGET_TYPE_NORMAL_WINDOW,
+                                        WIDGET_TYPE_OVERLAY,
+                                        WIDGET_TYPE_TOOL_BAR,
+                                        WIDGET_TYPE_DIALOG,
+                                        WIDGET_TYPE_POPUP,
+                                        WIDGET_TYPE_SYSTEM_BAR,
+                                        WIDGET_TYPE_SYSTEM_BAR_BOTTOM,
+                                        WIDGET_TYPE_SPRITE,
+                                        WIDGET_TYPE_KEYBOARD};
+
+#undef APP_RES_ROOT  // 以便可以通过命令行参数指定res目录
+
+#if defined(WIN32) && !defined(NDEBUG)
+#define SET_ENABLE_CONSOLE()                     \
+  if (tk_str_icmp(key, "enable_console") == 0) { \
+    enable_console = tk_atob(val + 1);           \
+  } else {                                       \
+    log_debug(usage, argv[0]);                   \
+  }
+#else
+#define SET_ENABLE_CONSOLE()   \
+  {                            \
+    log_debug(usage, argv[0]); \
+  }
+#endif /*WIN32 && !NDEBUG*/
+
+#define ON_CMD_LINE(argc, argv)                                                              \
+  {                                                                                          \
+    const char* usage =                                                                      \
+        "Usage: %s ui=xxx [lcd_w=800] [lcd_h=480] [res_root=xxx] "                           \
+        "[language=xxx] [theme=xxx] [system_bar=xxx] [bottom_system_bar=xxx] "               \
+        "[plugins_path=xxx] [render_mode=xxx] [enable_std_font=xxx] [enable_console=xxx]\n"; \
+    if (argc >= 2) {                                                                         \
+      char key[TK_NAME_LEN + 1];                                                             \
+      int i = 1;                                                                             \
+                                                                                             \
+      for (i = 1; i < argc; i++) {                                                           \
+        const char* p = argv[i];                                                             \
+        const char* val = strstr(p, "=");                                                    \
+        uint32_t len = (uint32_t)(val - p);                                                  \
+                                                                                             \
+        if (*(argv[i]) == '\0') {                                                            \
+          continue;                                                                          \
+        }                                                                                    \
+                                                                                             \
+        if (val == NULL || val == p || *(val + 1) == '\0' || len > TK_NAME_LEN) {            \
+          log_debug(usage, argv[0]);                                                         \
+          exit(0);                                                                           \
+        }                                                                                    \
+                                                                                             \
+        tk_strncpy(key, p, len);                                                             \
+        key[len] = '\0';                                                                     \
+                                                                                             \
+        if (tk_str_icmp(key, "res_root") == 0) {                                             \
+          s_res_root = val + 1;                                                              \
+        } else if (tk_str_icmp(key, "ui") == 0) {                                            \
+          s_ui = val + 1;                                                                    \
+        } else if (tk_str_icmp(key, "system_bar") == 0) {                                    \
+          s_system_bar = val + 1;                                                            \
+        } else if (tk_str_icmp(key, "bottom_system_bar") == 0) {                             \
+          s_system_bar_bottom = val + 1;                                                     \
+        } else if (tk_str_icmp(key, "lcd_w") == 0) {                                         \
+          lcd_w = tk_atoi(val + 1);                                                          \
+        } else if (tk_str_icmp(key, "lcd_h") == 0) {                                         \
+          lcd_h = tk_atoi(val + 1);                                                          \
+        } else if (tk_str_icmp(key, "plugins_path") == 0) {                                  \
+          s_plugins_path = val + 1;                                                          \
+        } else if (tk_str_icmp(key, "render_mode") == 0) {                                   \
+          s_render_mode = val + 1;                                                           \
+        } else if (tk_str_icmp(key, "language") == 0) {                                      \
+          s_language = val + 1;                                                              \
+        } else if (tk_str_icmp(key, "theme") == 0) {                                         \
+          s_theme = val + 1;                                                                 \
+        } else if (tk_str_icmp(key, "log_level") == 0) {                                     \
+          s_log_level = val + 1;                                                             \
+        } else if (tk_str_icmp(key, "fps") == 0) {                                           \
+          s_fps = val + 1;                                                                   \
+        } else if (tk_str_icmp(key, "enable_std_font") == 0) {                               \
+          s_enable_std_font = tk_atob(val + 1);                                              \
+        } else {                                                                             \
+          SET_ENABLE_CONSOLE()                                                               \
+        }                                                                                    \
+      }                                                                                      \
+                                                                                             \
+    } else {                                                                                 \
+      log_debug(usage, argv[0]);                                                             \
+      exit(0);                                                                               \
+    }                                                                                        \
+  }
+
+static ret_t get_default_res_root(char path[MAX_PATH + 1]) {
+#ifdef APP_RES_DEFAULT_ROOT
+  tk_strncpy(path, APP_RES_DEFAULT_ROOT, strlen(APP_RES_DEFAULT_ROOT));
+  return RET_OK;
+#else
+  char app_root[MAX_PATH + 1];
+  if (path_app_root(app_root) == RET_OK) {
+    return path_build(path, MAX_PATH, app_root, "res", NULL);
+  }
+  return RET_FAIL;
+#endif
+}
+
+typedef ret_t (*plugin_register_t)(void);
+typedef const char* (*plugin_supported_render_mode_t)(void);
+static ret_t plugins_dll_register(const char* dirname, const char* render_mode) {
+  str_t funcname;
+  fs_item_t item;
+  char path[MAX_PATH + 1] = {0};
+  fs_dir_t* dir = fs_open_dir(os_fs(), dirname);
+  return_value_if_fail(dir != NULL, RET_FAIL);
+
+  str_init(&funcname, 0);
+
+  while (fs_dir_read(dir, &item) == RET_OK) {
+    if (item.is_dir) {
+      if (!tk_str_eq(item.name, ".") && !tk_str_eq(item.name, "..")) {
+        path_build(path, MAX_PATH, dirname, item.name, NULL);
+        plugins_dll_register(path, render_mode);
+      }
+    } else {
+      bool_t should_try_register = TRUE;
+      tk_dl_t* dl = NULL;
+      plugin_register_t register_func;
+      plugin_supported_render_mode_t render_mode_func;
+
+#ifdef WIN32
+      if (item.is_reg_file && tk_str_end_with(item.name, ".dll")) {
+        str_set(&funcname, item.name);
+        str_replace(&funcname, ".dll", "");
+      } else {
+        continue;
+      }
+#elif defined LINUX
+      if (item.is_reg_file && tk_str_end_with(item.name, ".so") &&
+          tk_str_start_with(item.name, "lib")) {
+        str_set(&funcname, item.name);
+        str_replace(&funcname, "lib", "");
+        str_replace(&funcname, ".so", "");
+      } else {
+        continue;
+      }
+#elif defined MACOS
+      if (item.is_reg_file && tk_str_end_with(item.name, ".dylib") &&
+          tk_str_start_with(item.name, "lib")) {
+        str_set(&funcname, item.name);
+        str_replace(&funcname, "lib", "");
+        str_replace(&funcname, ".dylib", "");
+      } else {
+        continue;
+      }
+#else
+      log_debug("Not supported platform.\n");
+      return RET_FAIL;
+#endif
+
+      path_build(path, MAX_PATH, dirname, item.name, NULL);
+      dl = tk_dl_open(path);
+      if (dl == NULL) {
+#ifdef WIN32
+        log_debug("Open dynamic library failed: %s, error code: %d!\n", path, GetLastError());
+#else
+        log_debug("Open dynamic library failed: %s!\n", path);
+#endif
+        continue;
+      }
+
+      str_append(&funcname, "_supported_render_mode");
+      render_mode_func = (plugin_supported_render_mode_t)(tk_dl_sym(dl, funcname.str));
+      if (render_mode_func != NULL) {
+        const char* modes = render_mode_func();
+        should_try_register = strstr(modes, render_mode) != NULL;
+        if (!should_try_register) {
+          log_debug("Not supported render mode: %s %s!\n", path, render_mode);
+        }
+      }
+      str_replace(&funcname, "_supported_render_mode", "");
+
+      if (should_try_register) {
+        str_append(&funcname, "_register");
+        register_func = (plugin_register_t)tk_dl_sym(dl, funcname.str);
+        if (register_func != NULL) {
+          register_func();
+        } else {
+          log_debug("Not found function: %s %s!\n", path, funcname.str);
+        }
+      }
+    }
+  }
+
+  str_reset(&funcname);
+  return RET_OK;
+}
+
+static ret_t plugins_register(void) {
+  const char* path = s_plugins_path;
+  if (path != NULL && *path != '\0') {
+    return_value_if_fail(dir_exist(path), RET_BAD_PARAMS);
+    return plugins_dll_register(path, s_render_mode);
+  }
+  return RET_OK;
+}
+
+static ret_t refresh_in_timer(const timer_info_t* info) {
+  widget_t* widget = WIDGET(info->ctx);
+
+  widget_invalidate(widget, NULL);
+
+  return RET_REPEAT;
+}
+
+static ret_t get_res_strings_file_path(char* result, size_t size) {
+  return path_build(result, size, s_res_root, s_theme, "strings", "strings.xml", NULL);
+}
+
+static ret_t application_on_launch(void) {
+  // 当程序初始化完成时调用，全局只触发一次。
+
+  if (s_language != NULL && *s_language != '\0') {
+    char language[TK_NAME_LEN + 1] = {0};
+    const char* country = NULL;
+    const char* p = strstr(s_language, "_");
+
+    if (p != NULL) {
+      tk_strncpy(language, s_language, tk_min((size_t)(p - s_language), sizeof(language)));
+      country = (p + 1);
+    } else {
+      country = "";
+    }
+
+    s_old_locale_info = locale_info();
+    locale_info_t* info = locale_info_xml_create(language, country);
+    locale_info_set(info);
+    assets_manager_t* am = s_old_locale_info->assets_manager != NULL
+                               ? s_old_locale_info->assets_manager
+                               : assets_manager();
+    locale_info_xml_set_assets_manager(info, am);
+    locale_info_change(info, s_language, country);
+  }
+
+  widget_set_style_str(window_manager(), "bg_color", "white");
+  font_manager_set_standard_font_size(font_manager(), s_enable_std_font);
+
+  return RET_OK;
+}
+
+static ret_t application_on_exit(void) {
+  // 当程序退出时调用，全局只触发一次。
+  if (s_old_locale_info != NULL) {
+    locale_info_t* info = locale_info();
+    locale_info_set(s_old_locale_info);
+    locale_info_xml_destroy(info);
+  }
+
+  return RET_OK;
+}
+
+static ret_t find_first_tag(str_t* s, char* tag) {
+  int i = 0;
+  int start = 0;
+  enum _State {
+    STAT_START_TAG,
+    STAT_NONE,
+  } state = STAT_NONE;
+  return_value_if_fail(s != NULL && s->size != 0, RET_BAD_PARAMS);
+
+  for (i = 0; i < s->size; i++) {
+    char c = s->str[i];
+
+    switch (state) {
+      case STAT_START_TAG: {
+        if (!(tk_isalpha(c) || c == '_')) {
+          state = STAT_NONE;
+        }
+        if (tk_isspace(c) || c == '>' || c == '/') {
+          state = STAT_NONE;
+          tk_strncpy(tag, s->str + start, i - start);
+          return RET_OK;
+        }
+        break;
+      }
+      case STAT_NONE: {
+        if (c == '<') {
+          start = i + 1;
+          state = STAT_START_TAG;
+        }
+        break;
+      }
+    }
+  }
+
+  return RET_OK;
+}
+
+static const char* find_xml_pi_start(const char* p) {
+  while (*p != '\0') {
+    if (*p != '<') {
+      p++;
+      continue;
+    }
+    p++;
+    while (*p != '\0' && tk_isspace(*p)) p++;
+    if (*p != '?') continue;
+    p++;
+    while (*p != '\0' && tk_isspace(*p)) p++;
+    if (tk_strncmp(p, "xml", 3) == 0) return p + 3;
+  }
+  return NULL;
+}
+
+static const char* find_xml_pi_end(const char* p) {
+  const char* q = NULL;
+  while (*p != '\0') {
+    if (*p != '?') {
+      p++;
+      continue;
+    }
+    q = p + 1;
+    while (*q != '\0' && tk_isspace(*q)) q++;
+    if (*q == '>') return p;
+    p++;
+  }
+  return NULL;
+}
+
+static ret_t parse_additional_xml_attr_value(const char* raw_data, const char* attr_name,
+                                             str_t* value) {
+  const char* p = NULL;
+  const char* pi_start = NULL;
+  const char* pi_end = NULL;
+  const char* eq = NULL;
+  const char* val_start = NULL;
+  const char* val_end = NULL;
+  uint32_t attr_name_len = 0;
+  uint32_t val_len = 0;
+  str_t raw_value;
+  return_value_if_fail(raw_data != NULL && attr_name != NULL && value != NULL, RET_BAD_PARAMS);
+
+  attr_name_len = tk_strlen(attr_name);
+  str_clear(value);
+
+  pi_start = find_xml_pi_start(raw_data);
+  return_value_if_fail(pi_start != NULL, RET_FAIL);
+
+  pi_end = find_xml_pi_end(pi_start);
+  return_value_if_fail(pi_end != NULL, RET_FAIL);
+
+  p = pi_start;
+  while (p < pi_end) {
+    p = strstr(p, attr_name);
+    if (p == NULL || p >= pi_end) return RET_FAIL;
+
+    if (!tk_isspace(*(p - 1))) {
+      p += attr_name_len;
+      continue;
+    }
+
+    eq = p + attr_name_len;
+    while (eq < pi_end && tk_isspace(*eq)) eq++;
+    if (*eq != '=' || eq >= pi_end) {
+      p += attr_name_len;
+      continue;
+    }
+    eq++;
+
+    while (eq < pi_end && tk_isspace(*eq)) eq++;
+    if ((*eq != '"' && *eq != '\'') || eq >= pi_end) {
+      p += attr_name_len;
+      continue;
+    }
+
+    val_start = eq + 1;
+    val_end = strchr(val_start, *eq);
+    if (val_end == NULL || val_end >= pi_end) return RET_FAIL;
+
+    val_len = (uint32_t)(val_end - val_start);
+    if (val_len == 0) return RET_FAIL;
+
+    str_init(&raw_value, val_len + 1);
+    str_set_with_len(&raw_value, val_start, val_len);
+    str_decode_xml_entity(value, raw_value.str);
+    str_reset(&raw_value);
+    return RET_OK;
+  }
+
+  return RET_FAIL;
+}
+
+// 检测当前xml是否为窗口
+static ret_t confirm_file_data_window(str_t* file_data) {
+  str_t temp;
+  str_init(&temp, 0);
+  bool_t with_window = FALSE;
+  char first_tag[TK_NAME_LEN + 1] = {0};
+  return_value_if_fail(file_data != NULL, RET_FAIL);
+
+  find_first_tag(file_data, first_tag);
+  for (int i = 0; i < ARRAY_SIZE(window_tag); i++) {
+    if (tk_str_eq(first_tag, window_tag[i])) {
+      with_window = TRUE;
+      break;
+    }
+  }
+
+  if (!with_window) {
+    str_set(&temp, "<view w=\"100%%\" h=\"100%%\">");
+    str_append(&temp, file_data->str);
+    str_append(&temp, "</view>");
+    str_set(file_data, temp.str);
+  }
+  str_reset(&temp);
+
+  return RET_OK;
+}
+
+static ret_t filename_to_res_name(const char* filename, const char* base_dir, char* res_name,
+                                  uint32_t size) {
+  ret_t ret = RET_OK;
+  char normalized_base_dir[MAX_PATH + 1] = {0};
+  char normalized_filename[MAX_PATH + 1] = {0};
+
+  path_normalize(base_dir, normalized_base_dir, MAX_PATH + 1);
+  path_remove_last_slash(normalized_base_dir);
+  path_normalize(filename, normalized_filename, MAX_PATH + 1);
+  path_remove_last_slash(normalized_filename);
+
+  if (strstr(normalized_filename, normalized_base_dir) != NULL) {
+    char* ext_name = NULL;
+
+    strncpy(res_name, normalized_filename + strlen(normalized_base_dir) + 1, size);
+    ext_name = strrchr(res_name, '.');
+    if (ext_name != NULL) {
+      *ext_name = '\0';
+    }
+  } else {
+    ret = filename_to_name(normalized_filename, res_name, size);
+  }
+
+  return ret;
+}
+
+static ret_t try_get_ui_dir_path(const char* filename, char* ui_dir, uint32_t size) {
+  char normalized_filename[MAX_PATH + 1] = {0};
+  char normalized_ui_dir[MAX_PATH + 1] = {0};
+
+  path_build(ui_dir, size, s_res_root, s_theme, "ui", NULL);
+  path_normalize(ui_dir, normalized_ui_dir, MAX_PATH + 1);
+  path_normalize(filename, normalized_filename, MAX_PATH + 1);
+  if (strstr(normalized_filename, normalized_ui_dir) == NULL || s_theme == NULL) {
+    memset(ui_dir, 0, size);
+    path_build(ui_dir, size, s_res_root, "default", "ui", NULL);
+  }
+
+  return RET_OK;
+}
+
+static widget_t* preview_ui(const char* filename) {
+  str_t s;
+  str_t file_data;
+  uint32_t size = 0;
+  widget_t* root = NULL;
+  char name[TK_NAME_LEN + 1] = {0};
+  char b_name[MAX_PATH + 1] = {0};
+  char* ext = NULL;
+  ui_builder_t* builder = NULL;
+  uint8_t* content = NULL;
+  bool_t is_bin = strstr(filename, ".bin") != NULL;
+  ui_loader_t* loader = is_bin ? default_ui_loader() : xml_ui_loader();
+  char ui_dir[MAX_PATH + 1] = {0};
+
+  return_value_if_fail(filename != NULL, NULL);
+
+  str_init(&s, 0);
+  str_init(&file_data, 0);
+  if (is_bin) {
+    content = (uint8_t*)file_read(filename, &size);
+  } else {
+    xml_file_read_to_str(filename, &s);
+    content = (uint8_t*)s.str;
+    size = s.size;
+  }
+  str_set(&file_data, (const char*)content);
+
+  confirm_file_data_window(&file_data);
+  try_get_ui_dir_path(filename, ui_dir, MAX_PATH);
+  filename_to_res_name(filename, ui_dir, name, TK_NAME_LEN);
+
+  ext = strrchr(filename, '.');
+  memcpy(b_name, name, tk_strlen(name) + 1);
+  tk_str_append(b_name, MAX_PATH, ext);
+  builder = ui_builder_default_create(b_name);
+  printf("preview %s\n", filename);
+  return_value_if_fail(file_data.size != 0, NULL);
+  ui_loader_load(loader, (uint8_t*)file_data.str, size, builder);
+
+  if (builder->root == NULL) {
+    builder->root = label_create(NULL, 10, 10, 100, 30);
+    widget_set_text_utf8(builder->root, "not found ui file!");
+  }
+
+  if (builder->root != NULL && !(builder->root->vt->is_window)) {
+    const char* theme = name;
+    str_t attr_value;
+    tk_object_t* features = object_default_create();
+    widget_t* win = window_create(NULL, 0, 0, 0, 0);
+
+    str_init(&attr_value, 0);
+    widget_add_child(win, builder->root);
+    if (RET_OK == parse_additional_xml_attr_value(file_data.str, "theme", &attr_value)) {
+      theme = attr_value.str;
+    } else if (RET_OK == parse_additional_xml_attr_value(file_data.str, "parent", &attr_value)) {
+      if (RET_OK == object_from_json(features, attr_value.str)) {
+        const char* theme_from_parent = tk_object_get_prop_str(features, "theme");
+        if (theme_from_parent != NULL) {
+          theme = theme_from_parent;
+        }
+      }
+    }
+
+    widget_set_prop_str(win, "theme", theme);
+    widget_layout(win);
+
+    TK_OBJECT_UNREF(features);
+    str_reset(&attr_value);
+    timer_add(refresh_in_timer, builder->root, 1000);
+  }
+
+  if (is_bin) {
+    TKMEM_FREE(content);
+  } else {
+    str_reset(&s);
+  }
+
+  str_reset(&file_data);
+  root = builder->root;
+  ui_builder_destroy(builder);
+
+  return root;
+}
+
+static ret_t application_init(void) {
+  plugins_register();
+  application_on_launch();
+
+  if (s_system_bar != NULL && *s_system_bar != '\0') {
+    window_open(s_system_bar);
+  }
+
+  if (s_system_bar_bottom != NULL && *s_system_bar_bottom != '\0') {
+    window_open(s_system_bar_bottom);
+  }
+
+  preview_ui(s_ui);
+
+  return RET_OK;
+}
+
+static ret_t application_exit() {
+  application_on_exit();
+  log_debug("application_exit\n");
+
+  return RET_OK;
+}
+
+static ret_t build_asset_dir_custom(void* ctx, char* path, uint32_t size, const char* theme,
+                                    const char* ratio, const char* subpath) {
+  return_value_if_fail(path_build(path, size, s_res_root, theme, subpath, ratio, NULL) == RET_OK,
+                       RET_FAIL);
+  if (path != NULL && *path != '\0') {
+    return RET_OK;
+  } else {
+    return RET_FAIL;
+  }
+}
+
+ret_t assets_init(void) {
+#ifdef WITH_FS_RES
+  assets_manager_t* am = assets_manager();
+  const char* res_root = NULL;
+  bool_t run_default = FALSE;
+
+  if (s_theme != NULL) {
+    assets_manager_set_theme(am, s_theme);
+  }
+
+  TKMEM_FREE(am->res_root);
+  am->res_root = NULL;
+
+  assets_manager_set_custom_build_asset_dir(am, build_asset_dir_custom, NULL);
+
+  char path[MAX_PATH + 1];
+
+  if (s_res_root != NULL && *s_res_root != '\0') {
+    assets_manager_set_res_root(am, s_res_root);
+  }
+
+  res_root = assets_manager_get_res_root(am);
+  tk_snprintf(path, sizeof(path), "%s/assets/default/raw/ui", res_root);
+  if (!dir_exist(path)) {
+    tk_snprintf(path, sizeof(path), "%s/default/ui", res_root);
+    if (!dir_exist(path)) {
+      run_default = TRUE;
+    }
+  }
+
+  if (run_default) {
+    char path[MAX_PATH + 1];
+    if (get_default_res_root(path) == RET_OK) {
+      assets_manager_set_res_root(am, path);
+    }
+  }
+
+  assets_manager_preload(am, ASSET_TYPE_FONT, "default");
+  assets_manager_preload(am, ASSET_TYPE_STYLE, "default");
+#endif
+  tk_init_assets();
+  return RET_OK;
+}
+
+static ret_t global_init(void) {
+  tk_log_level_t log_level =
+      s_log_level != NULL && *s_log_level != '\0' ? tk_atoi(s_log_level) : LOG_LEVEL_DEBUG;
+
+  log_set_log_level(log_level);
+
+  return RET_OK;
+}
+
+static ret_t global_exit(void) {
+  return RET_OK;
+}
+
+#define GLOBAL_INIT() global_init()
+#define GLOBAL_EXIT() global_exit()
+#define APP_NAME "awtk_preview"
+
+#include "awtk_main.inc"

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  touch screen calibration win
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,7 +20,7 @@
  */
 
 #include "tkc/mem.h"
-#include "widgets/window.h"
+#include "base/window.h"
 #include "base/window_manager.h"
 #include "widgets/calibration_win.h"
 
@@ -86,6 +86,14 @@ static ret_t calibration_win_on_event(widget_t* widget, event_t* e) {
   }
 
   switch (type) {
+    case EVT_WINDOW_OPEN: {
+      widget_grab(widget->parent, widget);
+      return RET_OK;
+    }
+    case EVT_WINDOW_CLOSE: {
+      widget_ungrab(widget->parent, widget);
+      return RET_OK;
+    }
     case EVT_POINTER_UP: {
       point_t* p = win->points + win->cursor;
       pointer_event_t* evt = (pointer_event_t*)e;
@@ -105,12 +113,12 @@ static ret_t calibration_win_on_event(widget_t* widget, event_t* e) {
       if (win->cursor == PT_MAX_NR) {
         if (win->on_done != NULL) {
           if (win->on_done(win->on_done_ctx, win->points) == RET_OK) {
-            window_close(widget);
+            window_close_force(widget);
           } else {
             win->cursor = 0;
           }
         } else {
-          window_close(widget);
+          window_close_force(widget);
         }
 #if 0        
         p = win->points;
@@ -141,7 +149,8 @@ static ret_t calibration_win_on_paint_self(widget_t* widget, canvas_t* c) {
 
   if (text->size > 0) {
     rect_t r = rect_init(0, 40, widget->w, widget->h);
-    canvas_draw_text_in_rect(c, text->str, text->size, &r);
+    bool_t ellipses = widget_get_prop_bool(widget, WIDGET_PROP_ELLIPSES, FALSE);
+    widget_draw_text_in_rect(widget, c, widget->text.str, widget->text.size, &r, ellipses);
   }
 
   canvas_set_stroke_color(c, fg);
@@ -153,17 +162,29 @@ static ret_t calibration_win_on_paint_self(widget_t* widget, canvas_t* c) {
   return RET_OK;
 }
 
+static ret_t calibration_win_init(widget_t* widget) {
+  calibration_win_t* win = CALIBRATION_WIN(widget);
+  return_value_if_fail(win != NULL, RET_BAD_PARAMS);
+  win->cursor = 0;
+  win->x_offset = 20;
+  win->y_offset = 20;
+  win->cross_size = 16;
+  return RET_OK;
+}
+
 TK_DECL_VTABLE(calibration_win) = {.size = sizeof(calibration_win_t),
                                    .type = WIDGET_TYPE_CALIBRATION_WIN,
                                    .is_window = TRUE,
-                                   .parent = TK_PARENT_VTABLE(window_base),
+                                   .get_parent_vt = TK_GET_PARENT_VTABLE(window_base),
+                                   .init = calibration_win_init,
                                    .create = calibration_win_create,
                                    .on_event = calibration_win_on_event,
                                    .set_prop = window_base_set_prop,
                                    .get_prop = window_base_get_prop,
                                    .on_paint_begin = window_base_on_paint_begin,
                                    .on_paint_end = window_base_on_paint_end,
-                                   .on_paint_self = calibration_win_on_paint_self};
+                                   .on_paint_self = calibration_win_on_paint_self,
+                                   .on_destroy = window_base_on_destroy};
 
 ret_t calibration_win_set_on_done(widget_t* widget, calibration_win_on_done_t on_done, void* ctx) {
   calibration_win_t* win = CALIBRATION_WIN(widget);
@@ -188,14 +209,7 @@ ret_t calibration_win_set_on_click(widget_t* widget, calibration_win_on_click_t 
 
 widget_t* calibration_win_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {
   widget_t* widget = window_base_create(parent, TK_REF_VTABLE(calibration_win), x, y, w, h);
-  calibration_win_t* win = CALIBRATION_WIN(widget);
-
-  return_value_if_fail(win != NULL, NULL);
-
-  win->cursor = 0;
-  win->x_offset = 20;
-  win->y_offset = 20;
-  win->cross_size = 16;
+  return_value_if_fail(calibration_win_init(widget) == RET_OK, NULL);
 
   widget_resize(widget, widget->parent->w, widget->parent->h);
 

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  window animator factory
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -85,12 +85,12 @@ ret_t window_animator_factory_register(window_animator_factory_t* factory, const
  * @annotation ["constructor"]
  * @param {window_animator_factory_t*} factory 窗口动画工厂对象。
  * @param {bool_t} open TRUE表示打开窗口时的动画，FALSE表示关闭窗口时的动画。
- * @param {object_t*} args 参数。
+ * @param {tk_object_t*} args 参数。
  *
  * @return {window_animator_t*} 返回窗口动画对象。
  */
 window_animator_t* window_animator_factory_create_animator(window_animator_factory_t* factory,
-                                                           bool_t open, object_t* args);
+                                                           bool_t open, tk_object_t* args);
 
 /**
  * @method window_animator_factory_destroy
@@ -107,7 +107,7 @@ ret_t window_animator_factory_destroy(window_animator_factory_t* factory);
  * @method window_animator_create_for_open
  * @annotation ["constructor"]
  * 为打开窗口创建动画。
- * @param {char*} type 动画类型。
+ * @param {const char*} type 动画类型。
  * @param {canvas_t*} c canvas。
  * @param {widget_t*} prev_win 前一窗口。
  * @param {widget_t*} curr_win 当前窗口。
@@ -121,7 +121,7 @@ window_animator_t* window_animator_create_for_open(const char* type, canvas_t* c
  * @method window_animator_create_for_close
  * @annotation ["constructor"]
  * 为关闭窗口创建动画。
- * @param {char*} type 动画类型。
+ * @param {const char*} type 动画类型。
  * @param {canvas_t*} c canvas。
  * @param {widget_t*} prev_win 前一窗口。
  * @param {widget_t*} curr_win 当前窗口。

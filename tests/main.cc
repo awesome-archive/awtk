@@ -27,6 +27,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN 1
+#endif /*WIN32_LEAN_AND_MEAN*/
+
 #include <stdio.h>
 
 #include "awtk.h"
@@ -36,21 +40,24 @@
 #include "ext_widgets/ext_widgets.h"
 #include "gtest/gtest.h"
 #include "demos/assets.h"
+#include "tkc/socket_helper.h"
 
 GTEST_API_ int main(int argc, char** argv) {
   printf("Running main() from gtest_main.cc\n");
   testing::InitGoogleTest(&argc, argv);
 
-  system_info_init(APP_SIMULATOR, NULL, "./demos");
-  tk_init_internal();
+  return_value_if_fail(tk_init(0, 0, APP_CONSOLE, NULL, "./") == RET_OK, RET_FAIL);
+
+  tk_socket_init();
 
   assets_init();
   tk_init_assets();
   tk_ext_widgets_init();
-
+  widget_resize(window_manager(), 1024, 800);
   int ret = RUN_ALL_TESTS();
 
   tk_deinit_internal();
+  tk_socket_deinit();
 
   return ret;
 }

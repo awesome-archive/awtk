@@ -1,10 +1,10 @@
-## 将AWTK移植到aworks平台
+# 将AWTK移植到AWorksOS平台
 
 AWTK的可移植性很高，在移植时只需要实现平台初始化、lcd和mainloop三个方面的东西。本文以aworks-rt1052平台为例介绍移植AWTK到新平台的过程。
 
-### 一、平台初始化
+## 平台初始化
 
-除了基本的libc函数外，AWTK对平台没有特别要求，在aworks上没有函数gettimeofday，所以要实现一个获取当前时间的函数get\_time\_ms。另外需要给GUI分配一块内存空间，并调用tk\_mem\_init。
+除了基本的libc函数外，AWTK对平台没有特别要求，实现获取当前时间的函数get\_time\_ms64和sleep_ms函数即可。另外需要给GUI分配一块内存空间，并调用tk\_mem\_init。
 
 ```
 #include "aw_system.h"
@@ -12,7 +12,7 @@ AWTK的可移植性很高，在移植时只需要实现平台初始化、lcd和m
 #include "base/mem.h"
 #include "base/timer.h"
 
-uint32_t get_time_ms() {
+uint32_t get_time_ms64() {
   return aw_sys_tick_get();
 }
 
@@ -34,9 +34,9 @@ ret_t platform_prepare(void) {
  
 > 参考：awtk-port/platform.c
 
-### 二、实现lcd
+## 实现lcd
 
-aworks使用基于framebuffer的lcd的缺省实现，只需要调用函数lcd\_mem\_create\_double\_fb即可。
+AWorksOS使用基于framebuffer的lcd的缺省实现，只需要调用函数lcd\_mem\_create\_double\_fb即可。
 
 
 ```
@@ -89,7 +89,7 @@ aw_emwin_fb_info_t* aworks_lcd_init(void) {
 
 > 参考 awtk-port/lcd\_aworks.c
 
-### 三、实现main\_loop
+## 实现main\_loop
 
 main\_loop主要负责事件分发和绘制这个不断循环的过程。main\_loop\_raw.inc里实现了裸系统main\_loop的基本功能，在移植时加上输入事件的的分发即可：
 
@@ -144,4 +144,3 @@ lcd_t* platform_create_lcd(wh_t w, wh_t h) {
 > 参考 awtk-port/main\_loop\_aworks.c
 
 完整项目和源码请参考：[awtk-aworks-rt1052](https://github.com/zlgopen/awtk-aworks-rt1052)
-

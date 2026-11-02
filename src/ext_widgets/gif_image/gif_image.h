@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  gif_image
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -34,18 +34,19 @@ BEGIN_C_DECLS
  * GIF图片控件。
  *
  * > 注意：GIF图片的尺寸大于控件大小时会自动缩小图片，但一般的嵌入式系统的硬件加速都不支持图片缩放，
- * 所以缩放图片会导致性能明显下降。如果性能不满意时，请确认一下GIF图片的尺寸是否小余控件大小。
+ * 所以缩放图片会导致性能明显下降。如果性能不满意时，请确认一下GIF图片的尺寸是否小于控件大小。
  *
  * gif\_image\_t是[image\_base\_t](image_base_t.md)的子类控件，image\_base\_t的函数均适用于gif\_image\_t控件。
  *
- * 在xml中使用"gif\_image"标签创建GIF图片控件。如：
+ * 在xml中使用"gif"标签创建GIF图片控件。如：
  *
  * ```xml
- * <gif_image image="bee"/>
+ * <gif image="bee"/>
  * ```
  *
  * >更多用法请参考：
- * [gif image](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/gif_image.xml)
+ * [gif
+ * image](https://github.com/zlgopen/awtk/blob/master/design/default/ui/gif_image.xml)
  *
  * 在c代码中使用函数gif\_image\_create创建GIF图片控件。如：
  *
@@ -64,25 +65,59 @@ BEGIN_C_DECLS
  * 可用通过style来设置控件的显示风格，如背景和边框等。如：
  *
  * ```xml
- * <gif_image>
+ * <gif>
  *  <style name="border">
  *   <normal border_color="#000000" bg_color="#e0e0e0" text_color="black"/>
  *  </style>
- * </gif_image>
+ * </gif>
  * ```
  *
  * > 更多用法请参考：[theme default](
- * https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml)
+ * https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml)
  *
  */
 typedef struct _gif_image_t {
   image_base_t image_base;
 
+  /**
+   * @property {bool_t} running
+   * @annotation ["set_prop","get_prop","readable"]
+   * 是否正在运行。
+   *
+   */
+  bool_t running;
+
+  /**
+   * @property {uint32_t} loop
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 循环播放的次数。
+   *
+   */
+  uint32_t loop;
+
+  /**
+   * @property {bool_t} part_buffer_load_mode
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 边加载边播放模式。（比较耗费性能，但占用内存较小）
+   *
+   */
+  bool_t part_buffer_load_mode;
+
   /*private*/
-  int* delays;
   uint32_t index;
+  uint32_t delay;
   uint32_t timer_id;
-  uint32_t frames_nr;
+  uint32_t loop_done;
+  bitmap_t bitmap;
+  bool_t gif_update_flag;
+  int gif_delays;
+  bool_t gif_on_end;
+  int32_t gif_layers;
+  void* gif_msg;
+  void* gif_cache;
+  void* gif_context;
+  const asset_info_t* gif_res;
+  assets_manager_t* gif_am;
 } gif_image_t;
 
 /**
@@ -100,6 +135,58 @@ typedef struct _gif_image_t {
 widget_t* gif_image_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 
 /**
+ * @method gif_image_play
+ * 播放。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget gif_image对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t gif_image_play(widget_t* widget);
+
+/**
+ * @method gif_image_stop
+ * 停止(并重置index为0)。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget gif_image对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t gif_image_stop(widget_t* widget);
+
+/**
+ * @method gif_image_pause
+ * 暂停。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget gif_image对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t gif_image_pause(widget_t* widget);
+
+/**
+ * @method gif_image_set_loop
+ * 设置循环播放次数。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {uint32_t} loop 循环播放次数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t gif_image_set_loop(widget_t* widget, uint32_t loop);
+
+/**
+ * @method gif_image_set_part_buffer_load_mode
+ * 设置是否使用部分加载模式。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t} part_buffer_load_mode 循环播放次数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t gif_image_set_part_buffer_load_mode(widget_t* widget, bool_t part_buffer_load_mode);
+
+/**
  * @method gif_image_cast
  * 转换为gif_image对象(供脚本语言使用)。
  * @annotation ["cast", "scriptable"]
@@ -110,6 +197,7 @@ widget_t* gif_image_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 widget_t* gif_image_cast(widget_t* widget);
 
 #define WIDGET_TYPE_GIF_IMAGE "gif"
+#define WIDGET_PROP_PART_BUFFER_LOAD_MODE "part_buffer_load_mode"
 
 #define GIF_IMAGE(widget) ((gif_image_t*)(gif_image_cast(WIDGET(widget))))
 

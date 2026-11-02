@@ -1,4 +1,4 @@
-//
+﻿//
 // Copyright (c) 2013 Mikko Mononen memon@inside.org
 //
 // This software is provided 'as-is', without any express or implied
@@ -66,8 +66,9 @@ enum NVGpointFlags
 {
 	NVG_PT_CORNER = 0x01,
 	NVG_PT_LEFT = 0x02,
-	NVG_PT_BEVEL = 0x04,
-	NVG_PR_INNERBEVEL = 0x08,
+	NVG_PT_RIGHT = 0x04,
+	NVG_PT_BEVEL = 0x08,
+	NVG_PR_INNERBEVEL = 0x10,
 };
 
 struct NVGstate {
@@ -75,6 +76,7 @@ struct NVGstate {
 	int shapeAntiAlias;
 	NVGpaint fill;
 	NVGpaint stroke;
+	enum NVGFillMode fillMode;
 	float strokeWidth;
 	float miterLimit;
 	int lineJoin;
@@ -94,6 +96,7 @@ typedef struct NVGstate NVGstate;
 struct NVGpoint {
 	float x,y;
 	float dx, dy;
+	float dlx, dly;
 	float len;
 	float dmx, dmy;
 	unsigned char flags;
@@ -127,6 +130,8 @@ struct NVGcontext {
 	float distTol;
 	float fringeWidth;
 	float devicePxRatio;
+	float windowWidth;
+	float windowHeight;
 	struct FONScontext* fs;
 	int fontImages[NVG_MAX_FONTIMAGES];
 	int fontImageIdx;
@@ -153,6 +158,7 @@ static float nvg__absf(float a) { return a >= 0.0f ? a : -a; }
 static float nvg__signf(float a) { return a >= 0.0f ? 1.0f : -1.0f; }
 static float nvg__clampf(float a, float mn, float mx) { return a < mn ? mn : (a > mx ? mx : a); }
 static float nvg__cross(float dx0, float dy0, float dx1, float dy1) { return dx1*dy0 - dx0*dy1; }
+static int nvg__fequalf(float a, float b) { float t = a - b; return t > -1e-6 && t < 1e-6; }
 
 static float nvg__normalize(float *x, float* y)
 {
@@ -173,6 +179,20 @@ static void nvg__deletePathCache(NVGpathCache* c)
 	if (c->paths != NULL) free(c->paths);
 	if (c->verts != NULL) free(c->verts);
 	free(c);
+}
+
+float nvgGetWidth(NVGcontext* ctx) {
+	if (ctx != NULL) {
+		return ctx->windowWidth;
+	}
+	return 0.0f;
+}
+
+float nvgGetHeight(NVGcontext* ctx) {
+	if (ctx != NULL) {
+		return ctx->windowHeight;
+	}
+	return 0.0f;
 }
 
 static NVGpathCache* nvg__allocPathCache(void)
@@ -288,6 +308,14 @@ static NVGstate* nvg__getState(NVGcontext* ctx)
 	return &ctx->states[ctx->nstates-1];
 }
 
+void nvgGetStateXfrom(NVGcontext* ctx, float* xform)
+{
+	if(xform != NULL) {
+		memcpy(xform, &(ctx->states[ctx->nstates-1].xform), sizeof(float) * 6);
+	}
+}
+
+
 NVGcontext* nvgCreateInternal(NVGparams* params)
 {
 #ifdef WITH_NANOVG_GPU
@@ -332,7 +360,7 @@ NVGcontext* nvgCreateInternal(NVGparams* params)
 	if (ctx->fs == NULL) goto error;
 
 	// Create font texture
-	ctx->fontImages[0] = ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_ALPHA, fontParams.width, fontParams.height, 0, NULL);
+	ctx->fontImages[0] = ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_ALPHA, fontParams.width, fontParams.height, 0, 0, NVG_ORIENTATION_0, NULL);
 	if (ctx->fontImages[0] == 0) goto error;
 	ctx->fontImageIdx = 0;
 #endif/*WITH_NANOVG_GPU*/
@@ -376,16 +404,22 @@ void nvgDeleteInternal(NVGcontext* ctx)
 	free(ctx);
 }
 
-void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio)
+void nvgBeginFrameEx(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio, int reset, enum NVGorientation orientation)
 {
+	float angle = 0.0f;
+	float anchor_x = 0.0f;
+	float anchor_y = 0.0f;
 /*	printf("Tris: draws:%d  fill:%d  stroke:%d  text:%d  TOT:%d\n",
 		ctx->drawCallCount, ctx->fillTriCount, ctx->strokeTriCount, ctx->textTriCount,
 		ctx->fillTriCount+ctx->strokeTriCount+ctx->textTriCount);*/
+	if (reset != 0) {
+		ctx->nstates = 0;
+		nvgSave(ctx);
+		nvgReset(ctx);
+	}
 
-	ctx->nstates = 0;
-	nvgSave(ctx);
-	nvgReset(ctx);
-
+	ctx->windowWidth = windowWidth;
+	ctx->windowHeight = windowHeight;
 	nvg__setDevicePixelRatio(ctx, devicePixelRatio);
 
 	ctx->params.renderViewport(ctx->params.userPtr, windowWidth, windowHeight, devicePixelRatio);
@@ -394,6 +428,44 @@ void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float
 	ctx->fillTriCount = 0;
 	ctx->strokeTriCount = 0;
 	ctx->textTriCount = 0;
+
+	if (ctx->params.globalSreenOrientation != NULL) {
+		ctx->params.globalSreenOrientation(ctx->params.userPtr, orientation);
+	}
+	/* global sreen orientation is anti-clockwise */
+	switch (orientation) {
+	case NVG_ORIENTATION_0:
+		angle = 0.0f;
+		break;
+	case NVG_ORIENTATION_90:
+		angle = nvgDegToRad(270);
+		break;
+	case NVG_ORIENTATION_180:
+		angle = nvgDegToRad(180);
+		break;
+	case NVG_ORIENTATION_270:
+		angle = nvgDegToRad(90);
+		break;
+	default :
+		break;
+	}
+	anchor_x = windowWidth / 2.0f;
+	anchor_y = windowHeight / 2.0f;
+
+	if (orientation == 90 || orientation == 270) {
+		nvgTranslate(ctx, anchor_x, anchor_y);
+		nvgRotate(ctx, angle);
+		nvgTranslate(ctx, -anchor_y, -anchor_x);
+	} else if (orientation == 180) {
+		nvgTranslate(ctx, anchor_x, anchor_y);
+		nvgRotate(ctx, angle);
+		nvgTranslate(ctx, -anchor_x, -anchor_y);
+	}
+}
+
+void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio, enum NVGorientation orientation)
+{
+	nvgBeginFrameEx(ctx, windowWidth, windowHeight, devicePixelRatio, 1, orientation);
 }
 
 void nvgCancelFrame(NVGcontext* ctx)
@@ -664,6 +736,7 @@ void nvgReset(NVGcontext* ctx)
 	state->miterLimit = 10.0f;
 	state->lineCap = NVG_BUTT;
 	state->lineJoin = NVG_MITER;
+	state->fillMode = NVG_FILLMODE_All;
 	state->alpha = 1.0f;
 	nvgTransformIdentity(state->xform);
 
@@ -701,7 +774,7 @@ void nvgLineCap(NVGcontext* ctx, int cap)
 {
 	NVGstate* state = nvg__getState(ctx);
 	state->lineCap = cap;
-	if(ctx->params.setLineJoin != NULL)
+	if(ctx->params.setLineCap != NULL)
 	{
 		ctx->params.setLineCap(ctx->params.userPtr, cap);
 	}
@@ -715,6 +788,12 @@ void nvgLineJoin(NVGcontext* ctx, int join)
 	{
 		ctx->params.setLineJoin(ctx->params.userPtr, join);
 	}
+}
+
+void nvgFillMode(NVGcontext* ctx, enum NVGFillMode fillMode)
+{
+	NVGstate* state = nvg__getState(ctx);
+	state->fillMode = fillMode;
 }
 
 void nvgGlobalAlpha(NVGcontext* ctx, float alpha)
@@ -852,7 +931,7 @@ int nvgCreateImageMem(NVGcontext* ctx, int imageFlags, unsigned char* data, int 
 
 int nvgCreateImageRGBA(NVGcontext* ctx, int w, int h, int imageFlags, const unsigned char* data)
 {
-	return ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_RGBA, w, h, imageFlags, data);
+	return ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_RGBA, w, h, w * 4, imageFlags, NVG_ORIENTATION_0, data);
 }
 
 void nvgUpdateImage(NVGcontext* ctx, int image, const unsigned char* data)
@@ -866,6 +945,15 @@ void nvgImageSize(NVGcontext* ctx, int image, int* w, int* h)
 {
 	ctx->params.renderGetTextureSize(ctx->params.userPtr, image, w, h);
 }
+
+void nvgDeleteFontByName(NVGcontext* ctx, const char* name)
+{
+#ifdef WITH_NANOVG_GPU
+	if (ctx->fs) {
+		fontsDeleteFontByName(ctx->fs, name);
+	}
+#endif
+} 
 
 void nvgDeleteImage(NVGcontext* ctx, int image)
 {
@@ -989,18 +1077,28 @@ NVGpaint nvgImagePattern(NVGcontext* ctx,
 // Scissoring
 void nvgScissor(NVGcontext* ctx, float x, float y, float w, float h)
 {
+	float scale_x = 0.0f;
+	float scale_y = 0.0f;
 	NVGstate* state = nvg__getState(ctx);
 
 	w = nvg__maxf(0.0f, w);
 	h = nvg__maxf(0.0f, h);
-
+	/* 消除着色器精度不够引起的漏出颜色的问题 */
+	if (w == 0.0f || h == 0.0f) {
+		w = 0.0f;
+		h = 0.0f;
+	}
+	
 	nvgTransformIdentity(state->scissor.xform);
 	state->scissor.xform[4] = x+w*0.5f;
 	state->scissor.xform[5] = y+h*0.5f;
 	nvgTransformMultiply(state->scissor.xform, state->xform);
 
-	state->scissor.extent[0] = w*0.5f;
-	state->scissor.extent[1] = h*0.5f;
+	scale_x = sqrtf(state->scissor.xform[0]*state->scissor.xform[0] + state->scissor.xform[2]*state->scissor.xform[2]);
+	scale_y = sqrtf(state->scissor.xform[1]*state->scissor.xform[1] + state->scissor.xform[3]*state->scissor.xform[3]);
+
+	state->scissor.extent[0] = w*0.5f*scale_x;
+	state->scissor.extent[1] = h*0.5f*scale_y;
 }
 
 static void nvg__isectRects(float* dst,
@@ -1017,12 +1115,89 @@ static void nvg__isectRects(float* dst,
 	dst[3] = nvg__maxf(0.0f, maxy - miny);
 }
 
+int nvgGetCurrScissor(NVGcontext* ctx, float* x, float* y, float* w, float* h) 
+{
+	NVGstate* state = nvg__getState(ctx);
+	float pxform[6], invxorm[6];
+	float ex, ey, tex, tey;
+	float scale_x = 0.0f;
+	float scale_y = 0.0f;
+
+	// If no previous scissor has been set, set the scissor as current scissor.
+	if (state->scissor.extent[0] < 0) {
+		*w = 0;
+		*h = 0;
+		return 0;
+	}
+
+	scale_x = sqrtf(state->scissor.xform[0]*state->scissor.xform[0] + state->scissor.xform[2]*state->scissor.xform[2]);
+	scale_y = sqrtf(state->scissor.xform[1]*state->scissor.xform[1] + state->scissor.xform[3]*state->scissor.xform[3]);
+
+	// Transform the current scissor rect into current transform space.
+	// If there is difference in rotation, this will be approximation.
+	memcpy(pxform, state->scissor.xform, sizeof(float)*6);
+	ex = state->scissor.extent[0] / scale_x;
+	ey = state->scissor.extent[1] / scale_y;
+	nvgTransformInverse(invxorm, state->xform);
+	nvgTransformMultiply(pxform, invxorm);
+	tex = ex*nvg__absf(pxform[0]) + ey*nvg__absf(pxform[2]);
+	tey = ex*nvg__absf(pxform[1]) + ey*nvg__absf(pxform[3]);
+
+	*x = pxform[4] - tex;
+	*y = pxform[5] - tey;
+	*w = tex * 2;
+	*h = tey * 2;
+	return 1;
+}
+
+void nvgIntersectScissor_ex(NVGcontext* ctx, float* x, float* y, float* w, float* h)
+{
+	NVGstate* state = nvg__getState(ctx);
+	float pxform[6], invxorm[6];
+	float rect[4];
+	float ex, ey, tex, tey;
+	float scale_x = 0.0f;
+	float scale_y = 0.0f;
+
+	// If no previous scissor has been set, set the scissor as current scissor.
+	if (state->scissor.extent[0] < 0) {
+		nvgScissor(ctx, *x, *y, *w, *h);
+		return;
+	}
+
+	scale_x = sqrtf(state->scissor.xform[0]*state->scissor.xform[0] + state->scissor.xform[2]*state->scissor.xform[2]);
+	scale_y = sqrtf(state->scissor.xform[1]*state->scissor.xform[1] + state->scissor.xform[3]*state->scissor.xform[3]);
+
+	// Transform the current scissor rect into current transform space.
+	// If there is difference in rotation, this will be approximation.
+	memcpy(pxform, state->scissor.xform, sizeof(float)*6);
+	ex = state->scissor.extent[0] / scale_x;
+	ey = state->scissor.extent[1] / scale_y;
+	nvgTransformInverse(invxorm, state->xform);
+	nvgTransformMultiply(pxform, invxorm);
+	tex = ex*nvg__absf(pxform[0]) + ey*nvg__absf(pxform[2]);
+	tey = ex*nvg__absf(pxform[1]) + ey*nvg__absf(pxform[3]);
+
+	// Intersect rects.
+	nvg__isectRects(rect, pxform[4]-tex,pxform[5]-tey,tex*2,tey*2, *x, *y, *w, *h);
+
+	*x = rect[0];
+	*y = rect[1];
+	*w = rect[2];
+	*h = rect[3];
+
+	nvgScissor(ctx, rect[0], rect[1], rect[2], rect[3]);
+}
+
+
 void nvgIntersectScissor(NVGcontext* ctx, float x, float y, float w, float h)
 {
 	NVGstate* state = nvg__getState(ctx);
 	float pxform[6], invxorm[6];
 	float rect[4];
 	float ex, ey, tex, tey;
+	float scale_x = 0.0f;
+	float scale_y = 0.0f;
 
 	// If no previous scissor has been set, set the scissor as current scissor.
 	if (state->scissor.extent[0] < 0) {
@@ -1030,11 +1205,14 @@ void nvgIntersectScissor(NVGcontext* ctx, float x, float y, float w, float h)
 		return;
 	}
 
+	scale_x = sqrtf(state->scissor.xform[0]*state->scissor.xform[0] + state->scissor.xform[2]*state->scissor.xform[2]);
+	scale_y = sqrtf(state->scissor.xform[1]*state->scissor.xform[1] + state->scissor.xform[3]*state->scissor.xform[3]);
+
 	// Transform the current scissor rect into current transform space.
 	// If there is difference in rotation, this will be approximation.
 	memcpy(pxform, state->scissor.xform, sizeof(float)*6);
-	ex = state->scissor.extent[0];
-	ey = state->scissor.extent[1];
+	ex = state->scissor.extent[0] / scale_x;
+	ey = state->scissor.extent[1] / scale_y;
 	nvgTransformInverse(invxorm, state->xform);
 	nvgTransformMultiply(pxform, invxorm);
 	tex = ex*nvg__absf(pxform[0]) + ey*nvg__absf(pxform[2]);
@@ -1106,6 +1284,10 @@ static void nvg__appendCommands(NVGcontext* ctx, float* vals, int nvals)
 {
 	NVGstate* state = nvg__getState(ctx);
 	int i;
+
+	if (state->xform[0] == 0.0f || state->xform[3] == 0.0f) {
+		return;
+	}
 
 	if (ctx->ncommands+nvals > ctx->ccommands) {
 		float* commands;
@@ -1351,7 +1533,7 @@ static void nvg__tesselateBezier(NVGcontext* ctx,
 	nvg__tesselateBezier(ctx, x1234,y1234, x234,y234, x34,y34, x4,y4, level+1, type);
 }
 
-static void nvg__flattenPaths(NVGcontext* ctx)
+static void nvg__flattenPaths(NVGcontext* ctx, enum NVGFillMode fillMode)
 {
 	NVGpathCache* cache = ctx->cache;
 //	NVGstate* state = nvg__getState(ctx);
@@ -1425,13 +1607,13 @@ static void nvg__flattenPaths(NVGcontext* ctx)
 			path->closed = 1;
 		}
 
-		// Enforce winding.
-		if (path->count > 2) {
-			area = nvg__polyArea(pts, path->count);
-			if (path->winding == NVG_CCW && area < 0.0f)
+		area = nvg__polyArea(pts, path->count);
+		path->path_winding = area >= 0.0f ? NVG_CCW : NVG_CW;
+		if (fillMode == NVG_FILLMODE_All && path->count > 2) {
+			if (path->winding == NVG_CCW && area < 0.0f) {
 				nvg__polyReverse(pts, path->count);
-			if (path->winding == NVG_CW && area > 0.0f)
-				nvg__polyReverse(pts, path->count);
+				path->path_winding = NVG_CCW;
+			}
 		}
 
 		for(i = 0; i < path->count; i++) {
@@ -1439,6 +1621,13 @@ static void nvg__flattenPaths(NVGcontext* ctx)
 			p0->dx = p1->x - p0->x;
 			p0->dy = p1->y - p0->y;
 			p0->len = nvg__normalize(&p0->dx, &p0->dy);
+			if (path->path_winding == NVG_CCW) {
+				p0->dlx = p0->dy;
+				p0->dly = -p0->dx;
+			} else {
+				p0->dlx = -p0->dy;
+				p0->dly = p0->dx;
+			}
 			// Update bounds
 			cache->bounds[0] = nvg__minf(cache->bounds[0], p0->x);
 			cache->bounds[1] = nvg__minf(cache->bounds[1], p0->y);
@@ -1478,13 +1667,13 @@ static NVGvertex* nvg__roundJoin(NVGvertex* dst, NVGpoint* p0, NVGpoint* p1,
 								 float fringe)
 {
 	int i, n;
-	float dlx0 = p0->dy;
-	float dly0 = -p0->dx;
-	float dlx1 = p1->dy;
-	float dly1 = -p1->dx;
+	float dlx0 = p0->dlx;
+	float dly0 = p0->dly;
+	float dlx1 = p1->dlx;
+	float dly1 = p1->dly;
 	NVG_NOTUSED(fringe);
 
-	if (p1->flags & NVG_PT_LEFT) {
+	if (p1->flags & NVG_PT_LEFT || p1->flags & NVG_PT_RIGHT) {
 		float lx0,ly0,lx1,ly1,a0,a1;
 		nvg__chooseBevel(p1->flags & NVG_PR_INNERBEVEL, p0, p1, lw, &lx0,&ly0, &lx1,&ly1);
 		a0 = atan2f(-dly0, -dlx0);
@@ -1539,13 +1728,13 @@ static NVGvertex* nvg__bevelJoin(NVGvertex* dst, NVGpoint* p0, NVGpoint* p1,
 {
 	float rx0,ry0,rx1,ry1;
 	float lx0,ly0,lx1,ly1;
-	float dlx0 = p0->dy;
-	float dly0 = -p0->dx;
-	float dlx1 = p1->dy;
-	float dly1 = -p1->dx;
+	float dlx0 = p0->dlx;
+	float dly0 = p0->dly;
+	float dlx1 = p1->dlx;
+	float dly1 = p1->dly;
 	NVG_NOTUSED(fringe);
 
-	if (p1->flags & NVG_PT_LEFT) {
+	if (p1->flags & NVG_PT_LEFT || p1->flags & NVG_PT_RIGHT) {
 		nvg__chooseBevel(p1->flags & NVG_PR_INNERBEVEL, p0, p1, lw, &lx0,&ly0, &lx1,&ly1);
 
 		nvg__vset(dst, lx0, ly0, lu,1); dst++;
@@ -1696,15 +1885,16 @@ static void nvg__calculateJoins(NVGcontext* ctx, float w, int lineJoin, float mi
 		NVGpoint* p0 = &pts[path->count-1];
 		NVGpoint* p1 = &pts[0];
 		int nleft = 0;
+		int nright = 0;
 
 		path->nbevel = 0;
 
 		for (j = 0; j < path->count; j++) {
 			float dlx0, dly0, dlx1, dly1, dmr2, cross, limit;
-			dlx0 = p0->dy;
-			dly0 = -p0->dx;
-			dlx1 = p1->dy;
-			dly1 = -p1->dx;
+			dlx0 = p0->dlx;
+			dly0 = p0->dly;
+			dlx1 = p1->dlx;
+			dly1 = p1->dly;
 			// Calculate extrusions
 			p1->dmx = (dlx0 + dlx1) * 0.5f;
 			p1->dmy = (dly0 + dly1) * 0.5f;
@@ -1726,6 +1916,9 @@ static void nvg__calculateJoins(NVGcontext* ctx, float w, int lineJoin, float mi
 			if (cross > 0.0f) {
 				nleft++;
 				p1->flags |= NVG_PT_LEFT;
+			} else if (cross < 0.0f) {
+				nright++;
+				p1->flags |= NVG_PT_RIGHT;
 			}
 
 			// Calculate if we should use bevel or miter for inner join.
@@ -1746,7 +1939,7 @@ static void nvg__calculateJoins(NVGcontext* ctx, float w, int lineJoin, float mi
 			p0 = p1++;
 		}
 
-		path->convex = (nleft == path->count) ? 1 : 0;
+		path->convex = (nleft == path->count || nright == path->count) ? 1 : 0;
 	}
 }
 
@@ -1880,7 +2073,7 @@ static int nvg__expandFill(NVGcontext* ctx, float w, int lineJoin, float miterLi
 	NVGpathCache* cache = ctx->cache;
 	NVGvertex* verts;
 	NVGvertex* dst;
-	int cverts, convex, i, j;
+	int cverts, i, j;
 	float aa = ctx->fringeWidth;
 	int fringe = w > 0.0f;
 
@@ -1897,8 +2090,6 @@ static int nvg__expandFill(NVGcontext* ctx, float w, int lineJoin, float miterLi
 
 	verts = nvg__allocTempVerts(ctx, cverts);
 	if (verts == NULL) return 0;
-
-	convex = cache->npaths == 1 && cache->paths[0].convex;
 
 	for (i = 0; i < cache->npaths; i++) {
 		NVGpath* path = &cache->paths[i];
@@ -1919,11 +2110,11 @@ static int nvg__expandFill(NVGcontext* ctx, float w, int lineJoin, float miterLi
 			p1 = &pts[0];
 			for (j = 0; j < path->count; ++j) {
 				if (p1->flags & NVG_PT_BEVEL) {
-					float dlx0 = p0->dy;
-					float dly0 = -p0->dx;
-					float dlx1 = p1->dy;
-					float dly1 = -p1->dx;
-					if (p1->flags & NVG_PT_LEFT) {
+					float dlx0 = p0->dlx;
+					float dly0 = p0->dly;
+					float dlx1 = p1->dlx;
+					float dly1 = p1->dly;
+					if (p1->flags & NVG_PT_LEFT || p1->flags & NVG_PT_RIGHT) {
 						float lx = p1->x + p1->dmx * woff;
 						float ly = p1->y + p1->dmy * woff;
 						nvg__vset(dst, lx, ly, 0.5f,1); dst++;
@@ -1961,7 +2152,7 @@ static int nvg__expandFill(NVGcontext* ctx, float w, int lineJoin, float miterLi
 
 			// Create only half a fringe for convex shapes so that
 			// the shape can be rendered without stenciling.
-			if (convex) {
+			if (path->convex) {
 				lw = woff;	// This should generate the same vertex as fill inset above.
 				lu = 0.5f;	// Set outline fade at middle.
 			}
@@ -2294,6 +2485,7 @@ void nvgPathWinding(NVGcontext* ctx, int dir)
 
 void nvgArc(NVGcontext* ctx, float cx, float cy, float r, float a0, float a1, int dir)
 {
+	float ads_da = 0;
 	float a = 0, da = 0, hda = 0, kappa = 0;
 	float dx = 0, dy = 0, x = 0, y = 0, tanx = 0, tany = 0;
 	float px = 0, py = 0, ptanx = 0, ptany = 0;
@@ -2303,14 +2495,15 @@ void nvgArc(NVGcontext* ctx, float cx, float cy, float r, float a0, float a1, in
 
 	// Clamp angles
 	da = a1 - a0;
+	ads_da = nvg__absf(da);
 	if (dir == NVG_CW) {
-		if (nvg__absf(da) >= NVG_PI*2) {
+		if (ads_da > NVG_PI*2 || nvg__fequalf(ads_da, NVG_PI*2)) {
 			da = NVG_PI*2;
 		} else {
 			while (da < 0.0f) da += NVG_PI*2;
 		}
 	} else {
-		if (nvg__absf(da) >= NVG_PI*2) {
+		if (ads_da > NVG_PI*2 || nvg__fequalf(ads_da, NVG_PI*2)) {
 			da = -NVG_PI*2;
 		} else {
 			while (da > 0.0f) da -= NVG_PI*2;
@@ -2420,6 +2613,13 @@ void nvgCircle(NVGcontext* ctx, float cx, float cy, float r)
 	nvgEllipse(ctx, cx,cy, r,r);
 }
 
+int nvgClearCache(NVGcontext* ctx) {
+	if(ctx->params.clearCache != NULL) {
+		ctx->params.clearCache(ctx->params.userPtr);
+	}
+	return 0;
+}
+
 #ifdef WITH_NANOVG_GPU
 void nvgDebugDumpPathCache(NVGcontext* ctx)
 {
@@ -2451,7 +2651,7 @@ void nvgFill(NVGcontext* ctx)
 	NVGpaint fillPaint = state->fill;
 	int i;
 
-	nvg__flattenPaths(ctx);
+	nvg__flattenPaths(ctx, state->fillMode);
 	if (ctx->params.edgeAntiAlias && state->shapeAntiAlias)
 		nvg__expandFill(ctx, ctx->fringeWidth, NVG_MITER, 2.4f);
 	else
@@ -2461,8 +2661,13 @@ void nvgFill(NVGcontext* ctx)
 	fillPaint.innerColor.a *= state->alpha;
 	fillPaint.outerColor.a *= state->alpha;
 
+	/* 把 nanovg 的坐标系传入到适量画布算法中 */
+	if(ctx->params.setStateXfrom != NULL) {
+		ctx->params.setStateXfrom(ctx->params.userPtr, state->xform);
+	}
+
 	ctx->params.renderFill(ctx->params.userPtr, &fillPaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
-						   ctx->cache->bounds, ctx->cache->paths, ctx->cache->npaths);
+						   ctx->cache->bounds, ctx->cache->paths, ctx->cache->npaths, state->fillMode);
 
 	// Count triangles
 	for (i = 0; i < ctx->cache->npaths; i++) {
@@ -2496,12 +2701,17 @@ void nvgStroke(NVGcontext* ctx)
 	strokePaint.innerColor.a *= state->alpha;
 	strokePaint.outerColor.a *= state->alpha;
 
-	nvg__flattenPaths(ctx);
+	nvg__flattenPaths(ctx, NVG_FILLMODE_All);
 
 	if (ctx->params.edgeAntiAlias && state->shapeAntiAlias)
 		nvg__expandStroke(ctx, strokeWidth*0.5f, ctx->fringeWidth, state->lineCap, state->lineJoin, state->miterLimit);
 	else
 		nvg__expandStroke(ctx, strokeWidth*0.5f, 0.0f, state->lineCap, state->lineJoin, state->miterLimit);
+
+	/* 把 nanovg 的坐标系传入到适量画布算法中 */
+	if(ctx->params.setStateXfrom != NULL) {
+		ctx->params.setStateXfrom(ctx->params.userPtr, state->xform);
+	}
 
 	ctx->params.renderStroke(ctx->params.userPtr, &strokePaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
 							 strokeWidth, ctx->cache->paths, ctx->cache->npaths);
@@ -2519,6 +2729,11 @@ void nvgStroke(NVGcontext* ctx)
 int nvgCreateFont(NVGcontext* ctx, const char* name, const char* path)
 {
 	return fonsAddFont(ctx->fs, name, path);
+}
+
+int nvgCreateEmptyFont(NVGcontext* ctx, const char* name)
+{
+	return fonsCreateEmptyFont(ctx->fs, name);
 }
 
 int nvgCreateFontMem(NVGcontext* ctx, const char* name, unsigned char* data, int ndata, int freeData)
@@ -2633,7 +2848,7 @@ static int nvg__allocTextAtlas(NVGcontext* ctx)
 			iw *= 2;
 		if (iw > NVG_MAX_FONTIMAGE_SIZE || ih > NVG_MAX_FONTIMAGE_SIZE)
 			iw = ih = NVG_MAX_FONTIMAGE_SIZE;
-		ctx->fontImages[ctx->fontImageIdx+1] = ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_ALPHA, iw, ih, 0, NULL);
+		ctx->fontImages[ctx->fontImageIdx+1] = ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_ALPHA, iw, ih, 0, 0, NVG_ORIENTATION_0, NULL);
 	}
 	++ctx->fontImageIdx;
 	fonsResetAtlas(ctx->fs, iw, ih);
@@ -2656,6 +2871,57 @@ static void nvg__renderText(NVGcontext* ctx, NVGvertex* verts, int nverts)
 
 	ctx->drawCallCount++;
 	ctx->textTriCount += nverts/3;
+}
+
+static inline int nvgpTrianglesIsCW(float x1, float y1, float x2, float y2, float x3, float y3) {
+  float ret = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1);
+  assert(ret != 0.0f);
+  return ret < 0.0f ? 1 : 0;
+}
+
+void nvgGlyph(NVGcontext* ctx, unsigned int codepoint, float fontSize, float x, float y, float w, float h, const unsigned char* data) 
+{
+	FONSquad q;
+	float c[4*2];
+	NVGstate* state = nvg__getState(ctx);
+	float _scale = ctx->devicePxRatio;
+	float invscale = 1.0f / _scale;
+	int cverts = 6; // conservative estimate.
+	int nverts = 0;
+	NVGvertex* verts = nvg__allocTempVerts(ctx, cverts);
+	if (verts == NULL) return;
+
+	fonsSetBlur(ctx->fs, state->fontBlur*_scale);
+	fonsSetFont(ctx->fs, state->fontId);
+
+	fonFONSquadFromGlyph(ctx->fs, &q, codepoint, (short)fontSize, x, y, (int)w, (int)h, data);
+	// Transform corners.
+	nvgTransformPoint(&c[0],&c[1], state->xform, q.x0*invscale, q.y0*invscale);
+	nvgTransformPoint(&c[2],&c[3], state->xform, q.x1*invscale, q.y0*invscale);
+	nvgTransformPoint(&c[4],&c[5], state->xform, q.x1*invscale, q.y1*invscale);
+	nvgTransformPoint(&c[6],&c[7], state->xform, q.x0*invscale, q.y1*invscale);
+	// Create triangles
+	if (nverts+6 <= cverts) {
+		nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); nverts++;
+		if (nvgpTrianglesIsCW(c[0], c[1], c[4], c[5], c[2], c[3])) {
+			nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+			nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); nverts++;
+		} else {
+			nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); nverts++;
+			nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+		}
+		nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); nverts++;
+		if (nvgpTrianglesIsCW(c[0], c[1], c[6], c[7], c[4], c[5])) {
+			nvg__vset(&verts[nverts], c[6], c[7], q.s0, q.t1); nverts++;
+			nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+		} else {
+			nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+			nvg__vset(&verts[nverts], c[6], c[7], q.s0, q.t1); nverts++;
+		}
+	}
+	nvg__flushTextTexture(ctx);
+
+	nvg__renderText(ctx, verts, nverts);
 }
 
 float nvgText(NVGcontext* ctx, float x, float y, const char* string, const char* end)
@@ -2709,11 +2975,21 @@ float nvgText(NVGcontext* ctx, float x, float y, const char* string, const char*
 		// Create triangles
 		if (nverts+6 <= cverts) {
 			nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); nverts++;
-			nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
-			nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); nverts++;
+			if (nvgpTrianglesIsCW(c[0], c[1], c[4], c[5], c[2], c[3])) {
+				nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+				nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); nverts++;
+			} else {
+				nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); nverts++;
+				nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+			}
 			nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); nverts++;
-			nvg__vset(&verts[nverts], c[6], c[7], q.s0, q.t1); nverts++;
-			nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+			if (nvgpTrianglesIsCW(c[0], c[1], c[6], c[7], c[4], c[5])) {
+				nvg__vset(&verts[nverts], c[6], c[7], q.s0, q.t1); nverts++;
+				nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+			} else {
+				nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+				nvg__vset(&verts[nverts], c[6], c[7], q.s0, q.t1); nverts++;
+			}
 		}
 	}
 
@@ -3164,6 +3440,10 @@ void nvgFontFace(NVGcontext* ctx, const char* font)
 {
 }
 
+int nvgCreateEmptyFont(NVGcontext* ctx, const char* name) {
+  return 0;
+}
+
 int nvgCreateFontMem(NVGcontext* ctx, const char* name, unsigned char* data, int ndata, int freeData)
 {
   return 0;
@@ -3171,6 +3451,10 @@ int nvgCreateFontMem(NVGcontext* ctx, const char* name, unsigned char* data, int
 
 int nvgFindFont(NVGcontext* ctx, const char* name) {
   return 0;
+}
+
+void nvgGlyph(NVGcontext* ctx, unsigned int codepoint, float fontSize, float x, float y, float w, float h, const unsigned char* data) {
+	return;
 }
 
 float nvgText(NVGcontext* ctx, float x, float y, const char* string, const char* end) {
@@ -3188,9 +3472,17 @@ NVGparams* nvgGetParams(NVGcontext* ctx) {
   return &(ctx->params);
 }
 
-int nvgCreateImageRaw(NVGcontext* ctx, int w, int h, int format, int imageFlags, const unsigned char* data)
+int nvgCreateImageRaw(NVGcontext* ctx, int w, int h, int format, int stride, int imageFlags, enum NVGorientation orientation, const unsigned char* data)
 {
-	return ctx->params.renderCreateTexture(ctx->params.userPtr, format, w, h, imageFlags, data);
+	return ctx->params.renderCreateTexture(ctx->params.userPtr, format, w, h, stride, imageFlags, orientation, data);
+}
+
+int nvgFindTextureRaw(NVGcontext* ctx, const void* data)
+{
+	if(ctx->params.findTexture != NULL) {
+		return ctx->params.findTexture(ctx->params.userPtr, data);
+	}
+	return -1;
 }
 
 // vim: ft=c nu noet ts=4

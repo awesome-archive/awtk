@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  tokenizer
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is ditokenizeributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -29,10 +29,22 @@ BEGIN_C_DECLS
 /**
  * @class tokenizer_t
  * 从字符串中解析出一个一个的token。
+ * 
+ * ```c
+ * tokenizer_t tokenizer;
+ * tokenizer_t* t = tokenizer_init(&tokenizer, "20,111.2,22.3,333.3,44,555.5", UINT32_MAX, ",");
+ *
+ * while(tokenizer_has_more(t)) {
+ *   double v = tokenizer_next_float(t, 0);
+ *   log_debug("%lf\n", v);
+ * }
+ *
+ * tokenizer_deinit(t);
+ * ```
  */
 typedef struct _tokenizer_t {
   /**
-   * @property {char*} str
+   * @property {const char*} str
    * @annotation ["readable"]
    * 字符串。
    */
@@ -51,14 +63,14 @@ typedef struct _tokenizer_t {
   uint32_t cursor;
 
   /**
-   * @property {char*} separtor
+   * @property {const char*} separtor
    * @annotation ["readable"]
    * 分隔字符串。
    */
   const char* separtor;
 
   /**
-   * @property {char*} single_char_token
+   * @property {const char*} single_char_token
    * @annotation ["readable"]
    * 单字符的token。
    */
@@ -72,9 +84,9 @@ typedef struct _tokenizer_t {
  * 初始化tokenizer对象。
  * @annotation ["constructor"]
  * @param {tokenizer_t*} tokenizer tokenizer对象。
- * @param {char*} str 要解析的字符串。
+ * @param {const char*} str 要解析的字符串。
  * @param {uint32_t} size 字符串长度。
- * @param {char*} separtor 分隔字符。
+ * @param {const char*} separtor 分隔字符。
  *
  * @return {tokenizer_t*} tokenizer对象本身。
  */
@@ -86,10 +98,10 @@ tokenizer_t* tokenizer_init(tokenizer_t* tokenizer, const char* str, uint32_t si
  * 初始化tokenizer对象。
  * @annotation ["constructor"]
  * @param {tokenizer_t*} tokenizer tokenizer对象。
- * @param {char*} str 要解析的字符串。
+ * @param {const char*} str 要解析的字符串。
  * @param {uint32_t} size 字符串长度。
- * @param {char*} separtor 分隔字符。
- * @param {char*} single_char_token 单字符token。
+ * @param {const char*} separtor 分隔字符。
+ * @param {const char*} single_char_token 单字符token。
  *
  * @return {tokenizer_t*} tokenizer对象本身。
  */
@@ -110,9 +122,18 @@ bool_t tokenizer_has_more(tokenizer_t* tokenizer);
  * 获取下一个token。
  * @param {tokenizer_t*} tokenizer tokenizer对象。
  *
- * @return {char*} 成功返回token，失败返回NULL。
+ * @return {const char*} 成功返回token，失败返回NULL。
  */
 const char* tokenizer_next(tokenizer_t* tokenizer);
+
+/**
+ * @method tokenizer_next_str
+ * 获取下一个字符串(允许使用英文单引号和双引号界定字符串)。
+ * @param {tokenizer_t*} tokenizer tokenizer对象。
+ *
+ * @return {const char*} 成功返回字符串，失败返回NULL。
+ */
+const char* tokenizer_next_str(tokenizer_t* tokenizer);
 
 /**
  * @method tokenizer_next_until
@@ -120,9 +141,29 @@ const char* tokenizer_next(tokenizer_t* tokenizer);
  * @param {tokenizer_t*} tokenizer tokenizer对象。
  * @param {const char*} str 字符集。
  *
- * @return {char*} 成功返回token，失败返回NULL。
+ * @return {const char*} 成功返回token，失败返回NULL。
  */
 const char* tokenizer_next_until(tokenizer_t* tokenizer, const char* str);
+
+/**
+ * @method tokenizer_next_expr_until
+ * 获取下一个expr，该expr直到遇到指定的char。
+ * @param {tokenizer_t*} tokenizer tokenizer对象。
+ * @param {const char*} str 字符集。
+ *
+ * @return {const char*} 成功返回token，失败返回NULL。
+ */
+const char* tokenizer_next_expr_until(tokenizer_t* tokenizer, const char* str);
+
+/**
+ * @method tokenizer_next_str_until
+ * 获取下一个str，该str直到遇到指定的char。
+ * @param {tokenizer_t*} tokenizer tokenizer对象。
+ * @param {const char*} str 字符集。
+ *
+ * @return {const char*} 成功返回token，失败返回NULL。
+ */
+const char* tokenizer_next_str_until(tokenizer_t* tokenizer, const char* str);
 
 /**
  * @method tokenizer_next_int
@@ -130,9 +171,19 @@ const char* tokenizer_next_until(tokenizer_t* tokenizer, const char* str);
  * @param {tokenizer_t*} tokenizer tokenizer对象。
  * @param {int} defval 缺省值。
  *
- * @return {char*} 成功返回token的int值，失败返回缺省值。
+ * @return {int} 成功返回token的int值，失败返回缺省值。
  */
 int tokenizer_next_int(tokenizer_t* tokenizer, int defval);
+
+/**
+ * @method tokenizer_next_int64
+ * 获取下一个token，并转换成int64_t。
+ * @param {tokenizer_t*} tokenizer tokenizer对象。
+ * @param {int64_t} defval 缺省值。
+ *
+ * @return {int64_t} 成功返回token的int64_t值，失败返回缺省值。
+ */
+int64_t tokenizer_next_int64(tokenizer_t* tokenizer, int64_t defval);
 
 /**
  * @method tokenizer_next_float
@@ -140,7 +191,7 @@ int tokenizer_next_int(tokenizer_t* tokenizer, int defval);
  * @param {tokenizer_t*} tokenizer tokenizer对象。
  * @param {float} defval 缺省值。
  *
- * @return {char*} 成功返回token的float值，失败返回缺省值。
+ * @return {float} 成功返回token的float值，失败返回缺省值。
  */
 float tokenizer_next_float(tokenizer_t* tokenizer, float defval);
 

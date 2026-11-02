@@ -1,9 +1,9 @@
-/**
- * File:   children_layouter_list_view_list_view.c
+﻿/**
+ * File:   children_layouter_list_view.c
  * Author: AWTK Develop Team
  * Brief:  children layouter list view
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -27,14 +27,16 @@
 #include "scroll_view/scroll_bar.h"
 #include "scroll_view/scroll_view.h"
 #include "scroll_view/list_view.h"
+#include "scroll_view/list_view_h.h"
 #include "scroll_view/children_layouter_list_view.h"
 
 static const char* children_layouter_list_view_to_string(children_layouter_t* layouter) {
   char temp[32];
   str_t* str = &(layouter->params);
   children_layouter_list_view_t* layout = (children_layouter_list_view_t*)layouter;
-
-  str_set(str, "listview(");
+  return_value_if_fail(layout != NULL, NULL);
+  memset(temp, 0, sizeof(temp));
+  str_set(str, "list_view(");
   str_append(str, temp);
 
   if (layout->item_height) {
@@ -63,12 +65,26 @@ static const char* children_layouter_list_view_to_string(children_layouter_t* la
     str_append(str, temp);
   }
 
+  if (layout->cols > 1) {
+    tk_snprintf(temp, sizeof(temp) - 1, "cols=%d,", (int)(layout->cols));
+    str_append(str, temp);
+  }
+
   if (!(layout->keep_disable)) {
     str_append(str, "keep_disable=false,");
   }
 
   if (layout->keep_invisible) {
     str_append(str, "keep_invisible=true,");
+  }
+
+  if (layout->hlayouter) {
+    str_append(str, "hlayouter=true,");
+  }
+
+  if (layout->animating_time) {
+    tk_snprintf(temp, sizeof(temp) - 1, "animating_time=%d,", layout->animating_time);
+    str_append(str, temp);
   }
 
   str_trim_right(str, ",");
@@ -108,12 +124,26 @@ static ret_t children_layouter_list_view_set_param(children_layouter_t* layouter
       l->default_item_height = val;
       break;
     }
+    case 'c': {
+      l->cols = val;
+      break;
+    }
     case 'k': {
       if (strstr(name, "invisible") != NULL || name[1] == 'i') {
         l->keep_invisible = value_bool(v);
       } else if (strstr(name, "disable") != NULL || name[1] == 'd') {
         l->keep_disable = value_bool(v);
       }
+      break;
+    }
+    case 'h': {
+      if (strstr(name, "layouter") != NULL || name[1] == 'l') {
+        l->hlayouter = value_bool(v);
+      }
+      break;
+    }
+    case 'a': {
+      l->animating_time = (uint32_t)val;
       break;
     }
     default:
@@ -152,6 +182,10 @@ static ret_t children_layouter_list_view_get_param(children_layouter_t* layouter
       value_set_int(v, l->default_item_height);
       return RET_OK;
     }
+    case 'c': {
+      value_set_int(v, l->cols);
+      return RET_OK;
+    }
     case 'k': {
       if (strstr(name, "invisible") != NULL || name[1] == 'i') {
         value_set_bool(v, l->keep_invisible);
@@ -162,6 +196,17 @@ static ret_t children_layouter_list_view_get_param(children_layouter_t* layouter
       }
       break;
     }
+    case 'h': {
+      if (strstr(name, "layouter") != NULL || name[1] == 'l') {
+        value_set_bool(v, l->hlayouter);
+        return RET_OK;
+      }
+      break;
+    }
+    case 'a': {
+      value_set_uint32(v, l->animating_time);
+      return RET_OK;
+    }
     default: {
       assert(!"not support param");
       break;
@@ -171,40 +216,326 @@ static ret_t children_layouter_list_view_get_param(children_layouter_t* layouter
   return RET_FAIL;
 }
 
-static ret_t children_layouter_list_view_layout(children_layouter_t* layouter, widget_t* widget) {
-  int32_t spacing = 0;
-  int32_t x_margin = 0;
-  int32_t y_margin = 0;
+static ret_t children_layouter_list_view_for_list_view_children_layout_h(
+    darray_t* children_for_layout, int32_t item_height, int32_t default_item_height) {
+  int32_t i = 0;
+  int32_t h = 0;
+  int32_t n = 0;
+  widget_t** children = NULL;
+  return_value_if_fail(children_for_layout != NULL, RET_BAD_PARAMS);
+  n = children_for_layout->size;
+  children = (widget_t**)children_for_layout->elms;
+  for (i = 0; i < n; i++) {
+    bool_t resize = TRUE;
+    widget_t* iter = children[i];
+
+    if (iter->w == 0) {
+      iter->w = iter->parent->w;
+    }
+    if (iter->h == 0) {
+      iter->h = item_height;
+    }
+
+    if (iter->self_layout != NULL || iter->auto_adjust_size) {
+      widget_layout(iter);
+    }
+
+    h = item_height;
+    if (h <= 0) {
+      h = iter->h;
+      resize = FALSE;
+    }
+    if (h <= 0) {
+      h = default_item_height;
+      resize = TRUE;
+    }
+    if (resize) {
+      widget_resize(iter, iter->w, h);
+    }
+  }
+  return RET_OK;
+}
+
+static ret_t children_layouter_list_view_for_list_view_children_layout_w_with_animation(
+    children_layouter_t* layouter, darray_t* children_for_layout, int32_t w) {
+  ret_t ret = RET_OK;
+  int32_t i = 0;
+  int32_t y = 0;
+  uint32_t cols = 0;
+  widget_t** children = NULL;
+  children_layouter_list_view_t* l = (children_layouter_list_view_t*)layouter;
+  return_value_if_fail(l != NULL && children_for_layout != NULL, RET_BAD_PARAMS);
+
+  y = l->y_margin;
+  cols = l->cols <= 1 ? 1 : l->cols;
+  children = (widget_t**)children_for_layout->elms;
+
+  if (cols <= 1) {
+    for (i = 0; i < children_for_layout->size; i++) {
+      widget_t* iter = children[i];
+      widget_move_resize_ex(iter, l->x_margin, iter->y, w, iter->h, FALSE);
+      widget_set_prop_int(iter, WIDGET_PROP_ANIMATE_ANIMATING_TIME, l->animating_time);
+      widget_set_prop_int(iter, WIDGET_PROP_ANIMATE_PREFIX WIDGET_PROP_Y, y);
+      widget_layout_children(iter);
+      y += (iter->h + l->spacing);
+    }
+  } else {
+    ret = RET_FAIL;
+    log_warn("Remove animation of multiple columns is not supported!\n");
+  }
+
+  return ret;
+}
+
+static ret_t children_layouter_list_view_for_list_view_children_layout_w(
+    children_layouter_t* layouter, darray_t* children_for_layout, int32_t virtual_w) {
+  int32_t i = 0;
+  int32_t w = 0;
+  int32_t x = 0;
+  int32_t y = 0;
+  uint32_t cols = 0;
+  widget_t* win = NULL;
+  widget_t** children = NULL;
+  children_layouter_list_view_t* l = (children_layouter_list_view_t*)layouter;
+  return_value_if_fail(l != NULL && children_for_layout != NULL, RET_BAD_PARAMS);
+
+  x = l->x_margin;
+  y = l->y_margin;
+  cols = l->cols <= 1 ? 1 : l->cols;
+  w = virtual_w - 2 * l->x_margin;
+
+  children = (widget_t**)children_for_layout->elms;
+  if (children_for_layout->size > 0 && children != NULL) {
+    win = widget_get_window(children[0]);
+    if (cols <= 1) {
+      if (l->animating_time && win && !win->loading) {
+        children_layouter_list_view_for_list_view_children_layout_w_with_animation(
+            layouter, children_for_layout, w);
+      } else {
+        for (i = 0; i < children_for_layout->size; i++) {
+          widget_t* iter = children[i];
+          widget_move_resize_ex(iter, x, y, w, iter->h, FALSE);
+          widget_layout_children(iter);
+          y += (iter->h + l->spacing);
+        }
+      }
+    } else {
+      int32_t j = 0;
+      int32_t n = 0;
+      int32_t h = 0;
+      int32_t size = children_for_layout->size;
+      uint32_t rows = (size % cols) ? (size / cols) + 1 : (size / cols);
+      w = (w - (cols - 1) * l->spacing) / cols;
+      for (i = 0; i < rows && n < size; i++) {
+        h = 0;
+        for (j = 0; j < cols && n < size; j++, n++) {
+          widget_t* iter = children[n];
+          int32_t tmp_x = x + j * (w + l->spacing);
+          widget_move_resize_ex(iter, tmp_x, y, w, iter->h, FALSE);
+          widget_layout_children(iter);
+          h = tk_max(h, iter->h);
+        }
+        y += (h + l->spacing);
+      }
+    }
+  }
+
+  return RET_OK;
+}
+
+static int32_t children_layouter_list_view_for_list_view_get_virtual_h(
+    darray_t* children_for_layout, uint32_t cols, int32_t y_margin, int32_t spacing) {
+  int32_t i = 0;
+  widget_t** children = NULL;
+  int32_t virtual_h = y_margin;
+  return_value_if_fail(children_for_layout != NULL, 0);
+  children = (widget_t**)children_for_layout->elms;
+  if (cols <= 1) {
+    for (i = 0; i < children_for_layout->size; i++) {
+      virtual_h += (children[i]->h + (i == 0 ? 0 : spacing));
+    }
+  } else {
+    int32_t j = 0;
+    int32_t h = 0;
+    int32_t num = 0;
+    int32_t n = children_for_layout->size;
+    uint32_t rows = (n % cols) ? (n / cols) + 1 : (n / cols);
+    for (i = 0; i < rows && num < children_for_layout->size; i++) {
+      for (j = 0, h = 0; j < cols && num < children_for_layout->size; j++, num++) {
+        h = tk_max(h, children[num]->h);
+      }
+      virtual_h += (h + (i == 0 ? 0 : spacing));
+    }
+  }
+
+  virtual_h += y_margin;
+
+  return virtual_h;
+}
+
+static int32_t children_layouter_list_view_for_list_view_get_scroll_view_w(list_view_t* list_view,
+                                                                           widget_t* scroll_view,
+                                                                           int32_t virtual_h) {
+  int32_t scroll_view_w = 0;
+  widget_t* scroll_bar = NULL;
+  return_value_if_fail(list_view != NULL && scroll_view != NULL, 0);
+  scroll_bar = list_view_get_scroll_bar(WIDGET(list_view), FALSE);
+  if (list_view->floating_scroll_bar) {
+    scroll_view_w = scroll_view->w;
+  } else if (scroll_bar == NULL || scroll_bar_is_mobile(scroll_bar) ||
+             (!scroll_bar_is_mobile(scroll_bar) && list_view->auto_hide_scroll_bar &&
+              scroll_view->h >= virtual_h)) {
+    scroll_view_w = list_view->widget.w;
+  } else {
+    scroll_view_w = list_view->widget.w - scroll_bar->w;
+  }
+
+  return scroll_view_w;
+}
+
+static ret_t children_layouter_list_view_for_list_view_set_scroll_view_info(
+    children_layouter_t* layouter, widget_t* widget, widget_t* scroll_bar, int32_t virtual_h,
+    widget_t* scroll_bar_h, int32_t virtual_w) {
+  scroll_view_t* scroll_view = SCROLL_VIEW(widget);
+  children_layouter_list_view_t* l = (children_layouter_list_view_t*)layouter;
+  return_value_if_fail(scroll_view != NULL && l != NULL, RET_BAD_PARAMS);
+
+  if (scroll_bar_is_mobile(scroll_bar)) {
+    scroll_view_set_yslidable(widget, TRUE);
+  }
+  scroll_view_set_virtual_h(widget, virtual_h);
+
+  if (scroll_bar_is_mobile(scroll_bar_h)) {
+    scroll_view_set_xslidable(widget, TRUE);
+  }
+  scroll_view_set_virtual_w(widget, virtual_w);
+
+  if (!scroll_view->dragged && scroll_view->wa == NULL) {
+    scroll_view_fix_offset(widget);
+
+    if (l->animating_time) {
+      widget_set_prop_int(widget, WIDGET_PROP_ANIMATE_ANIMATING_TIME, l->animating_time);
+      widget_set_prop_int(widget, WIDGET_PROP_ANIMATE_PREFIX WIDGET_PROP_YOFFSET,
+                          scroll_view->yoffset);
+    }
+
+    if (scroll_view->on_scroll) {
+      scroll_view->on_scroll(widget, scroll_view->xoffset, scroll_view->yoffset);
+    }
+  }
+  return RET_OK;
+}
+
+static ret_t children_layouter_list_view_for_list_view_set_scroll_bar_info(widget_t* widget,
+                                                                           list_view_t* list_view,
+                                                                           widget_t* scroll_view,
+                                                                           int32_t virtual_h,
+                                                                           int32_t item_height) {
+  scroll_view_t* ascroll_view = SCROLL_VIEW(scroll_view);
+  return_value_if_fail(list_view != NULL && ascroll_view != NULL, RET_BAD_PARAMS);
+
+  scroll_bar_set_params(widget, virtual_h, item_height);
+  if (scroll_bar_is_mobile(widget)) {
+    if (widget->h > virtual_h) {
+      scroll_bar_set_params(widget, widget->h, item_height);
+    }
+
+    if (SCROLL_BAR(widget)->auto_hide && !ascroll_view->dragged && ascroll_view->wa == NULL) {
+      widget_set_sensitive(widget, FALSE);
+      widget_set_visible_only(widget, FALSE);
+    }
+  } else {
+    if (scroll_view->h >= virtual_h) {
+      scroll_bar_set_value(widget, 0);
+      if (list_view->auto_hide_scroll_bar) {
+        widget_set_sensitive(widget, FALSE);
+        widget_set_visible_only(widget, FALSE);
+      } else {
+        widget_set_sensitive(widget, FALSE);
+        widget_set_visible_only(widget, TRUE);
+      }
+    } else {
+      if (list_view->auto_hide_scroll_bar && list_view->floating_scroll_bar) {
+        widget_set_sensitive(widget, list_view->is_over);
+        widget_set_visible_only(widget, list_view->is_over);
+      } else {
+        widget_set_sensitive(widget, TRUE);
+        widget_set_visible_only(widget, TRUE);
+      }
+    }
+  }
+  return RET_OK;
+}
+
+static ret_t children_layouter_list_view_for_list_view_set_scroll_bar_h_info(widget_t* widget,
+                                                                             list_view_t* list_view,
+                                                                             widget_t* scroll_view,
+                                                                             int32_t virtual_w) {
+  scroll_view_t* ascroll_view = SCROLL_VIEW(scroll_view);
+  scroll_bar_t* scroll_bar = SCROLL_BAR(widget);
+  return_value_if_fail(list_view != NULL && ascroll_view != NULL, RET_BAD_PARAMS);
+
+  scroll_bar_set_params(widget, virtual_w, scroll_bar->row);
+  if (scroll_bar_is_mobile(widget)) {
+    if (widget->w > virtual_w) {
+      scroll_bar_set_params(widget, widget->w, scroll_bar->row);
+    }
+
+    if (SCROLL_BAR(widget)->auto_hide && !ascroll_view->dragged && ascroll_view->wa == NULL) {
+      widget_set_sensitive(widget, FALSE);
+      widget_set_visible_only(widget, FALSE);
+    }
+  } else {
+    if (scroll_view->w >= virtual_w) {
+      scroll_bar_set_value(widget, 0);
+      if (list_view->auto_hide_scroll_bar) {
+        widget_set_sensitive(widget, FALSE);
+        widget_set_visible_only(widget, FALSE);
+      } else {
+        widget_set_sensitive(widget, FALSE);
+        widget_set_visible_only(widget, TRUE);
+      }
+    } else {
+      if (list_view->auto_hide_scroll_bar && list_view->floating_scroll_bar) {
+        widget_set_sensitive(widget, list_view->is_over);
+        widget_set_visible_only(widget, list_view->is_over);
+      } else {
+        widget_set_sensitive(widget, TRUE);
+        widget_set_visible_only(widget, TRUE);
+      }
+    }
+  }
+  return RET_OK;
+}
+
+static ret_t children_layouter_list_view_for_list_view_layout(children_layouter_t* layouter,
+                                                              widget_t* widget) {
   int32_t virtual_h = 0;
+  int32_t virtual_w = 0;
   int32_t item_height = 0;
-  int32_t default_item_height = 0;
   list_view_t* list_view = NULL;
   widget_t* scroll_bar = NULL;
+  widget_t* scroll_bar_h = NULL;
+  int32_t default_item_height = 0;
   scroll_view_t* scroll_view = SCROLL_VIEW(widget);
   children_layouter_list_view_t* l = (children_layouter_list_view_t*)layouter;
   return_value_if_fail(widget != NULL && scroll_view != NULL && l != NULL, RET_BAD_PARAMS);
 
-  virtual_h = widget->h;
   list_view = LIST_VIEW(widget->parent);
   return_value_if_fail(list_view != NULL, RET_BAD_PARAMS);
 
-  scroll_bar = list_view->scroll_bar;
-  spacing = l->spacing;
-  x_margin = l->x_margin;
-  y_margin = l->y_margin;
   item_height = list_view->item_height ? list_view->item_height : l->item_height;
   default_item_height =
       list_view->default_item_height ? list_view->default_item_height : l->default_item_height;
 
+  scroll_bar = list_view_get_scroll_bar(WIDGET(list_view), FALSE);
+  scroll_bar_h = list_view_get_scroll_bar(WIDGET(list_view), TRUE);
+
   if (widget->children != NULL) {
-    int32_t i = 0;
-    int32_t n = 0;
-    int32_t x = x_margin;
-    int32_t y = y_margin;
-    int32_t h = item_height;
-    widget_t** children = NULL;
+    int32_t scroll_view_w = 0;
+    int32_t scroll_view_h = widget->h;
     darray_t children_for_layout;
-    int32_t w = widget->w - x_margin * 2;
+    uint32_t cols = l->cols <= 1 ? 1 : l->cols;
 
     widget_layout_floating_children(widget);
     darray_init(&children_for_layout, widget->children->size, NULL, NULL);
@@ -214,85 +545,124 @@ static ret_t children_layouter_list_view_layout(children_layouter_t* layouter, w
                                        l->keep_invisible) == RET_OK,
         RET_BAD_PARAMS);
 
-    n = children_for_layout.size;
-    children = (widget_t**)(children_for_layout.elms);
+    children_layouter_list_view_for_list_view_children_layout_h(&children_for_layout, item_height,
+                                                                default_item_height);
+    virtual_h = children_layouter_list_view_for_list_view_get_virtual_h(&children_for_layout, cols,
+                                                                        l->y_margin, l->spacing);
+    scroll_view_w =
+        children_layouter_list_view_for_list_view_get_scroll_view_w(list_view, widget, virtual_h);
 
-    for (i = 0; i < n; i++) {
-      widget_t* iter = children[i];
-
-      if (item_height <= 0) {
-        h = iter->h;
-      }
-
-      if (h <= 0) {
-        h = default_item_height;
-      }
-
-      y = y + (h > 0 ? h : iter->h) + spacing;
-      if (y > virtual_h) {
-        virtual_h = y;
+    virtual_w = tk_max(list_view->item_width, scroll_view_w);
+    if (scroll_bar_h != NULL) {
+      if (virtual_w == scroll_view_w) {
+        scroll_view_h = widget->h + scroll_bar_h->h;
       }
     }
 
-    scroll_view->widget.w = list_view->widget.w;
-    if (scroll_bar != NULL) {
-      if (!scroll_bar_is_mobile(scroll_bar)) {
-        if (list_view->auto_hide_scroll_bar) {
-          if (virtual_h <= widget->h) {
-            widget_set_visible_only(scroll_bar, FALSE);
-            widget_set_enable(scroll_bar, FALSE);
-          } else {
-            scroll_view->widget.w = list_view->widget.w - scroll_bar->w;
-            widget_set_visible_only(scroll_bar, TRUE);
-            widget_set_enable(scroll_bar, TRUE);
-          }
-        }
-      }
-    }
-
-    y = y_margin;
-    w = scroll_view->widget.w - 2 * x_margin;
-
-    for (i = 0; i < n; i++) {
-      widget_t* iter = children[i];
-
-      if (item_height <= 0) {
-        h = iter->h;
-      }
-
-      if (h <= 0) {
-        h = default_item_height;
-      }
-
-      widget_move_resize(iter, x, y, w, h);
-      widget_layout(iter);
-
-      y = iter->y + iter->h + spacing;
-    }
-
-    if (scroll_bar != NULL && (SCROLL_BAR(scroll_bar)->value) >= y) {
-      int32_t offset = tk_max(0, (y - widget->h + item_height));
-      scroll_bar_set_value(scroll_bar, offset);
-      scroll_view_set_offset(WIDGET(scroll_view), 0, offset);
-    }
+    widget_move_resize_ex(widget, widget->x, widget->y, scroll_view_w, scroll_view_h, FALSE);
+    children_layouter_list_view_for_list_view_children_layout_w(layouter, &children_for_layout,
+                                                                virtual_w);
 
     darray_deinit(&(children_for_layout));
-  } else {
-    scroll_bar_set_value(scroll_bar, 0);
-    scroll_view_set_offset(WIDGET(scroll_view), 0, 0);
   }
 
-  scroll_view_set_virtual_h(list_view->scroll_view, virtual_h);
-  item_height = tk_max(item_height, default_item_height);
-  scroll_bar_set_params(list_view->scroll_bar, virtual_h, item_height);
+  virtual_w = tk_max(list_view->item_width, widget->w);
 
-  scroll_view_set_xslidable(list_view->scroll_view, FALSE);
-  if (scroll_bar_is_mobile(list_view->scroll_bar)) {
-    scroll_view_set_yslidable(list_view->scroll_view, TRUE);
-    widget_set_visible_only(list_view->scroll_bar, FALSE);
+  children_layouter_list_view_for_list_view_set_scroll_view_info(
+      layouter, widget, scroll_bar, virtual_h, scroll_bar_h, virtual_w);
+
+  if (scroll_bar != NULL) {
+    int32_t row_height = 0;
+    scroll_bar_t* bar = SCROLL_BAR(scroll_bar);
+
+    if (bar != NULL && bar->row > 0) {
+      row_height = bar->row;
+    } else {
+      row_height = item_height > 0 ? item_height : default_item_height;
+    }
+    children_layouter_list_view_for_list_view_set_scroll_bar_info(scroll_bar, list_view, widget,
+                                                                  virtual_h, row_height);
+  }
+
+  if (scroll_bar_h != NULL) {
+    float_t ratio = scroll_bar_h->w / (float_t)widget->w;
+    children_layouter_list_view_for_list_view_set_scroll_bar_h_info(scroll_bar_h, list_view, widget,
+                                                                    virtual_w * ratio);
   }
 
   return RET_OK;
+}
+
+static ret_t children_layouter_list_view_for_list_view_h_layout(children_layouter_t* layouter,
+                                                                widget_t* widget) {
+  int32_t virtual_w = 0;
+  list_view_h_t* list_view_h = NULL;
+  scroll_view_t* scroll_view = SCROLL_VIEW(widget);
+  children_layouter_list_view_t* l = (children_layouter_list_view_t*)layouter;
+  return_value_if_fail(widget != NULL && scroll_view != NULL && l != NULL, RET_BAD_PARAMS);
+
+  list_view_h = LIST_VIEW_H(widget->parent);
+  return_value_if_fail(list_view_h != NULL, RET_BAD_PARAMS);
+
+  if (widget->children != NULL && l->cols > 0) {
+    int32_t i = 0;
+    int32_t nw = 0;
+    int32_t x = l->x_margin;
+    int32_t y = l->y_margin;
+    uint32_t cols = l->cols;
+    widget_t** children = NULL;
+    darray_t children_for_layout;
+    int32_t spacing = l->spacing;
+    int32_t h = widget->h - l->y_margin * 2;
+    int32_t w = widget->w - l->x_margin * 2;
+    int32_t oy = l->y_margin - l->item_height - spacing;
+    uint32_t item_w = (w - (cols - 1) * spacing) / cols;
+
+    widget_layout_floating_children(widget);
+    darray_init(&children_for_layout, widget->children->size, NULL, NULL);
+
+    return_value_if_fail(
+        widget_get_children_for_layout(widget, &children_for_layout, l->keep_disable,
+                                       l->keep_invisible) == RET_OK,
+        RET_BAD_PARAMS);
+
+    children = (widget_t**)(children_for_layout.elms);
+    y = oy;
+    virtual_w = w;
+    for (i = 0; i < children_for_layout.size; i++) {
+      widget_t* iter = children[i];
+
+      if (i % cols == 0) {
+        x = l->x_margin + w * nw;
+        y += l->item_height + spacing;
+        if (y + l->item_height + spacing > h) {
+          nw++;
+          x += w;
+          virtual_w += w;
+          y = oy + l->item_height + spacing;
+        }
+      } else {
+        x += item_w + spacing;
+      }
+
+      widget_move_resize(iter, x, y, item_w, l->item_height);
+      widget_layout(iter);
+    }
+    scroll_view_set_virtual_w(list_view_h->scroll_view, virtual_w);
+    darray_deinit(&children_for_layout);
+  }
+
+  return RET_OK;
+}
+
+static ret_t children_layouter_list_view_layout(children_layouter_t* layouter, widget_t* widget) {
+  children_layouter_list_view_t* l = (children_layouter_list_view_t*)layouter;
+  return_value_if_fail(l != NULL, RET_BAD_PARAMS);
+  if (l->hlayouter) {
+    return children_layouter_list_view_for_list_view_h_layout(layouter, widget);
+  } else {
+    return children_layouter_list_view_for_list_view_layout(layouter, widget);
+  }
 }
 
 static bool_t children_layouter_list_view_is_valid(children_layouter_t* layouter) {
@@ -301,14 +671,26 @@ static bool_t children_layouter_list_view_is_valid(children_layouter_t* layouter
 
 static ret_t children_layouter_list_view_destroy(children_layouter_t* layouter) {
   children_layouter_list_view_t* l = (children_layouter_list_view_t*)layouter;
+  return_value_if_fail(l != NULL, RET_BAD_PARAMS);
   str_reset(&(layouter->params));
   TKMEM_FREE(l);
 
   return RET_OK;
 }
 
+static children_layouter_t* children_layouter_list_view_clone(children_layouter_t* layouter) {
+  children_layouter_list_view_t* l = TKMEM_ZALLOC(children_layouter_list_view_t);
+  return_value_if_fail(l != NULL, NULL);
+  memcpy(l, layouter, sizeof(*l));
+  str_init(&(l->layouter.params), 0);
+  str_set(&(l->layouter.params), layouter->params.str);
+
+  return (children_layouter_t*)l;
+}
+
 static const children_layouter_vtable_t s_children_layouter_list_view_vtable = {
-    .type = "listview",
+    .type = CHILDREN_LAYOUTER_LIST_VIEW,
+    .clone = children_layouter_list_view_clone,
     .to_string = children_layouter_list_view_to_string,
     .get_param = children_layouter_list_view_get_param,
     .set_param = children_layouter_list_view_set_param,

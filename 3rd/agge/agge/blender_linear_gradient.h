@@ -70,16 +70,16 @@ inline bool blender_linear_gradient<PixelT>::get_color(int x, int y, pixel32_rgb
     return this->gradient((x - _sx)/_dx, c);
   } else {
     //https://github.com/SFML/SFML/wiki/Source:-Color-Gradient
-    if(x < _sx || y < _sy) {
-      c = _sc;
-    } else if(x > _ex || y > _ey) {
-      c = _ec;
-    } else {
+    // if(x < _sx || y < _sy) {
+    //   c = _sc;
+    // } else if(x > _ex || y > _ey) {
+    //   c = _ec;
+    // } else {
       float dot_product = (x - _sx) * _dx + (y - _sy) * _dy;
       float factor = dot_product * _dot_product_1;
 
       return this->gradient(factor, c);
-    }
+    // }
   }
 
   return true;

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  utf8 encode decode
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,266 +19,167 @@
  *
  */
 
+#include "tkc/mem.h"
 #include "tkc/utf8.h"
+#include <string.h>
 
-/*UTF8-related functions are copied from glib.*/
+// 获取UTF-8编码的首字节所表示的字符长度
+static int utf8_get_char_len(unsigned char c) {
+  if (c < 0x80) return 1;            // 单字节ASCII
+  if ((c & 0xE0) == 0xC0) return 2;  // 2字节序列
+  if ((c & 0xF0) == 0xE0) return 3;  // 3字节序列
+  if ((c & 0xF8) == 0xF0) return 4;  // 4字节序列
+  if ((c & 0xFC) == 0xF8) return 5;  // 5字节序列（历史/扩展）
+  if ((c & 0xFE) == 0xFC) return 6;  // 6字节序列（历史/扩展）
+  return -1;                         // 非法首字节
+}
 
-#define UTF8_COMPUTE(Char, Mask, Len) \
-  if (Char < 128) {                   \
-    Len = 1;                          \
-    Mask = 0x7f;                      \
-  } else if ((Char & 0xe0) == 0xc0) { \
-    Len = 2;                          \
-    Mask = 0x1f;                      \
-  } else if ((Char & 0xf0) == 0xe0) { \
-    Len = 3;                          \
-    Mask = 0x0f;                      \
-  } else if ((Char & 0xf8) == 0xf0) { \
-    Len = 4;                          \
-    Mask = 0x07;                      \
-  } else if ((Char & 0xfc) == 0xf8) { \
-    Len = 5;                          \
-    Mask = 0x03;                      \
-  } else if ((Char & 0xfe) == 0xfc) { \
-    Len = 6;                          \
-    Mask = 0x01;                      \
-  } else                              \
-    Len = -1;
+// 获取UTF-8首字节的字节数
+uint32_t tk_utf8_get_bytes_of_leading(uint8_t c) {
+  return (uint32_t)utf8_get_char_len(c);
+}
 
-#define UTF8_LENGTH(Char) \
-  ((Char) < 0x80          \
-       ? 1                \
-       : ((Char) < 0x800  \
-              ? 2         \
-              : ((Char) < 0x10000 ? 3 : ((Char) < 0x200000 ? 4 : ((Char) < 0x4000000 ? 5 : 6)))))
-
-#define UTF8_GET(Result, Chars, Count, Mask, Len) \
-  (Result) = (Chars)[0] & (Mask);                 \
-  for ((Count) = 1; (Count) < (Len); ++(Count)) { \
-    if (((Chars)[(Count)] & 0xc0) != 0x80) {      \
-      (Result) = -1;                              \
-      break;                                      \
-    }                                             \
-    (Result) <<= 6;                               \
-    (Result) |= ((Chars)[(Count)] & 0x3f);        \
-  }
-
-#define UNICODE_VALID(Char)                                                                        \
-  ((Char) < 0x110000 && (((Char)&0xFFFFF800) != 0xD800) && ((Char) < 0xFDD0 || (Char) > 0xFDEF) && \
-   ((Char)&0xFFFE) != 0xFFFE)
-static const char utf8_skip_data[256] = {
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 1, 1};
-
-const char* const g_utf8_skip = utf8_skip_data;
-#define g_utf8_next_char(p) (char*)((p) + g_utf8_skip[*(const unsigned char*)(p)])
-
-wchar_t utf8_get_char(const char* p, const char** next) {
-  uint32_t mask = 0;
-  wchar_t result = 0;
-  int32_t i = 0, len = 0;
+// 解析UTF-8编码，获取下一个Unicode码点
+static int32_t utf8_get_char(const char* p, const char** next) {
+  int i = 0;
   unsigned char c = (unsigned char)*p;
-
-  UTF8_COMPUTE(c, mask, len);
-  if (len == -1) return (wchar_t)-1;
-  UTF8_GET(result, p, i, mask, len);
-
-  if (next != NULL) {
-    *next = g_utf8_next_char(p);
+  int len = utf8_get_char_len(c);
+  if (len == -1) return -1;
+  // 取出首字节的有效位
+  int32_t result = c & ((1 << (8 - len)) - 1);
+  // 依次拼接后续字节的低6位
+  for (i = 1; i < len; ++i) {
+    if ((p[i] & 0xC0) != 0x80) return -1;  // 非法续字节
+    result = (result << 6) | (p[i] & 0x3F);
   }
-
+  if (next) *next = p + len;
   return result;
 }
 
-wchar_t utf8_get_prev_char(const char* p, const char** prev) {
+// 将单个Unicode码点编码为UTF-8字节序列
+static int unichar_to_utf8(uint32_t c, char* outbuf) {
   int i = 0;
-  for (i = 1; i < 8; i++) {
-    unsigned char val = p[-i];
-    if ((val & 0x80) && !(val & 0x40)) {
-      continue;
-    } else {
-      if (prev != NULL) {
-        *prev = p - i;
-      }
-      return utf8_get_char(p - i, NULL);
-    }
-  }
-
-  if (prev != NULL) {
-    *prev = p;
-  }
-
-  return 0;
-}
-
-int utf8_count_char(const char* str, int length) {
-  int nr = 0;
-  const char* iter = str;
-  return_value_if_fail(str != NULL, 0);
-
-  while (utf8_get_char(iter, &iter) && (iter - str) <= (int)length) {
-    nr++;
-  }
-
-  return nr;
-}
-
-int unichar_to_utf8(wchar_t c, char* outbuf) {
-  /* If this gets modified, also update the copy in g_string_insert_unichar() */
-  size_t len = 0;
-  int first;
-  int i;
-
-  if (c < 0x80) {
-    first = 0;
+  int len = 0;
+  // 判断需要多少字节表示
+  if (c < 0x80)
     len = 1;
-  } else if (c < 0x800) {
-    first = 0xc0;
+  else if (c < 0x800)
     len = 2;
-  } else if (c < 0x10000) {
-    first = 0xe0;
+  else if (c < 0x10000)
     len = 3;
-  } else if (c < 0x200000) {
-    first = 0xf0;
+  else if (c < 0x200000)
     len = 4;
-  } else if (c < 0x4000000) {
-    first = 0xf8;
+  else if (c < 0x4000000)
     len = 5;
-  } else {
-    first = 0xfc;
+  else
     len = 6;
-  }
-
   if (outbuf) {
+    // 低位字节，倒序填充
     for (i = len - 1; i > 0; --i) {
-      outbuf[i] = (c & 0x3f) | 0x80;
+      outbuf[i] = (c & 0x3F) | 0x80;
       c >>= 6;
     }
-    outbuf[0] = c | first;
+    // 首字节填充
+    static const unsigned char first_byte_mark[7] = {0x00, 0x00, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC};
+    outbuf[0] = c | first_byte_mark[len];
   }
-
   return len;
 }
 
-#define SURROGATE_VALUE(h, l) (((h)-0xd800) * 0x400 + (l)-0xdc00 + 0x10000)
-
-char* utf16_to_utf8(const wchar_t* str, int32_t len, char* utf8, int out_len) {
-  /* This function and g_utf16_to_ucs4 are almost exactly identical - The lines
-   * that differ are marked.
-   */
-  const wchar_t* in;
-  char* out;
-  char* result = NULL;
-  int n_bytes;
-  wchar_t high_surrogate;
-
-  return_value_if_fail(str != NULL, NULL);
-
-  n_bytes = 0;
-  in = str;
-  high_surrogate = 0;
-  while ((len < 0 || in - str < len) && *in) {
-    wchar_t c = *in;
-    wchar_t wc;
-
-    if (c >= 0xdc00 && c < 0xe000) /* low surrogate */
-    {
-      if (high_surrogate) {
-        wc = SURROGATE_VALUE(high_surrogate, c);
-        high_surrogate = 0;
-      } else {
-        log_error("Invalid sequence in conversion input");
-        goto err_out;
+// UTF-16转UTF-8，支持代理对，自动处理wchar_t宽度
+char* tk_utf8_from_utf16_ex(const wchar_t* in, uint32_t in_size, char* out, uint32_t out_size) {
+  if (!in || !out || out_size == 0) return NULL;
+  uint32_t i = 0, j = 0;
+  while (i < in_size && in[i] != 0) {
+    uint32_t wc = (uint32_t)in[i];
+    // 处理UTF-16代理对（仅wchar_t为2字节时）
+    if (sizeof(wchar_t) == 2 && wc >= 0xD800 && wc <= 0xDBFF && (i + 1) < in_size) {
+      uint32_t wc2 = (uint32_t)in[i + 1];
+      if (wc2 >= 0xDC00 && wc2 <= 0xDFFF) {
+        wc = 0x10000 + (((wc - 0xD800) << 10) | (wc2 - 0xDC00));
+        i++;
       }
-    } else {
-      if (high_surrogate) {
-        log_error("Invalid sequence in conversion input");
-        goto err_out;
-      }
-
-      if (c >= 0xd800 && c < 0xdc00) /* high surrogate */
-      {
-        high_surrogate = c;
-        goto next1;
-      } else
-        wc = c;
     }
-
-    /********** DIFFERENT for UTF8/UCS4 **********/
-    n_bytes += UTF8_LENGTH(wc);
-
-  next1:
-    in++;
+    char tmp[8] = {0};
+    int len = unichar_to_utf8(wc, tmp);
+    if (j + len >= out_size) break;  // 缓冲区不足
+    memcpy(out + j, tmp, len);
+    j += len;
+    i++;
   }
-
-  if (high_surrogate) {
-    log_error("Partial character sequence at end of input");
-    goto err_out;
-  }
-
-  /* At this point, everything is valid, and we just need to convert
-   */
-  /********** DIFFERENT for UTF8/UCS4 **********/
-  // result = g_malloc (n_bytes + 1);
-  result = utf8;
-  assert(out_len > n_bytes);
-
-  high_surrogate = 0;
-  out = result;
-  in = str;
-  while (out < result + n_bytes) {
-    wchar_t c = *in;
-    wchar_t wc;
-
-    if (c >= 0xdc00 && c < 0xe000) /* low surrogate */
-    {
-      wc = SURROGATE_VALUE(high_surrogate, c);
-      high_surrogate = 0;
-    } else if (c >= 0xd800 && c < 0xdc00) /* high surrogate */
-    {
-      high_surrogate = c;
-      goto next2;
-    } else
-      wc = c;
-
-    /********** DIFFERENT for UTF8/UCS4 **********/
-    out += unichar_to_utf8(wc, out);
-
-  next2:
-    in++;
-  }
-
-  /********** DIFFERENT for UTF8/UCS4 **********/
-  *out = '\0';
-
-  return result;
-err_out:
-  return NULL;
+  if (j < out_size)
+    out[j] = '\0';
+  else
+    out[out_size - 1] = '\0';
+  if (i < in_size && in[i] != 0) return NULL;  // 未全部转换
+  return out;
 }
 
-char* utf8_from_utf16(const wchar_t* str, char* out, uint32_t size) {
-  return_value_if_fail(str != NULL && out != NULL, NULL);
-
-  return utf16_to_utf8(str, wcslen(str), out, size);
+// UTF-16转UTF-8（自动计算输入长度）
+char* tk_utf8_from_utf16(const wchar_t* str, char* out, uint32_t out_size) {
+  if (!str || !out || out_size == 0) return NULL;
+  return tk_utf8_from_utf16_ex(str, (uint32_t)wcslen(str), out, out_size);
 }
 
-wchar_t* utf8_to_utf16(const char* str, wchar_t* out, uint32_t size) {
+// UTF-8转UTF-16（自动计算输入长度）
+wchar_t* tk_utf8_to_utf16(const char* str, wchar_t* out, uint32_t out_size) {
+  if (!str || !out || out_size == 0) return NULL;
+  return tk_utf8_to_utf16_ex(str, (uint32_t)strlen(str), out, out_size);
+}
+
+// UTF-8转UTF-16，支持wchar_t为2字节和4字节
+wchar_t* tk_utf8_to_utf16_ex(const char* str, uint32_t size, wchar_t* out, uint32_t out_size) {
+  if (!str || !out || out_size == 0) return NULL;
   uint32_t i = 0;
   const char* p = str;
-  const char* next = NULL;
-  return_value_if_fail(str != NULL && out != NULL, NULL);
-
-  while (p != NULL && *p && (i + 1) < size) {
-    out[i++] = utf8_get_char(p, &next);
-    p = next;
+  const char* end = str + size;
+  while (p < end && (i + 1) < out_size) {
+    int32_t val = utf8_get_char(p, &p);
+    if (val == -1) return NULL;  // 非法UTF-8
+    if (sizeof(wchar_t) == 4) {
+      out[i++] = (wchar_t)val;
+    } else if (sizeof(wchar_t) == 2) {
+      if (val < 0x10000) {
+        out[i++] = (wchar_t)val;
+      } else {
+        val -= 0x10000;
+        out[i++] = (wchar_t)(0xD800 + (val >> 10));  // 高代理项
+        if ((i + 1) < out_size)
+          out[i++] = (wchar_t)(0xDC00 + (val & 0x3FF));  // 低代理项
+        else
+          return NULL;
+      }
+    }
   }
-  out[i] = '\0';
-
+  out[i] = 0;
   return out;
+}
+
+// 复制UTF-16字符串并转为UTF-8
+char* tk_utf8_dup_utf16(const wchar_t* in, int32_t size) {
+  if (!in) return NULL;
+  if (size < 0) size = (int32_t)wcslen(in);
+  uint32_t out_size = size * 4 + 2;
+  char* out = (char*)TKMEM_ALLOC(out_size);
+  if (!out) return NULL;
+  memset(out, 0, out_size);
+  return tk_utf8_from_utf16_ex(in, size, out, out_size - 1);
+}
+
+// 截断不完整的UTF-8字符，保证字符串结尾合法
+char* tk_utf8_trim_invalid_char(char* str) {
+  uint32_t i = 0;
+  if (!str) return str;
+  char* p = str;
+  while (*p) {
+    uint32_t n = tk_utf8_get_bytes_of_leading((uint8_t)*p);
+    for (i = 1; i < n; ++i) {
+      if ((p[i] & 0xC0) != 0x80 || p[i] == '\0') {
+        *p = '\0';  // 截断到此处
+        return str;
+      }
+    }
+    p += n;
+  }
+  return str;
 }

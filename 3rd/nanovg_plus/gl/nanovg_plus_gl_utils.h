@@ -1,0 +1,253 @@
+﻿/**
+ * File:   nanovg_plus_gl_utils.h
+ * Author: AWTK Develop Team
+ * Brief:  opengl utils function.
+ *
+ * Copyright (c) 2018 - 2024  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * License file for more details.
+ *
+ */
+
+/**
+ * History:
+ * ================================================================
+ * 2021-10-27 Luo Zhiming <luozhiming@zlg.cn> created
+ *
+ */
+
+#ifndef __NANOVG_PLUS_GL_UTILS_H__
+#define __NANOVG_PLUS_GL_UTILS_H__
+
+#include "nanovg_plus_gl.h"
+
+typedef struct _nvgp_gl_util_framebuffer {
+  nvgp_context_t* ctx;
+  GLuint fbo;
+  GLuint rbo;
+  GLuint self_fbo;
+  GLuint temp_fbo;
+  GLuint mass_rbo;
+  GLuint mass_stencil_rbo;
+  GLuint texture;
+  int32_t image;
+  uint32_t samples;
+  uint32_t width;
+  uint32_t height;
+} nvgp_gl_util_framebuffer;
+
+#if defined(NVGP_GL3) || defined(NVGP_GLES2) || defined(NVGP_GLES3)
+#define NVGP_FBO_VALID 1
+#elif defined(NVGP_GL2)
+#ifdef __APPLE__
+#include <OpenGL/glext.h>
+#define NVGP_FBO_VALID 1
+#endif
+#endif
+
+static GLint s_nvgp_gl_default_fbo = -1;
+
+int nvgp_gl_get_curr_framebuffer() {
+#ifdef NVGP_FBO_VALID
+  GLint s_nvgp_gl_default_fbo;
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &s_nvgp_gl_default_fbo);
+  return s_nvgp_gl_default_fbo;
+#else
+  return -1;
+#endif
+}
+
+void nvgp_gl_delete_framebuffer(nvgp_gl_util_framebuffer* fb) {
+#ifdef NVGP_FBO_VALID
+  if (fb == NULL) {
+    return;
+  }
+  if (fb->fbo != 0) {
+    glDeleteFramebuffers(1, &fb->fbo);
+  }
+  if (fb->rbo != 0) {
+    glDeleteRenderbuffers(1, &fb->rbo);
+  }
+  if (fb->temp_fbo != 0) {
+    glDeleteFramebuffers(1, &fb->temp_fbo);
+  }
+  if (fb->mass_rbo != 0) {
+    glDeleteRenderbuffers(1, &fb->mass_rbo);
+  }
+  if (fb->mass_stencil_rbo != 0) {
+    glDeleteRenderbuffers(1, &fb->mass_stencil_rbo);
+  }
+  if (fb->image >= 0) {
+    nvgp_delete_image(fb->ctx, fb->image);
+  }
+  fb->ctx = NULL;
+  fb->fbo = 0;
+  fb->rbo = 0;
+  fb->texture = 0;
+  fb->image = -1;
+  NVGP_FREE(fb);
+#else
+  (void)(fb);
+#endif
+}
+
+static GLenum nvgp_gl_stencil_storage_format(int32_t with_depth) {
+  if (with_depth) {
+#ifdef GL_DEPTH24_STENCIL8
+    return GL_DEPTH24_STENCIL8;
+#elif defined(GL_DEPTH24_STENCIL8_OES)
+    return GL_DEPTH24_STENCIL8_OES;
+#endif
+  }
+  return GL_STENCIL_INDEX8;
+}
+
+static void nvgp_gl_attach_stencil_buffer(GLuint rbo, int32_t with_depth) {
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
+  if (with_depth) {
+#ifdef GL_DEPTH_ATTACHMENT
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
+#endif
+  }
+}
+
+nvgp_gl_util_framebuffer* nvgp_gl_create_framebuffer_ex(nvgp_context_t* ctx, int32_t w, int32_t h,
+                                                        int32_t imageFlags, int32_t samples,
+                                                        int32_t with_depth) {
+#ifdef NVGP_FBO_VALID
+  GLint s_nvgp_gl_default_fbo;
+  GLint defaultRBO;
+  GLenum stencil_fmt = GL_STENCIL_INDEX8;
+  nvgp_gl_util_framebuffer* fb = NULL;
+
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &s_nvgp_gl_default_fbo);
+  glGetIntegerv(GL_RENDERBUFFER_BINDING, &defaultRBO);
+
+  fb = NVGP_ZALLOC(nvgp_gl_util_framebuffer);
+  if (fb == NULL) {
+    goto error;
+  }
+  NVGP_MEMSET(fb, 0, sizeof(nvgp_gl_util_framebuffer));
+  fb->width = w;
+  fb->height = h;
+  fb->image = nvgp_create_image_rgba(ctx, w, h, imageFlags | NVGP_GL_IMAGE_FLIPY | NVGP_GL_IMAGE_PREMULTIPLIED, NULL);
+
+  fb->texture = nvgp_gl_get_gpu_texture_id((nvgp_gl_context_t*)nvgp_get_vt_ctx(ctx), fb->image);
+
+  fb->ctx = ctx;
+  stencil_fmt = nvgp_gl_stencil_storage_format(with_depth);
+
+  // frame buffer object
+  glGenFramebuffers(1, &fb->fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, fb->fbo);
+
+// 下面的 mass 代码兼容性比较差，在某些平台性能会比较差
+#if 0
+  fb->samples = samples;
+  if (samples > 0) { 
+    glGenRenderbuffers(1, &fb->mass_rbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, fb->mass_rbo);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_RGBA8, w, h);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, fb->mass_rbo);
+
+    glGenRenderbuffers(1, &fb->mass_stencil_rbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, fb->mass_stencil_rbo);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, stencil_fmt, w, h);
+    nvgp_gl_attach_stencil_buffer(fb->mass_stencil_rbo, with_depth);
+
+    fb->self_fbo = fb->fbo;
+    // 创建中间FBO用于解析多重采样结果
+    glGenFramebuffers(1, &fb->temp_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fb->temp_fbo);
+  }
+#endif
+
+  // render buffer object
+  glGenRenderbuffers(1, &fb->rbo);
+  glBindRenderbuffer(GL_RENDERBUFFER, fb->rbo);
+  glRenderbufferStorage(GL_RENDERBUFFER, stencil_fmt, w, h);
+
+  // combine all
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb->texture, 0);
+  nvgp_gl_attach_stencil_buffer(fb->rbo, with_depth);
+
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+#ifdef GL_DEPTH24_STENCIL8
+    if (!with_depth) {
+      // If GL_STENCIL_INDEX8 is not supported, try GL_DEPTH24_STENCIL8 as a fallback.
+      // Some graphics cards require a depth buffer along with a stencil.
+      glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, w, h);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb->texture, 0);
+      glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fb->rbo);
+    }
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+#endif // GL_DEPTH24_STENCIL8
+      goto error;
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, s_nvgp_gl_default_fbo);
+  glBindRenderbuffer(GL_RENDERBUFFER, defaultRBO);
+  return fb;
+error:
+  glBindFramebuffer(GL_FRAMEBUFFER, s_nvgp_gl_default_fbo);
+  glBindRenderbuffer(GL_RENDERBUFFER, defaultRBO);
+  nvgp_gl_delete_framebuffer(fb);
+  return NULL;
+#else
+  (void)(ctx);
+  (void)(w);
+  (void)(h);
+  (void)(imageFlags);
+  (void)(samples);
+  (void)(with_depth);
+  return NULL;
+#endif
+}
+
+nvgp_gl_util_framebuffer* nvgp_gl_create_framebuffer(nvgp_context_t* ctx, int32_t w, int32_t h, int32_t imageFlags, int32_t samples) {
+  return nvgp_gl_create_framebuffer_ex(ctx, w, h, imageFlags, samples, 0);
+}
+
+void nvgp_gl_bind_framebuffer(nvgp_gl_util_framebuffer* fb) {
+#ifdef NVGP_FBO_VALID
+  if (s_nvgp_gl_default_fbo == -1) {
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &s_nvgp_gl_default_fbo);
+  }
+
+#if defined(NVGP_GL3) || defined(NVGP_GLES3)
+  if (fb != NULL && fb->fbo != fb->self_fbo && fb->temp_fbo > 0 && fb->samples > 0) {
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fb->self_fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fb->temp_fbo);
+    // 执行多重采样解析
+    glBlitFramebuffer(0, 0, fb->width, fb->height,
+                      0, 0, fb->width, fb->height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+  }
+#endif
+
+  glBindFramebuffer(GL_FRAMEBUFFER, fb != NULL ? fb->fbo : s_nvgp_gl_default_fbo);
+#else
+  (void)(fb);
+#endif
+}
+
+void nvgp_gl_read_current_framebuffer_data(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t width, uint32_t height, nvgp_gl_util_framebuffer* fb, void* pixels) {
+  if (fb != NULL) {
+    if (fb->temp_fbo > 0 && fb->samples > 0) {
+      glBindFramebuffer(GL_FRAMEBUFFER, fb->temp_fbo);
+    } else if (fb->samples == 0) {
+      glBindFramebuffer(GL_FRAMEBUFFER, fb->fbo);
+    }
+  }
+  if(x + w <= width && y + h <= height && pixels != NULL) {
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+  }
+}
+
+#endif // NVGP_GL_UTILS_H
+

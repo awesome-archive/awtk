@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  progress_bar
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -44,7 +44,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [basic demo](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/basic.xml)
+ * [basic demo](https://github.com/zlgopen/awtk/blob/master/design/default/ui/basic.xml)
  *
  * 在c代码中使用函数progress\_bar\_create创建进度条控件。如：
  *
@@ -65,17 +65,31 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme
- * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L183)
+ * default](https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L183)
  *
  */
 typedef struct _progress_bar_t {
   widget_t widget;
   /**
-   * @property {uint8_t} value
+   * @property {double} value
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 进度条的值[0-100]。
+   * 进度条的值[0-max]。
    */
-  uint8_t value;
+  double value;
+  /**
+   * @property {double} max
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 最大值(缺省为100)。
+   */
+  double max;
+
+  /**
+   * @property {char*} format
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 数值到字符串转换时的格式，缺省为"%d%%"。
+   */
+  char* format;
+
   /**
    * @property {bool_t} vertical
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
@@ -88,15 +102,21 @@ typedef struct _progress_bar_t {
    * 是否显示文本。
    */
   bool_t show_text;
+  /**
+   * @property {bool_t} reverse
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否反向显示。如果为TRUE，水平方向从右向左表示增加，垂直方向从上到下表示增加。
+   */
+  bool_t reverse;
 } progress_bar_t;
 
 /**
- * @event {event_t} EVT_VALUE_WILL_CHANGE
+ * @event {value_change_event_t} EVT_VALUE_WILL_CHANGE
  * 值即将改变事件。
  */
 
 /**
- * @event {event_t} EVT_VALUE_CHANGED
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
  * 值改变事件。
  */
 
@@ -129,11 +149,34 @@ widget_t* progress_bar_cast(widget_t* widget);
  * 设置进度条的进度。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {uint8_t}  value 进度
+ * @param {double}  value 进度
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t progress_bar_set_value(widget_t* widget, uint8_t value);
+ret_t progress_bar_set_value(widget_t* widget, double value);
+
+/**
+ * @method progress_bar_set_max
+ * 设置最大值。
+ *
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {double}  max 最大值。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t progress_bar_set_max(widget_t* widget, double max);
+
+/**
+ * @method progress_bar_set_format
+ * 设置格式。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget progress_bar对象。
+ * @param {const char*} format 格式。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t progress_bar_set_format(widget_t* widget, const char* format);
 
 /**
  * @method progress_bar_set_vertical
@@ -156,6 +199,29 @@ ret_t progress_bar_set_vertical(widget_t* widget, bool_t vertical);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t progress_bar_set_show_text(widget_t* widget, bool_t show_text);
+
+/**
+ * @method progress_bar_set_reverse
+ * 设置进度条是否反向。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  reverse 是否反向。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t progress_bar_set_reverse(widget_t* widget, bool_t reverse);
+
+/**
+ * @method progress_bar_get_percent
+ * 获取进度百分比。
+ *
+ * > 当max为100时，percent和value取整后一致。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {uint32_t} 返回百分比。
+ */
+uint32_t progress_bar_get_percent(widget_t* widget);
 
 #define PROGRESS_BAR(widget) ((progress_bar_t*)(progress_bar_cast(WIDGET(widget))))
 

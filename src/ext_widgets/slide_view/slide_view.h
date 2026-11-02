@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  slide_view
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -51,7 +51,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[slide_view.xml](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/slide_view.xml)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/ui/slide_view.xml)
  *
  * 在c代码中使用函数slide\_view\_create创建滑动视图控件。如：
  *
@@ -74,7 +74,7 @@ BEGIN_C_DECLS
  * > 如果希望背景图片跟随滚动，请将背景图片设置到页面上，否则设置到slide\_view上。
  *
  * > 更多用法请参考：[theme default](
- * https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L458)
+ * https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L458)
  *
  */
 typedef struct _slide_view_t {
@@ -89,7 +89,7 @@ typedef struct _slide_view_t {
   /**
    * @property {uint16_t} auto_play
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 自动播放。0表示禁止自动播放，非0表示自动播放时每一页播放的时间。
+   * 自动播放。0表示禁止自动播放，非0表示自动播放时每一页播放的时间(毫秒)。
    */
   uint16_t auto_play;
 
@@ -111,26 +111,80 @@ typedef struct _slide_view_t {
    */
   char* anim_hint;
 
-  /*private*/
+  /**
+   * @property {uint32_t} drag_threshold
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 拖动临界值。
+   *
+   */
+  uint32_t drag_threshold;
+
+  /**
+   * @property {uint32_t} animating_time
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 动画时间（单位：毫秒）。
+   *
+   */
+  uint32_t animating_time;
+
+  /**
+   * @property {uint32_t} active
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable","inputable"]
+   * 当前活跃的page。
+   */
+  uint32_t active;
+
+  /**
+   * @property {uint32_t} value
+   * @annotation ["set_prop","get_prop","readable","persitent","design","fake","inputable"]
+   * 当前活跃的page。
+   */
+
+  /* private */
+  velocity_t velocity;
   point_t down;
   int32_t xoffset;
   int32_t yoffset;
-  uint32_t active;
-  bool_t animating;
+  uint32_t last_active;
   uint32_t timer_id;
   bool_t dragged;
   bool_t pressed;
-  velocity_t velocity;
+  bool_t animating;
+  bool_t check_last;
+  bool_t remove_when_anim_done;
+
+  /* for save focused child */
+  str_t str_target;
+  uint32_t init_idle_id;
+  uint32_t focused_idle_id;
+
+  /* for animation */
+  widget_t* prev;
+  widget_t* next;
+
+  /* for move */
+  uint32_t move_idle_id;
+
 } slide_view_t;
 
 /**
- * @event {event_t} EVT_VALUE_WILL_CHANGE
+ * @event {value_change_event_t} EVT_VALUE_WILL_CHANGE
  * 值(当前页)即将改变事件。
  */
 
 /**
- * @event {event_t} EVT_VALUE_CHANGED
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
  * 值(当前页)改变事件。
+ */
+
+/**
+ * @event {event_t} EVT_PAGE_CHANGED
+ * 页面改变事件。
+ */
+
+/**
+ * @event {event_t} EVT_PAGE_CHANGING
+ * 页面正在改变。
  */
 
 /**
@@ -162,7 +216,7 @@ widget_t* slide_view_cast(widget_t* widget);
  * 设置为自动播放模式。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget slide_view对象。
- * @param {uint16_t} auto_play 0表示禁止自动播放，非0表示自动播放时每一页播放的时间。
+ * @param {uint16_t} auto_play 0表示禁止自动播放，非0表示自动播放时每一页播放的时间(毫秒)。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -170,7 +224,7 @@ ret_t slide_view_set_auto_play(widget_t* widget, uint16_t auto_play);
 
 /**
  * @method slide_view_set_active
- * 设置当前页的序号。
+ * 设置当前页的序号(默认启用动画)。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget slide_view对象。
  * @param {uint32_t} index 当前页的序号。
@@ -178,6 +232,18 @@ ret_t slide_view_set_auto_play(widget_t* widget, uint16_t auto_play);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t slide_view_set_active(widget_t* widget, uint32_t index);
+
+/**
+ * @method slide_view_set_active_ex
+ * 设置当前页的序号。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget slide_view对象。
+ * @param {uint32_t} index 当前页的序号。
+ * @param {bool_t} animate 是否启用动画。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t slide_view_set_active_ex(widget_t* widget, uint32_t index, bool_t animate);
 
 /**
  * @method slide_view_set_vertical
@@ -223,6 +289,39 @@ ret_t slide_view_set_anim_hint(widget_t* widget, const char* anim_hint);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t slide_view_set_loop(widget_t* widget, bool_t loop);
+
+/**
+ * @method slide_view_set_drag_threshold
+ * 设置拖拽临界值。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget slide_view对象。
+ * @param {uint32_t} drag_threshold 拖动临界值。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t slide_view_set_drag_threshold(widget_t* widget, uint32_t drag_threshold);
+
+/**
+ * @method slide_view_set_animating_time
+ * 设置动画时间(毫秒)。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget slide_view对象。
+ * @param {uint32_t} animating_time 动画时间(毫秒)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t slide_view_set_animating_time(widget_t* widget, uint32_t animating_time);
+
+/**
+ * @method slide_view_remove_index
+ * 删除指定序号页面。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget slide_view对象。
+ * @param {uint32_t} index 删除页面的序号。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t slide_view_remove_index(widget_t* widget, uint32_t index);
 
 /*public for test only*/
 widget_t* slide_view_get_prev(slide_view_t* slide_view);

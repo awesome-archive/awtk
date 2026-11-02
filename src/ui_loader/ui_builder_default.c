@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   ui_builder_default.c
  * Author: AWTK Develop Team
  * Brief:  ui_builder default
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,11 +19,12 @@
  *
  */
 
-#include "widgets/view.h"
 #include "tkc/utf8.h"
+#include "tkc/utils.h"
 #include "base/enums.h"
-#include "widgets/dialog.h"
+#include "base/dialog.h"
 #include "base/widget_factory.h"
+#include "base/window_manager.h"
 #include "ui_loader/ui_builder_default.h"
 #include "ui_loader/ui_loader_default.h"
 
@@ -41,10 +42,12 @@ static ret_t ui_builder_default_on_widget_start(ui_builder_t* b, const widget_de
   widget = widget_factory_create_widget(widget_factory(), type, parent, x, y, w, h);
   if (widget == NULL) {
     log_debug("%s: not supported type %s\n", __FUNCTION__, type);
-    assert(!"not supported");
+    widget = widget_factory_create_widget(widget_factory(), WIDGET_TYPE_VIEW, parent, x, y, w, h);
   }
+  return_value_if_fail(widget != NULL, RET_OOM);
 
   b->widget = widget;
+  b->widget->loading = TRUE;
   if (b->root == NULL) {
     b->root = widget;
   }
@@ -62,46 +65,73 @@ static ret_t ui_builder_default_on_widget_prop(ui_builder_t* b, const char* name
 }
 
 static ret_t ui_builder_default_on_widget_prop_end(ui_builder_t* b) {
-  (void)b;
   return RET_OK;
 }
 
 static ret_t ui_builder_default_on_widget_end(ui_builder_t* b) {
-  b->widget = b->widget->parent;
-  return RET_OK;
-}
+  if (b->widget != NULL) {
+    event_t e = event_init(EVT_WIDGET_LOAD, NULL);
+    widget_dispatch(b->widget, &e);
 
-static ret_t ui_builder_default_on_end(ui_builder_t* b) {
-  if (b->root != NULL) {
-    widget_t* widget = b->root;
-
-    widget_invalidate_force(widget, NULL);
-    if (widget && widget->name == NULL) {
-      widget_set_name(widget, b->name);
-    }
-
-    if (widget->vt->is_window) {
-      event_t e = event_init(EVT_WINDOW_LOAD, widget);
-
-      widget_layout(widget);
-      widget_dispatch(widget, &e);
-    }
+    b->widget->loading = FALSE;
+    b->widget = b->widget->parent;
   }
 
   return RET_OK;
 }
 
-static ui_builder_t s_ui_builder;
+static ret_t ui_builder_default_on_end(ui_builder_t* b) {
+  ENSURE(b);
+  widget_t* widget = b->root;
+  if (widget != NULL) {
+    widget_t* wm = window_manager();
+    event_t e;
 
-ui_builder_t* ui_builder_default(const char* name) {
-  memset(&s_ui_builder, 0x00, sizeof(ui_builder_t));
+    widget_invalidate_force(widget, NULL);
+    if (widget && (widget->name == NULL || widget->name[0] == 0)) {
+      char name[MAX_PATH + 1] = {0};
+      tk_strncpy(name, b->name, MAX_PATH);
+      if (tk_str_end_with(b->name, ".xml")) {
+        name[strlen(name) - strlen(".xml")] = '\0';
+      }
+      widget_set_name(widget, name);
+    }
 
-  s_ui_builder.on_widget_start = ui_builder_default_on_widget_start;
-  s_ui_builder.on_widget_prop = ui_builder_default_on_widget_prop;
-  s_ui_builder.on_widget_prop_end = ui_builder_default_on_widget_prop_end;
-  s_ui_builder.on_widget_end = ui_builder_default_on_widget_end;
-  s_ui_builder.on_end = ui_builder_default_on_end;
-  s_ui_builder.name = name;
+    e = event_init(EVT_WIDGET_LOAD, NULL);
+    widget_dispatch(widget, &e);
 
-  return &s_ui_builder;
+    if (widget->vt->is_window) {
+      e = event_init(EVT_WINDOW_LOAD, widget);
+      widget_dispatch_recursive(widget, &e);
+    }
+
+    if (wm != NULL) {
+      ui_load_event_t evt;
+      widget_dispatch(wm, ui_load_event_init(&evt, NULL, widget, b->name));
+    }
+
+    widget->loading = FALSE;
+  }
+
+  return RET_OK;
+}
+
+static ret_t ui_builder_default_destroy(ui_builder_t* b) {
+  TKMEM_FREE(b);
+  return RET_OK;
+}
+
+ui_builder_t* ui_builder_default_create(const char* name) {
+  ui_builder_t* builder = TKMEM_ZALLOC(ui_builder_t);
+  return_value_if_fail(builder != NULL, NULL);
+
+  builder->on_widget_start = ui_builder_default_on_widget_start;
+  builder->on_widget_prop = ui_builder_default_on_widget_prop;
+  builder->on_widget_prop_end = ui_builder_default_on_widget_prop_end;
+  builder->on_widget_end = ui_builder_default_on_widget_end;
+  builder->on_end = ui_builder_default_on_end;
+  builder->destroy = ui_builder_default_destroy;
+  builder->name = name;
+
+  return builder;
 }

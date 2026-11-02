@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   emitter.c
  * Author: AWTK Develop Team
  * Brief:  emitter dispatcher
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -29,11 +29,21 @@ emitter_t* emitter_create() {
   return emitter_init(emitter);
 }
 
+static uint32_t emitter_next_id(emitter_t* emitter) {
+  uint32_t id = emitter->next_id++;
+
+  if (id == TK_INVALID_ID) {
+    id = emitter->next_id++;
+  }
+
+  return id;
+}
+
 emitter_t* emitter_init(emitter_t* emitter) {
   return_value_if_fail(emitter, NULL);
 
   memset(emitter, 0x00, sizeof(emitter_t));
-  emitter->enable = TRUE;
+  emitter->disable = 0;
   emitter->next_id = TK_INVALID_ID + 1;
 
   return emitter;
@@ -61,8 +71,8 @@ static ret_t emitter_item_destroy(emitter_item_t* iter) {
 static ret_t emitter_remove(emitter_t* emitter, emitter_item_t* prev, emitter_item_t* iter) {
   return_value_if_fail(emitter != NULL && iter != NULL, RET_BAD_PARAMS);
 
-  if (emitter->curr_iter == iter) {
-    emitter->remove_curr_iter = TRUE;
+  if (iter->working) {
+    iter->pending_remove = TRUE;
     return RET_OK;
   }
 
@@ -110,21 +120,25 @@ ret_t emitter_dispatch(emitter_t* emitter, event_t* e) {
   if (e->target == NULL) {
     e->target = emitter;
   }
-
-  if (emitter->enable && emitter->items) {
+  if (emitter->disable == 0 && emitter->items) {
     emitter_item_t* iter = emitter->items;
 
     while (iter != NULL) {
-      emitter->curr_iter = iter;
-      if (iter != NULL && iter->type == e->type) {
+      if (iter->type == e->type) {
+        bool_t is_working = iter->working;
+        iter->working = TRUE;
         ret = iter->handler(iter->ctx, e);
+        if (!is_working) {
+          iter->working = FALSE;
+        }
         if (ret == RET_STOP) {
+          if (iter->pending_remove) {
+            emitter_remove_item(emitter, iter);
+          }
           return ret;
-        } else if (ret == RET_REMOVE || emitter->remove_curr_iter) {
+        } else if (ret == RET_REMOVE || iter->pending_remove) {
           emitter_item_t* next = iter->next;
 
-          emitter->curr_iter = NULL;
-          emitter->remove_curr_iter = FALSE;
           emitter_remove_item(emitter, iter);
           iter = next;
 
@@ -135,27 +149,67 @@ ret_t emitter_dispatch(emitter_t* emitter, event_t* e) {
       iter = iter->next;
     }
   }
-  emitter->curr_iter = NULL;
-  emitter->remove_curr_iter = FALSE;
 
   return RET_OK;
 }
 
-uint32_t emitter_on(emitter_t* emitter, uint32_t etype, event_func_t handler, void* ctx) {
+uint32_t emitter_on_with_tag(emitter_t* emitter, uint32_t etype, event_func_t handler, void* ctx,
+                             uint32_t tag) {
   emitter_item_t* iter = NULL;
   return_value_if_fail(emitter != NULL && handler != NULL, TK_INVALID_ID);
 
   iter = TKMEM_ZALLOC(emitter_item_t);
   return_value_if_fail(iter != NULL, TK_INVALID_ID);
 
-  iter->type = etype;
+  iter->tag = tag;
   iter->ctx = ctx;
+  iter->type = etype;
   iter->handler = handler;
-  iter->id = emitter->next_id++;
+  iter->id = emitter_next_id(emitter);
   iter->next = emitter->items;
   emitter->items = iter;
 
   return iter->id;
+}
+
+bool_t emitter_exist(emitter_t* emitter, uint32_t etype, event_func_t handler, void* ctx) {
+  return_value_if_fail(emitter != NULL, FALSE);
+
+  if (emitter->items) {
+    emitter_item_t* iter = emitter->items;
+
+    while (iter != NULL) {
+      if (iter->handler == handler && iter->type == etype && iter->ctx == ctx) {
+        return TRUE;
+      }
+
+      iter = iter->next;
+    }
+  }
+
+  return FALSE;
+}
+
+bool_t emitter_exist_by_etype(emitter_t* emitter, uint32_t etype) {
+  return_value_if_fail(emitter != NULL, FALSE);
+
+  if (emitter->items) {
+    emitter_item_t* iter = emitter->items;
+
+    while (iter != NULL) {
+      if (iter->type == etype) {
+        return TRUE;
+      }
+
+      iter = iter->next;
+    }
+  }
+
+  return FALSE;
+}
+
+uint32_t emitter_on(emitter_t* emitter, uint32_t etype, event_func_t handler, void* ctx) {
+  return emitter_on_with_tag(emitter, etype, handler, ctx, 0);
 }
 
 emitter_item_t* emitter_find(emitter_t* emitter, uint32_t id) {
@@ -192,7 +246,7 @@ uint32_t emitter_size(emitter_t* emitter) {
   return size;
 }
 
-ret_t emitter_off(emitter_t* emitter, uint32_t id) {
+static ret_t emitter_off_ex(emitter_t* emitter, tk_compare_t cmp, void* ctx) {
   return_value_if_fail(emitter != NULL, RET_BAD_PARAMS);
 
   if (emitter->items) {
@@ -200,7 +254,7 @@ ret_t emitter_off(emitter_t* emitter, uint32_t id) {
     emitter_item_t* prev = emitter->items;
 
     while (iter != NULL) {
-      if (iter->id == id) {
+      if (!iter->pending_remove && cmp(iter, ctx) == 0) {
         return emitter_remove(emitter, prev, iter);
       }
 
@@ -210,65 +264,104 @@ ret_t emitter_off(emitter_t* emitter, uint32_t id) {
   }
 
   return RET_FAIL;
+}
+
+static int emitter_item_compare_by_tag(const void* a, const void* b) {
+  const emitter_item_t* item = (const emitter_item_t*)a;
+  uint32_t tag = *(const uint32_t*)b;
+
+  return item->tag - tag;
+}
+
+static int emitter_item_compare_by_ctx(const void* a, const void* b) {
+  const emitter_item_t* item = (const emitter_item_t*)a;
+
+  return item->ctx == b ? 0 : 1;
+}
+
+static int emitter_item_compare_by_id(const void* a, const void* b) {
+  const emitter_item_t* item = (const emitter_item_t*)a;
+  uint32_t id = *(const uint32_t*)b;
+
+  return item->id - id;
+}
+
+static int emitter_item_compare_by_func(const void* a, const void* b) {
+  const emitter_item_t* item = (const emitter_item_t*)a;
+  const emitter_item_t* p = (const emitter_item_t*)b;
+
+  if (item->type == p->type && item->ctx == p->ctx && item->handler == p->handler) {
+    return 0;
+  }
+
+  return -1;
+}
+
+ret_t emitter_off(emitter_t* emitter, uint32_t id) {
+  return emitter_off_ex(emitter, emitter_item_compare_by_id, &id);
 }
 
 ret_t emitter_off_by_func(emitter_t* emitter, uint32_t etype, event_func_t handler, void* ctx) {
-  return_value_if_fail(emitter != NULL && handler != NULL, RET_BAD_PARAMS);
+  ret_t ret;
+  emitter_item_t item;
 
-  if (emitter->items) {
-    emitter_item_t* iter = emitter->items;
-    emitter_item_t* prev = emitter->items;
+  memset(&item, 0x00, sizeof(item));
 
-    while (iter != NULL) {
-      if (iter->type == etype && iter->ctx == ctx && iter->handler == handler) {
-        return emitter_remove(emitter, prev, iter);
+  item.ctx = ctx;
+  item.type = etype;
+  item.handler = handler;
+
+  ret = emitter_off_ex(emitter, emitter_item_compare_by_func, &item);
+  if (ret == RET_OK) {
+    while (TRUE) {
+      if (emitter_off_ex(emitter, emitter_item_compare_by_func, &item) != RET_OK) {
+        break;
       }
-
-      prev = iter;
-      iter = iter->next;
     }
   }
 
-  return RET_FAIL;
+  return ret;
+}
+
+ret_t emitter_off_by_tag(emitter_t* emitter, uint32_t tag) {
+  ret_t ret = emitter_off_ex(emitter, emitter_item_compare_by_tag, &tag);
+
+  if (ret == RET_OK) {
+    while (TRUE) {
+      if (emitter_off_ex(emitter, emitter_item_compare_by_tag, &tag) != RET_OK) {
+        break;
+      }
+    }
+  }
+
+  return ret;
 }
 
 ret_t emitter_off_by_ctx(emitter_t* emitter, void* ctx) {
-  return_value_if_fail(emitter != NULL, RET_BAD_PARAMS);
+  ret_t ret = emitter_off_ex(emitter, emitter_item_compare_by_ctx, ctx);
 
-  if (emitter->items) {
-    emitter_item_t* iter = emitter->items;
-    emitter_item_t* prev = emitter->items;
-
-    while (iter != NULL) {
-      emitter_item_t* next = iter->next;
-
-      if (iter->ctx == ctx) {
-        emitter_remove(emitter, prev, iter);
-
-        if (prev == iter) {
-          prev = next;
-        }
-      } else {
-        prev = iter;
+  if (ret == RET_OK) {
+    while (TRUE) {
+      if (emitter_off_ex(emitter, emitter_item_compare_by_ctx, ctx) != RET_OK) {
+        break;
       }
-
-      iter = next;
     }
   }
 
-  return RET_OK;
+  return ret;
 }
 
 ret_t emitter_enable(emitter_t* emitter) {
   return_value_if_fail(emitter != NULL, RET_BAD_PARAMS);
-  emitter->enable = TRUE;
+  return_value_if_fail(emitter->disable > 0, RET_FAIL);
+  emitter->disable--;
 
   return RET_OK;
 }
 
 ret_t emitter_disable(emitter_t* emitter) {
   return_value_if_fail(emitter != NULL, RET_BAD_PARAMS);
-  emitter->enable = FALSE;
+  emitter->disable++;
 
   return RET_OK;
 }
@@ -333,4 +426,23 @@ ret_t emitter_dispatch_simple_event(emitter_t* emitter, uint32_t type) {
   return_value_if_fail(emitter != NULL, RET_BAD_PARAMS);
 
   return emitter_dispatch(emitter, &e);
+}
+
+ret_t emitter_forward(void* ctx, event_t* e) {
+  return emitter_dispatch(EMITTER(ctx), e);
+}
+
+ret_t emitter_forward_retarget(void* ctx, event_t* e) {
+  ret_t ret = RET_OK;
+  void* target = NULL;
+  return_value_if_fail(e != NULL, RET_BAD_PARAMS);
+
+  target = e->target;
+  e->target = ctx;
+
+  ret = emitter_dispatch(EMITTER(ctx), e);
+
+  e->target = target;
+
+  return ret;
 }

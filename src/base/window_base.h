@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  window_base
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,6 +23,7 @@
 #define TK_WINDOW_BASE_H
 
 #include "base/widget.h"
+#include "base/widget_vtable.h"
 #include "base/native_window.h"
 
 BEGIN_C_DECLS
@@ -30,7 +31,7 @@ BEGIN_C_DECLS
 /**
  * @class window_base_t
  * @parent widget_t
- * @annotation ["scriptable"]
+ * @annotation ["scriptable","widget"]
  * 窗口。
  *
  * 本类把窗口相关的公共行为进行抽象，放到一起方便重用。目前已知的具体实现如下图：
@@ -53,12 +54,56 @@ typedef struct _window_base_t {
   /**
    * @property {char*} theme
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 主题资源的名称。
-   * 每个窗口都可以有独立的主题文件，如果没指定，则使用系统缺省的主题文件。
-   * 主题是一个XML文件，放在assets/raw/styles目录下。
-   * 请参考[主题](https://github.com/zlgopen/awtk/blob/master/docs/theme.md)
+   * 窗体样式资源的名称。
+   * 每个窗口都可以有独立的窗体样式文件，如果没指定，则使用系统缺省的窗体样式文件。
+   * 窗体样式是一个XML文件，放在assets/raw/styles目录下。
+   * 请参考[窗体样式](https://github.com/zlgopen/awtk/blob/master/docs/theme.md)
    */
   char* theme;
+
+  /**
+   * @property {uint16_t} design_w
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 设计时宽度。
+   */
+  uint16_t design_w;
+  /**
+   * @property {uint16_t} design_h
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 设计时高度。
+   */
+  uint16_t design_h;
+  /**
+   * @property {bool_t} auto_scale_children_x
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 窗口大小与设计时大小不同时，是否自动调整子控件的x坐标。
+   */
+  bool_t auto_scale_children_x;
+  /**
+   * @property {bool_t} auto_scale_children_y
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 窗口大小与设计时大小不同时，是否自动调整子控件的y坐标。
+   */
+  bool_t auto_scale_children_y;
+  /**
+   * @property {bool_t} auto_scale_children_w
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 窗口大小与设计时大小不同时，是否自动调整子控件的宽度。
+   */
+  bool_t auto_scale_children_w;
+  /**
+   * @property {bool_t} auto_scale_children_h
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 窗口大小与设计时大小不同时，是否自动调整子控件的高度。
+   */
+  bool_t auto_scale_children_h;
+
+  /**
+   * @property {bool_t} disable_anim
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 禁用窗口动画。
+   */
+  bool_t disable_anim;
 
   /**
    * @property {window_closable_t} closable
@@ -77,7 +122,7 @@ typedef struct _window_base_t {
 
   /**
    * @property {char*} open_anim_hint
-   * @annotation ["set_prop","get_prop","readable","persitent","design"]
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 打开窗口动画的名称。
    * 请参考[窗口动画](https://github.com/zlgopen/awtk/blob/master/docs/window_animator.md)
    */
@@ -85,14 +130,14 @@ typedef struct _window_base_t {
 
   /**
    * @property {char*} close_anim_hint
-   * @annotation ["set_prop","get_prop","readable","persitent","design"]
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 关闭窗口动画的名称。
    * 请参考[窗口动画](https://github.com/zlgopen/awtk/blob/master/docs/window_animator.md)
    */
   char* close_anim_hint;
 
   /**
-   * @property {char*} stage
+   * @property {window_stage_t} stage
    * @annotation ["readable", "get_prop"]
    * 窗口当前处于的状态。
    */
@@ -101,10 +146,10 @@ typedef struct _window_base_t {
   /**
    * @property {theme_t*} theme_obj
    * @annotation ["get_prop"]
-   * 窗口的常量主题数据。
+   * 窗口的常量窗体样式数据。
    *
    *>
-   *把主题管理器对象与窗口关联起来，是为了解决UI设计器与被设计的窗口需要从不同的位置加载主题资源的问题。
+   *把窗体样式管理器对象与窗口关联起来，是为了解决UI设计器与被设计的窗口需要从不同的位置加载窗体样式资源的问题。
    */
   theme_t* theme_obj;
 
@@ -135,23 +180,278 @@ typedef struct _window_base_t {
    * 把资源管理器对象与窗口关联起来，是为了解决UI设计器与被设计的窗口需要从不同的位置加载资源资源的问题。
    */
 
+  /**
+   * @property {locale_info_t*} locale_info
+   * @annotation ["get_prop"]
+   * 获取多国语言字符串管理器对象。
+   *
+   * >
+   * 把多国语言字符串管理器对象与窗口关联起来，是为了解决UI设计器与被设计的窗口需要从不同的位置加载资源资源的问题。
+   */
+
+  /**
+   * @property {char*} move_focus_prev_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向前移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_prev_key;
+
+  /**
+   * @property {char*} move_focus_next_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向后移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_next_key;
+
+  /**
+   * @property {char*} move_focus_up_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向上移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_up_key;
+
+  /**
+   * @property {char*} move_focus_down_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向下移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_down_key;
+
+  /**
+   * @property {char*} move_focus_left_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向左移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_left_key;
+
+  /**
+   * @property {char*} move_focus_right_key
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 向右移动焦点的键值。
+   *
+   * 请参考[控件焦点](https://github.com/zlgopen/awtk/blob/master/docs/widget_focus.md)
+   */
+  char* move_focus_right_key;
+
+  /**
+   * @property {char*} accept_button
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 窗口中按下 Enter 按钮默认触发单击 button 控件名字
+   */
+  char* accept_button;
+
+  /**
+   * @property {char*} cancel_button
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 窗口中按下 Esc 按钮默认触发单击 button 控件名字
+   */
+  char* cancel_button;
+
+  /**
+   * @property {char*} applet_name
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 小应用程序(applet)的名称。
+   *
+   * > 如果该窗口属于某个独立的小程序应用(applet)，需要指定它的名称，以便到对应的资源目录查找资源。
+   */
+  char* applet_name;
+
+  /**
+   * @property {bool_t} single_instance
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 单例。如果窗口存在，先关闭再打开。
+   */
+  bool_t single_instance;
+
+  /**
+   * @property {bool_t} strongly_focus
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 点击非focusable控件时，是否让当前焦点控件失去焦点。比如点击窗口空白区域，是否让编辑器失去焦点。 
+   */
+  bool_t strongly_focus;
+
   /*private*/
+  theme_t* default_theme_obj;
+  const asset_info_t* default_res_theme;
   const asset_info_t* res_theme;
-  font_manager_t* font_manager;
-  int32_t move_focus_prev_key;
-  int32_t move_focus_next_key;
   native_window_t* native_window;
+  widget_t* save_focus_widget;
+  uint32_t grab_count_when_to_foreground;
+  bool_t need_relayout;
+  bool_t moving_focus_mode;
+  bool_t pressed;
+  font_manager_t* font_manager;
+  assets_manager_t* assets_manager;
+  image_manager_t* image_manager;
+  locale_info_t* locale_info;
+
+  widget_t* accept_button_widget;
+  widget_t* cancel_button_widget;
 } window_base_t;
 
+/**
+ * @event {event_t} EVT_WINDOW_WILL_OPEN
+ * 窗口即将打开事件。 如果有窗口动画，在窗口动画开始前触发。如果没有窗口动画，在窗口被加载后的下一次循环中触发。
+ */
+
+/**
+ * @event {event_t} EVT_WINDOW_OPEN
+ * 窗口打开事件。 如果有窗口动画，在窗口动画完成时触发。如果没有窗口动画，在窗口被加载后的下一次循环中触发。
+ */
+
+/**
+ * @event {event_t} EVT_WINDOW_TO_BACKGROUND
+ * 窗口被切换到后台事件。 打开新窗口时，当前窗口被切换到后台时，对当前窗口触发本事件。
+ */
+
+/**
+ * @event {event_t} EVT_WINDOW_TO_FOREGROUND
+ * 窗口被切换到前台事件。 关闭当前窗口时，前一个窗口被切换到前台时，对前一个窗口触发本事件。
+ */
+
+/**
+ * @event {event_t} EVT_WINDOW_CLOSE
+ * 窗口关闭事件。
+ */
+
+/**
+ * @event {event_t} EVT_WINDOW_LOAD
+ * 窗口加载完成事件。
+ */
+
+/**
+ * @event {event_t} EVT_REQUEST_CLOSE_WINDOW
+ * 请求关闭窗口的事件。
+ */
+
+/**
+ * @event {event_t} EVT_LOCALE_CHANGED
+ * locale改变的事件。
+ */
+
 /*for sub class*/
+
+/**
+ * @method window_base_on_destroy
+ * 窗口on_destroy函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_on_destroy(widget_t* widget);
+/**
+ * @method window_base_on_event
+ * 窗口on_event函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {event_t*} e event对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_on_event(widget_t* widget, event_t* e);
-ret_t window_base_invalidate(widget_t* widget, rect_t* r);
+
+/**
+ * @method window_base_on_window_to_foreground
+ * 窗口切换到前台时的缺省处理。
+ * @param {widget_t*} widget window_base对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t window_base_on_window_to_foreground(widget_t* widget);
+
+/**
+ * @method window_base_on_window_to_background
+ * 窗口切换到后台时的缺省处理。
+ * @param {widget_t*} widget window_base对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t window_base_on_window_to_background(widget_t* widget);
+
+/**
+ * @method window_base_invalidate
+ * 窗口on_invalidate函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {const rect_t*} rect rect对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t window_base_invalidate(widget_t* widget, const rect_t* rect);
+
+/**
+ * @method window_base_on_paint_begin
+ * 窗口on_paint_begin函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_on_paint_begin(widget_t* widget, canvas_t* c);
+/**
+ * @method window_base_on_paint_end
+ * 窗口on_paint_end函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。1
+ */
 ret_t window_base_on_paint_end(widget_t* widget, canvas_t* c);
+
+/**
+ * @method window_base_on_paint_self
+ * 窗口on_paint_self函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。
+ * @param {canvas_t*} c canvas对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_on_paint_self(widget_t* widget, canvas_t* c);
+
+/**
+ * @method window_base_get_prop
+ * 窗口get_prop函数的缺省实现。
+ * @param {widget_t*} widget window_base对象。g
+ * @param {const char*} name 属性名。
+ * @param {value_t*} v value对象
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
 ret_t window_base_get_prop(widget_t* widget, const char* name, value_t* v);
+
+/**
+ * @method window_base_set_prop
+ * 窗口set_prop函数的缺省实现。
+ *
+ * @param {widget_t*} widget window_base对象。
+ * @param {const char*} name 属性名。
+ * @param {const value_t*} v value对象
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t window_base_set_prop(widget_t* widget, const char* name, const value_t* v);
+
+/**
+ * @method window_base_create
+ * 创建window base对象。
+ *
+ * @param {widget_t*} parent 父控件
+ * @param {const widget_vtable_t*} vt vtable对象。
+ * @param {xy_t} x x坐标
+ * @param {xy_t} y y坐标
+ * @param {wh_t} w 宽度
+ * @param {wh_t} h 高度
+ *
+ * @return {widget_t*} 窗口对象。
+ */
 widget_t* window_base_create(widget_t* parent, const widget_vtable_t* vt, xy_t x, xy_t y, wh_t w,
                              wh_t h);
 /**
@@ -164,10 +464,66 @@ widget_t* window_base_create(widget_t* parent, const widget_vtable_t* vt, xy_t x
  */
 widget_t* window_base_cast(widget_t* widget);
 
+/**
+ * @method window_base_set_need_relayout
+ * 设置是否需要relayout
+ * @param {widget_t*} widget window_base对象。
+ * @param {bool_t} need_relayout 是否需要relayout。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t window_base_set_need_relayout(widget_t* widget, bool_t need_relayout);
+
+/**
+ * @method window_base_on_copy
+ * 默认拷贝函数。
+ * @param {widget_t*} widget window_base对象。
+ * @param {widget_t*} other other window_base对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
+ret_t window_base_on_copy(widget_t* widget, widget_t* other);
+
+/**
+ * @method window_base_set_accept_button
+ * 设置 accept_button 控件。
+ * @param {widget_t*} widget window_base对象。
+ * @param {const char*} accept_button 控件名字。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
+ret_t window_base_set_accept_button(widget_t* widget, const char* accept_button);
+
+/**
+ * @method window_base_set_cancel_button
+ * 设置 cancel_button 控件。
+ * @param {widget_t*} widget window_base对象。
+ * @param {const char*} cancel_button 控件名字。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。。
+ */
+ret_t window_base_set_cancel_button(widget_t* widget, const char* cancel_button);
+
 #define WINDOW_BASE(widget) ((window_base_t*)(window_base_cast(WIDGET(widget))))
 
 /*public for subclass and runtime type check*/
 TK_EXTERN_VTABLE(window_base);
+
+/*public for test*/
+/**
+ * @method window_base_auto_scale_children 
+ * 根据参数自动缩放子控件。 
+ * @param {widget_t*} widget window_base对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t window_base_auto_scale_children(widget_t* widget);
+
+/*public for internal use*/
+assets_manager_t* window_base_get_assets_manager(widget_t* widget);
+font_manager_t* window_base_get_font_manager(widget_t* widget);
+locale_info_t* window_base_get_locale_info(widget_t* widget);
+image_manager_t* window_base_get_image_manager(widget_t* widget);
 
 END_C_DECLS
 

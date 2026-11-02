@@ -1,0 +1,139 @@
+#include "tkc/object_default.h"
+#include "tkc/object_array.h"
+#include "tkc/data_reader_mem.h"
+#include "conf_io/conf_utils.h"
+
+#include "gtest/gtest.h"
+
+TEST(ConfUtils, object_to_json) {
+  str_t str;
+  value_t v;
+  tk_object_t* obj = object_default_create();
+  tk_object_t* addr = object_default_create();
+  tk_object_t* arr = object_array_create();
+  tk_object_set_prop_str(obj, "name", "jim");
+  tk_object_set_prop_int(obj, "age", 100);
+
+  tk_object_set_prop_int(arr, "-1", 1);
+  tk_object_set_prop_int(arr, "-1", 2);
+  tk_object_set_prop_str(arr, "-1", "abc");
+  value_set_wstr(&v, L"hello");
+  tk_object_set_prop(arr, "-1", &v);
+
+  tk_object_set_prop_str(addr, "country", "zh");
+  tk_object_set_prop_str(addr, "city", "sz");
+
+  tk_object_set_prop_object(obj, "addr", addr);
+  tk_object_set_prop_object(obj, "arr", arr);
+
+  str_init(&str, 1000);
+  ASSERT_EQ(object_to_json(obj, &str), RET_OK);
+  ASSERT_STREQ(str.str,
+               "{\n"
+               "  \"addr\": {\n"
+               "    \"city\": \"sz\",\n"
+               "    \"country\": \"zh\"\n"
+               "  },\n"
+               "  \"age\": 100,\n"
+               "  \"arr\": [\n"
+               "    1,\n"
+               "    2,\n"
+               "    \"abc\",\n"
+               "    \"hello\"\n"
+               "  ],\n"
+               "  \"name\": \"jim\"\n"
+               "}");
+
+  str_reset(&str);
+  TK_OBJECT_UNREF(obj);
+  TK_OBJECT_UNREF(arr);
+  TK_OBJECT_UNREF(addr);
+}
+
+TEST(ConfUtils, object_from_json) {
+  tk_object_t* obj = object_default_create();
+
+  ASSERT_EQ(object_from_json(obj,
+                             "{\n"
+                             "  \"addr\": {\n"
+                             "    \"city\": \"sz\",\n"
+                             "    \"country\": \"zh\"\n"
+                             "  },\n"
+                             "  \"age\": 100,\n"
+                             "  \"arr\": [\n"
+                             "    1,\n"
+                             "    2,\n"
+                             "    \"abc\",\n"
+                             "    \"hello\"\n"
+                             "  ],\n"
+                             "  \"name\": \"jim\"\n"
+                             "}"),
+            RET_OK);
+
+  ASSERT_STREQ(tk_object_get_prop_str(obj, "name"), "jim");
+  ASSERT_EQ(tk_object_get_prop_int(obj, "age", 0), 100);
+
+  ASSERT_EQ(tk_object_get_prop_int(obj, "arr.[0]", 0), 1);
+  ASSERT_EQ(tk_object_get_prop_int(obj, "arr.[1]", 0), 2);
+  ASSERT_STREQ(tk_object_get_prop_str(obj, "arr.[2]"), "abc");
+  ASSERT_STREQ(tk_object_get_prop_str(obj, "arr.[3]"), "hello");
+
+  ASSERT_STREQ(tk_object_get_prop_str(obj, "addr.city"), "sz");
+  ASSERT_STREQ(tk_object_get_prop_str(obj, "addr.country"), "zh");
+
+  TK_OBJECT_UNREF(obj);
+}
+
+TEST(ConfUtils, object_load_conf_disable_path) {
+  char url[MAX_PATH + 1];
+  const char* str =
+      "category.1:\n"
+      "  abc.log:\n"
+      "    output: file\n"
+      "    level: DEBUG\n";
+  tk_object_t* obj = object_default_create_ex(FALSE);
+  tk_object_t *obj_category = NULL, *obj_file = NULL;
+
+  data_reader_mem_build_url(str, tk_strlen(str), url);
+
+  ASSERT_EQ(object_load_conf(obj, url, "yaml"), RET_OK);
+
+  obj_category = tk_object_get_prop_object(obj, "category.1");
+  ASSERT_TRUE(obj_category != NULL);
+
+  obj_file = tk_object_get_prop_object(obj_category, "abc.log");
+  ASSERT_TRUE(obj_file != NULL);
+
+  ASSERT_STREQ(tk_object_get_prop_str(obj_file, "output"), "file");
+  ASSERT_STREQ(tk_object_get_prop_str(obj_file, "level"), "DEBUG");
+
+  TK_OBJECT_UNREF(obj);
+}
+
+TEST(ConfUtils, object_load_conf_keep_props_order) {
+  char url[MAX_PATH + 1];
+  const char* str =
+      "data:\n"
+      "  alpha: 1\n"
+      "  beta: 2\n"
+      "  gamma: 3\n";
+  tk_object_t* obj = object_default_create();
+  tk_object_t* obj_data = NULL;
+  str_t str_json;
+
+  tk_object_set_prop_bool(obj, TK_OBJECT_PROP_KEEP_PROPS_ORDER, TRUE);
+  data_reader_mem_build_url(str, tk_strlen(str), url);
+
+  ASSERT_EQ(object_load_conf(obj, url, "yaml"), RET_OK);
+
+  obj_data = tk_object_get_prop_object(obj, "data");
+  ASSERT_TRUE(obj_data != NULL);
+
+  str_init(&str_json, 256);
+  ASSERT_EQ(tk_object_to_json(obj_data, &str_json, 0, 0, TRUE), RET_OK);
+  /* 验证属性顺序与 yaml 中一致: alpha, beta, gamma */
+  ASSERT_STREQ(str_json.str, "{\"alpha\": \"1\",\"beta\": \"2\",\"gamma\": \"3\"}");
+
+  str_reset(&str_json);
+  TK_OBJECT_UNREF(obj);
+}

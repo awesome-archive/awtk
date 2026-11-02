@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  xml str gen
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2024  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,6 +22,8 @@
 #include "str_gen.h"
 #include "tkc/fs.h"
 #include "tkc/str.h"
+#include "tkc/mem.h"
+#include "tkc/buffer.h"
 #include "base/enums.h"
 #include "base/theme.h"
 #include "common/utils.h"
@@ -43,11 +45,17 @@ static void xml_str_gen_on_start(XmlBuilder* thiz, const char* tag, const char**
   xml_str_builder_t* b = (xml_str_builder_t*)thiz;
 
   if (b->level == 0) {
+    str_t str;
+    const char* name = xml_builder_get_attr(attrs, "name");
+    str_init(&str, 100);
+    str_decode_xml_entity(&str, name);
+    b->str = string(str.str);
+    str_reset(&(str));
+
     assert(strcmp(tag, "string") == 0);
-    b->str = xml_builder_get_attr(attrs, "name");
   } else if (b->level == 1) {
     assert(strcmp(tag, "language") == 0);
-    b->language = xml_builder_get_attr(attrs, "name");
+    b->language = string(xml_builder_get_attr(attrs, "name"));
   }
 
   b->level++;
@@ -82,18 +90,36 @@ static void xml_str_gen_on_text(XmlBuilder* thiz, const char* text, size_t lengt
   return;
 }
 
+static void xml_gen_on_comment(XmlBuilder* thiz, const char* text, size_t length) {
+  (void)thiz;
+  (void)text;
+  (void)length;
+
+  return;
+}
+
 static XmlBuilder* builder_init(xml_str_builder_t& b, StrGen* sg) {
+  memset(&b.builder, 0x00, sizeof(XmlBuilder));
+  b.level = 0;
+  b.sg = NULL;
+  
+
   b.sg = sg;
   b.level = 0;
   b.builder.on_start = xml_str_gen_on_start;
   b.builder.on_end = xml_str_gen_on_end;
+  b.builder.on_comment = xml_gen_on_comment;
   b.builder.on_text = xml_str_gen_on_text;
 
   return &(b.builder);
 }
 
 bool xml_to_str_gen(const char* input_file, StrGen* sg) {
-  return xml_buff_to_str_gen((char*)file_read(input_file, NULL), sg);
+  bool ret = false;
+  char* buff = (char*)file_read(input_file, NULL);
+  ret = xml_buff_to_str_gen(buff, sg);
+  TKMEM_FREE(buff);
+  return ret;
 }
 
 bool xml_buff_to_str_gen(const char* buff, StrGen* sg) {
@@ -101,6 +127,7 @@ bool xml_buff_to_str_gen(const char* buff, StrGen* sg) {
   return_value_if_fail(buff != NULL && sg != NULL, false);
 
   XmlParser* parser = xml_parser_create();
+  xml_parser_set_trim_text(parser, FALSE);
   xml_parser_set_builder(parser, builder_init(b, sg));
   xml_parser_parse(parser, buff, strlen(buff));
 
@@ -109,31 +136,41 @@ bool xml_buff_to_str_gen(const char* buff, StrGen* sg) {
   return true;
 }
 
-static uint8_t output_buff[1024 * 1024];
-
-bool xml_to_str_gen(const char* input_file, const char* output_dir, bool bin) {
+bool xml_to_str_gen(const char* input_file, const char* output_dir, const char* theme,
+                    const char* name, bool bin) {
   StrGen sg;
-  uint8_t* p = NULL;
   char path[MAX_PATH + 1];
+  char var_name[MAX_PATH + 1];
 
   return_value_if_fail(input_file != NULL && output_dir != NULL, false);
   return_value_if_fail(xml_to_str_gen(input_file, &sg) == true, false);
 
   memset(path, 0x00, sizeof(path));
+
   vector<string> languages = sg.GetLanguages();
   for (size_t i = 0; i < languages.size(); i++) {
+    wbuffer_t wbuffer;
+    wbuffer_init_extendable(&wbuffer);
     string iter = languages[i];
-    p = sg.Output(iter, output_buff, sizeof(output_buff));
-    uint32_t size = p - output_buff;
-
-    if (bin) {
-      snprintf(path, MAX_PATH, "%s/%s.bin", output_dir, iter.c_str());
-      file_write(path, output_buff, size);
+    uint32_t size = sg.Output(iter, &wbuffer);
+    if (size > 0) {
+      if (bin) {
+        snprintf(path, MAX_PATH, "%s/%s.bin", output_dir, iter.c_str());
+        file_write(path, wbuffer.data, size);
+      } else {
+        snprintf(path, MAX_PATH, "%s/%s.data", output_dir, iter.c_str());
+        if (name == NULL || !*name) {
+          snprintf(var_name, MAX_PATH, "%s", iter.c_str());
+        } else {
+          snprintf(var_name, MAX_PATH, "%s/%s", name, iter.c_str());
+        }
+        output_res_c_source_ex(path, theme, ASSET_TYPE_STRINGS, 0, wbuffer.data, size, var_name);
+      }
+      log_debug("write %s\n", path);
     } else {
-      snprintf(path, MAX_PATH, "%s/%s.data", output_dir, iter.c_str());
-      output_res_c_source(path, ASSET_TYPE_STRINGS, 0, output_buff, size);
+      log_debug("language  %s Sentences is NULL.\n", iter.c_str());
     }
-    log_debug("write %s\n", path);
+    wbuffer_deinit(&wbuffer);
   }
 
   return true;

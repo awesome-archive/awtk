@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   system_info.h
  * Author: AWTK Develop Team
  * Brief:  system info
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -47,33 +47,75 @@ static bool_t app_root_is_valid(const char* app_root) {
   return path_exist(res_root);
 }
 
-static ret_t system_info_set_app_root(system_info_t* info, const char* app_root) {
+ret_t system_info_set_app_root(system_info_t* info, const char* app_root) {
   if (app_root != NULL) {
-    info->app_root = tk_strdup(app_root);
+    info->app_root = tk_str_copy(info->app_root, app_root);
     log_debug("app_root=%s\n", app_root);
   }
 
   return RET_OK;
 }
 
-static ret_t system_info_normalize_app_root_try_path(system_info_t* info, char* path) {
+static ret_t system_info_normalize_app_root_try_default(system_info_t* info,
+                                                        const char* app_root_default) {
+  if (app_root_default == NULL) {
+    app_root_default = "./";
+  }
+
+  if (app_root_is_valid(app_root_default)) {
+    return system_info_set_app_root(info, app_root_default);
+  } else if (!path_is_abs(app_root_default)) {
+    char path[MAX_PATH + 1] = {0};
+
+    if (path_exe(path) == RET_OK) {
+      char app_root[MAX_PATH + 1] = {0};
+      char* last = NULL;
+
+      last = strrchr(path, TK_PATH_SEP);
+      if (last != NULL) {
+        *last = '\0';
+      }
+
+      path_build(app_root, MAX_PATH, path, app_root_default, NULL);
+      if (app_root_is_valid(app_root)) {
+        return system_info_set_app_root(info, app_root);
+      }
+    }
+
+    return RET_FAIL;
+  }
+
+  return RET_FAIL;
+}
+
+static ret_t system_info_normalize_app_root_try_path(system_info_t* info, char* path,
+                                                     bool_t ignore_bin) {
   char* last = NULL;
   char app_root[MAX_PATH + 1] = {0};
 
   log_debug("try %s\n", path);
-  last = strrchr(path, TK_PATH_SEP);
-  if (last != NULL) {
-    if (tk_str_eq(last + 1, "bin")) {
-      *last = '\0';
+  if (!ignore_bin) {
+    last = strrchr(path, TK_PATH_SEP);
+    if (last != NULL) {
+      if (tk_str_eq(last + 1, "bin")) {
+        *last = '\0';
+      }
     }
   }
 
   if (!app_root_is_valid(path)) {
-    path_build(app_root, MAX_PATH, path, "demos", NULL);
+    path_build(app_root, MAX_PATH, path, "res", NULL);
+    log_debug("try set app_root:%s\n", app_root);
     if (app_root_is_valid(app_root)) {
       return system_info_set_app_root(info, app_root);
     } else {
-      return RET_FAIL;
+      path_build(app_root, MAX_PATH, path, "demos", NULL);
+      log_debug("try set app_root:%s\n", app_root);
+      if (app_root_is_valid(app_root)) {
+        return system_info_set_app_root(info, app_root);
+      } else {
+        return RET_FAIL;
+      }
     }
   } else {
     return system_info_set_app_root(info, path);
@@ -84,7 +126,7 @@ static ret_t system_info_normalize_app_root_try_cwd(system_info_t* info) {
   char path[MAX_PATH + 1] = {0};
   return_value_if_fail(path_cwd(path) == RET_OK, RET_FAIL);
 
-  return system_info_normalize_app_root_try_path(info, path);
+  return system_info_normalize_app_root_try_path(info, path, FALSE);
 }
 
 static ret_t system_info_normalize_app_root_try_exe(system_info_t* info) {
@@ -97,16 +139,33 @@ static ret_t system_info_normalize_app_root_try_exe(system_info_t* info) {
     *last = '\0';
   }
 
-  return system_info_normalize_app_root_try_path(info, path);
+  return system_info_normalize_app_root_try_path(info, path, FALSE);
+}
+
+static ret_t system_info_normalize_app_root_try_parent_dir(system_info_t* info) {
+  char* last = NULL;
+  char path[MAX_PATH + 1] = {0};
+  return_value_if_fail(path_cwd(path) == RET_OK, RET_FAIL);
+
+  last = strrchr(path, TK_PATH_SEP);
+  if (last != NULL) {
+    *last = '\0';
+  }
+
+  return system_info_normalize_app_root_try_path(info, path, TRUE);
 }
 
 static ret_t system_info_normalize_app_root(system_info_t* info, const char* app_root_default) {
-  if (app_root_is_valid(app_root_default)) {
-    return system_info_set_app_root(info, app_root_default);
+  if (system_info_normalize_app_root_try_default(info, app_root_default) == RET_OK) {
+    return RET_OK;
   } else if (system_info_normalize_app_root_try_cwd(info) == RET_OK) {
     return RET_OK;
   } else if (system_info_normalize_app_root_try_exe(info) == RET_OK) {
     return RET_OK;
+  } else if (system_info_normalize_app_root_try_parent_dir(info) == RET_OK) {
+    return RET_OK;
+  } else {
+    system_info_set_app_root(info, "");
   }
 
   log_debug("Not found valid assets folder!\n");
@@ -114,8 +173,14 @@ static ret_t system_info_normalize_app_root(system_info_t* info, const char* app
   return RET_FAIL;
 }
 #else
+ret_t system_info_set_app_root(system_info_t* info, const char* app_root) {
+  info->app_root = tk_str_copy(info->app_root, app_root);
+
+  return RET_OK;
+}
+
 static ret_t system_info_normalize_app_root(system_info_t* info, const char* app_root_default) {
-  info->app_root = tk_strdup(app_root_default);
+  info->app_root = tk_str_copy(info->app_root, app_root_default);
 
   return RET_OK;
 }
@@ -127,7 +192,7 @@ ret_t system_info_set_app_info(system_info_t* info, app_type_t app_type, const c
 
   info->app_type = app_type;
   system_info_normalize_app_root(info, app_root);
-  info->app_name = app_name ? app_name : "AWTK Simulator";
+  system_info_set_app_name(info, app_name);
 
   return RET_OK;
 }
@@ -155,13 +220,13 @@ ret_t system_info_init(app_type_t app_type, const char* app_name, const char* ap
 ret_t system_info_deinit(void) {
   return_value_if_fail(s_system_info != NULL, RET_BAD_PARAMS);
 
-  object_unref(OBJECT(s_system_info));
+  tk_object_unref(TK_OBJECT(s_system_info));
   s_system_info = NULL;
 
   return RET_OK;
 }
 
-static ret_t system_info_get_prop(object_t* obj, const char* name, value_t* v) {
+static ret_t system_info_get_prop(tk_object_t* obj, const char* name, value_t* v) {
   system_info_t* info = SYSTEM_INFO(obj);
 
   if (tk_str_eq(name, SYSTEM_INFO_PROP_LCD_W)) {
@@ -201,11 +266,13 @@ static ret_t system_info_get_prop(object_t* obj, const char* name, value_t* v) {
   return RET_OK;
 }
 
-static ret_t system_info_on_destroy(object_t* obj) {
+static ret_t system_info_on_destroy(tk_object_t* obj) {
   system_info_t* info = SYSTEM_INFO(obj);
   return_value_if_fail(info != NULL, RET_FAIL);
 
   TKMEM_FREE(info->app_root);
+  TKMEM_FREE(info->app_name);
+  TKMEM_FREE(info->default_font);
 
   return RET_OK;
 }
@@ -217,12 +284,13 @@ static const object_vtable_t s_system_info_vtable = {.type = "system_info",
                                                      .on_destroy = system_info_on_destroy};
 
 system_info_t* system_info_create(app_type_t app_type, const char* app_name, const char* app_root) {
-  object_t* obj = object_create(&s_system_info_vtable);
+  tk_object_t* obj = tk_object_create(&s_system_info_vtable);
   system_info_t* info = SYSTEM_INFO(obj);
   return_value_if_fail(info != NULL, NULL);
 
   info->font_scale = 1;
   info->device_pixel_ratio = 1;
+  info->keyboard_type = KEYBOARD_NORMAL;
   system_info_set_app_info(info, app_type, app_name, app_root);
 
   return info;
@@ -268,6 +336,19 @@ ret_t system_info_set_lcd_orientation(system_info_t* info, lcd_orientation_t lcd
   return RET_OK;
 }
 
+ret_t system_info_set_keyboard_type(system_info_t* info, keyboard_type_t keyboard_type) {
+  return_value_if_fail(info != NULL, RET_BAD_PARAMS);
+
+#ifndef WITH_STATE_ACTIVATED
+  return_value_if_fail(keyboard_type != KEYBOARD_3KEYS && keyboard_type != KEYBOARD_5KEYS,
+                       RET_FAIL);
+#endif
+
+  info->keyboard_type = keyboard_type;
+
+  return RET_OK;
+}
+
 ret_t system_info_set_device_pixel_ratio(system_info_t* info, float_t device_pixel_ratio) {
   return_value_if_fail(info != NULL, RET_BAD_PARAMS);
 
@@ -278,13 +359,19 @@ ret_t system_info_set_device_pixel_ratio(system_info_t* info, float_t device_pix
 
 static ret_t system_info_eval_one(system_info_t* info, str_t* str, const char* expr,
                                   tk_visit_t on_expr_result, void* ctx) {
-  if (strchr(expr, '$') != NULL) {
+  bool_t not_schema = strstr(expr, STR_SCHEMA_FILE) == NULL &&
+                      strstr(expr, STR_SCHEMA_HTTP) == NULL &&
+                      strstr(expr, STR_SCHEMA_HTTPS) == NULL;
+
+  if (not_schema && strchr(expr, '$') != NULL) {
     str_set(str, "");
-    ENSURE(str_expand_vars(str, expr, OBJECT(info)) == RET_OK);
-  } else {
-    ENSURE(str_set(str, expr) == RET_OK);
+
+    if (str_expand_vars(str, expr, TK_OBJECT(info)) == RET_OK) {
+      return on_expr_result(ctx, str->str);
+    }
   }
 
+  ENSURE(str_set(str, expr) == RET_OK);
   return on_expr_result(ctx, str->str);
 }
 
@@ -324,10 +411,18 @@ done:
   return ret;
 }
 
+ret_t system_info_set_app_name(system_info_t* info, const char* app_name) {
+  return_value_if_fail(info != NULL, RET_BAD_PARAMS);
+
+  info->app_name = tk_str_copy(info->app_name, app_name);
+
+  return RET_OK;
+}
+
 ret_t system_info_set_default_font(system_info_t* info, const char* default_font) {
   return_value_if_fail(info != NULL && default_font != NULL, RET_BAD_PARAMS);
 
-  info->default_font = default_font;
+  info->default_font = tk_str_copy(info->default_font, default_font);
 
   return RET_OK;
 }
@@ -337,3 +432,19 @@ const char* system_info_fix_font_name(const char* name) {
 
   return (name && *name) ? name : system_info()->default_font;
 }
+
+bool_t tk_is_swap_size_by_orientation(lcd_orientation_t old_orientation,
+                                      lcd_orientation_t new_orientation) {
+  if (old_orientation == LCD_ORIENTATION_0 || old_orientation == LCD_ORIENTATION_180) {
+    if (new_orientation == LCD_ORIENTATION_90 || new_orientation == LCD_ORIENTATION_270) {
+      return TRUE;
+    }
+  } else {
+    if (new_orientation == LCD_ORIENTATION_0 || new_orientation == LCD_ORIENTATION_180) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+#include "lcd_orientation_helper.inc"

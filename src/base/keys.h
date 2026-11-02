@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  key code constants
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,11 +21,29 @@
 
 #ifndef TK_KEYS_H
 #define TK_KEYS_H
+#include "base/types_def.h"
+#include "base/enums.h"
 
 #ifdef WITH_SDL
+#ifdef AWTK_SDL3
+#include <SDL3/SDL.h>
+/* SDL2-only scancodes with no SDL_oldnames.h alias in SDL3 */
+#define SDL_SCANCODE_WWW SDL_SCANCODE_AC_HOME
+#define SDL_SCANCODE_MAIL SDL_SCANCODE_AC_SEARCH
+#define SDL_SCANCODE_CALCULATOR SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_COMPUTER SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_BRIGHTNESSDOWN SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_BRIGHTNESSUP SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_DISPLAYSWITCH SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_KBDILLUMTOGGLE SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_KBDILLUMDOWN SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_KBDILLUMUP SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_APP1 SDL_SCANCODE_UNKNOWN
+#define SDL_SCANCODE_APP2 SDL_SCANCODE_UNKNOWN
+#else
 #include <SDL_keycode.h>
 #endif
-#include "base/types_def.h"
+#endif
 
 BEGIN_C_DECLS
 
@@ -533,7 +551,7 @@ typedef enum _key_code_t {
    * TK_KEY_RIGHTBRACE
    */
   TK_KEY_RIGHTBRACE = ')',
-#ifdef SDL2
+#ifdef WITH_SDL
   TK_KEY_CAPSLOCK = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_CAPSLOCK),
 
   TK_KEY_F1 = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_F1),
@@ -683,12 +701,21 @@ typedef enum _key_code_t {
 
   TK_KEY_MODE = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MODE),
 
+#ifdef AWTK_SDL3
+  TK_KEY_AUDIONEXT = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MEDIA_NEXT_TRACK),
+  TK_KEY_AUDIOPREV = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MEDIA_PREVIOUS_TRACK),
+  TK_KEY_AUDIOSTOP = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MEDIA_STOP),
+  TK_KEY_AUDIOPLAY = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MEDIA_PLAY),
+  TK_KEY_AUDIOMUTE = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MUTE),
+  TK_KEY_MEDIASELECT = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MEDIA_SELECT),
+#else
   TK_KEY_AUDIONEXT = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_AUDIONEXT),
   TK_KEY_AUDIOPREV = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_AUDIOPREV),
   TK_KEY_AUDIOSTOP = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_AUDIOSTOP),
   TK_KEY_AUDIOPLAY = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_AUDIOPLAY),
   TK_KEY_AUDIOMUTE = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_AUDIOMUTE),
   TK_KEY_MEDIASELECT = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MEDIASELECT),
+#endif
   TK_KEY_WWW = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_WWW),
   TK_KEY_MAIL = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MAIL),
   TK_KEY_CALCULATOR = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_CALCULATOR),
@@ -707,45 +734,392 @@ typedef enum _key_code_t {
   TK_KEY_KBDILLUMTOGGLE = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_KBDILLUMTOGGLE),
   TK_KEY_KBDILLUMDOWN = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_KBDILLUMDOWN),
   TK_KEY_KBDILLUMUP = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_KBDILLUMUP),
+#ifdef AWTK_SDL3
+  TK_KEY_EJECT = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_MEDIA_EJECT),
+#else
   TK_KEY_EJECT = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_EJECT),
+#endif
   TK_KEY_SLEEP = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_SLEEP),
   TK_KEY_APP1 = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_APP1),
   TK_KEY_APP2 = SDL_SCANCODE_TO_KEYCODE(SDL_SCANCODE_APP2),
-  TK_KEY_COMMAND = TK_KEY_RGUI,
-#else
-  TK_KEY_LSHIFT = 0x20 + 127,
-  TK_KEY_RSHIFT = 0x20 + 128,
-  TK_KEY_LCTRL = 0x20 + 129,
-  TK_KEY_RCTRL = 0x20 + 130,
-  TK_KEY_LALT = 0x20 + 131,
-  TK_KEY_RALT = 0x20 + 132,
-  TK_KEY_CAPSLOCK = 0x20 + 133,
-  TK_KEY_HOME = 0x20 + 134,
-  TK_KEY_END = 0x20 + 135,
-  TK_KEY_INSERT = 0x20 + 137,
-  TK_KEY_UP = 0x20 + 138,
-  TK_KEY_DOWN = 0x20 + 139,
-  TK_KEY_LEFT = 0x20 + 140,
-  TK_KEY_RIGHT = 0x20 + 141,
-  TK_KEY_PAGEUP = 0x20 + 142,
-  TK_KEY_PAGEDOWN = 0x20 + 143,
-  TK_KEY_F1 = 0x20 + 151,
-  TK_KEY_F2 = 0x20 + 152,
-  TK_KEY_F3 = 0x20 + 153,
-  TK_KEY_F4 = 0x20 + 154,
-  TK_KEY_F5 = 0x20 + 155,
-  TK_KEY_F6 = 0x20 + 156,
-  TK_KEY_F7 = 0x20 + 157,
-  TK_KEY_F8 = 0x20 + 158,
-  TK_KEY_F9 = 0x20 + 159,
-  TK_KEY_F10 = 0x20 + 160,
-  TK_KEY_F11 = 0x20 + 161,
-  TK_KEY_F12 = 0x20 + 162,
+  TK_KEY_COMMAND = TK_KEY_LGUI,
+  TK_KEY_LCOMMAND = TK_KEY_LGUI,
+  TK_KEY_RCOMMAND = TK_KEY_RGUI,
+  TK_KEY_BACK = TK_KEY_AC_BACK,
+#elif defined(AWTK_WEB)
+  TK_KEY_LSHIFT = 16,
+  TK_KEY_RSHIFT = 16,
+  TK_KEY_LCTRL = 17,
+  TK_KEY_RCTRL = 17,
+  TK_KEY_LALT = 18,
+  TK_KEY_RALT = 18,
+  TK_KEY_CAPSLOCK = 20,
+  TK_KEY_HOME = 36,
+  TK_KEY_END = 35,
+  TK_KEY_INSERT = 45,
+  TK_KEY_UP = 38,
+  TK_KEY_DOWN = 40,
+  TK_KEY_LEFT = 37,
+  TK_KEY_RIGHT = 39,
+  TK_KEY_PAGEUP = 33,
+  TK_KEY_PAGEDOWN = 34,
+  TK_KEY_F1 = 112,
+  TK_KEY_F2 = 113,
+  TK_KEY_F3 = 114,
+  TK_KEY_F4 = 115,
+  TK_KEY_F5 = 116,
+  TK_KEY_F6 = 117,
+  TK_KEY_F7 = 118,
+  TK_KEY_F8 = 119,
+  TK_KEY_F9 = 120,
+  TK_KEY_F10 = 121,
+  TK_KEY_F11 = 122,
+  TK_KEY_F12 = 123,
   TK_KEY_MENU = 0x20 + 163,
+  TK_KEY_COMMAND = 91,
+  TK_KEY_LCOMMAND = 91,
+  TK_KEY_RCOMMAND = 91,
+  TK_KEY_BACK = 0x20 + 166,
+  TK_KEY_CANCEL = 0x20 + 167,
+  TK_KEY_KP_DIVIDE = 111,
+  TK_KEY_KP_MULTIPLY = 106,
+  TK_KEY_KP_MINUS = 109,
+  TK_KEY_KP_PLUS = 107,
+  TK_KEY_KP_ENTER = 13,
+  TK_KEY_KP_1 = 97,
+  TK_KEY_KP_2 = 98,
+  TK_KEY_KP_3 = 99,
+  TK_KEY_KP_4 = 100,
+  TK_KEY_KP_5 = 101,
+  TK_KEY_KP_6 = 102,
+  TK_KEY_KP_7 = 103,
+  TK_KEY_KP_8 = 104,
+  TK_KEY_KP_9 = 105,
+  TK_KEY_KP_0 = 96,
+  TK_KEY_KP_PERIOD = 110,
+  TK_KEY_NUMLOCKCLEAR = 12,
+#else
+  /**
+   * @const TK_KEY_LSHIFT
+   * TK_KEY_LSHIFT
+   */
+  TK_KEY_LSHIFT = 0x20 + 127,
+  /**
+   * @const TK_KEY_RSHIFT
+   * TK_KEY_RSHIFT
+   */
+  TK_KEY_RSHIFT = 0x20 + 128,
+  /**
+   * @const TK_KEY_LCTRL
+   * TK_KEY_LCTRL
+   */
+  TK_KEY_LCTRL = 0x20 + 129,
+  /**
+   * @const TK_KEY_RCTRL
+   * TK_KEY_RCTRL
+   */
+  TK_KEY_RCTRL = 0x20 + 130,
+  /**
+   * @const TK_KEY_LALT
+   * TK_KEY_LALT
+   */
+  TK_KEY_LALT = 0x20 + 131,
+  /**
+   * @const TK_KEY_RALT
+   * TK_KEY_RALT
+   */
+  TK_KEY_RALT = 0x20 + 132,
+  /**
+   * @const TK_KEY_CAPSLOCK
+   * TK_KEY_CAPSLOCK
+   */
+  TK_KEY_CAPSLOCK = 0x20 + 133,
+  /**
+   * @const TK_KEY_HOME
+   * TK_KEY_HOME
+   */
+  TK_KEY_HOME = 0x20 + 134,
+  /**
+   * @const TK_KEY_END
+   * TK_KEY_END
+   */
+  TK_KEY_END = 0x20 + 135,
+  /**
+   * @const TK_KEY_INSERT
+   * TK_KEY_INSERT
+   */
+  TK_KEY_INSERT = 0x20 + 137,
+  /**
+   * @const TK_KEY_UP
+   * TK_KEY_UP
+   */
+  TK_KEY_UP = 0x20 + 138,
+  /**
+   * @const TK_KEY_DOWN
+   * TK_KEY_DOWN
+   */
+  TK_KEY_DOWN = 0x20 + 139,
+  /**
+   * @const TK_KEY_LEFT
+   * TK_KEY_LEFT
+   */
+  TK_KEY_LEFT = 0x20 + 140,
+  /**
+   * @const TK_KEY_RIGHT
+   * TK_KEY_RIGHT
+   */
+  TK_KEY_RIGHT = 0x20 + 141,
+  /**
+   * @const TK_KEY_PAGEUP
+   * TK_KEY_PAGEUP
+   */
+  TK_KEY_PAGEUP = 0x20 + 142,
+  /**
+   * @const TK_KEY_PAGEDOWN
+   * TK_KEY_PAGEDOWN
+   */
+  TK_KEY_PAGEDOWN = 0x20 + 143,
+  /**
+   * @const TK_KEY_F1
+   * TK_KEY_F1
+   */
+  TK_KEY_F1 = 0x20 + 151,
+  /**
+   * @const TK_KEY_F2
+   * TK_KEY_F2
+   */
+  TK_KEY_F2 = 0x20 + 152,
+  /**
+   * @const TK_KEY_F3
+   * TK_KEY_F3
+   */
+  TK_KEY_F3 = 0x20 + 153,
+  /**
+   * @const TK_KEY_F4
+   * TK_KEY_F4
+   */
+  TK_KEY_F4 = 0x20 + 154,
+  /**
+   * @const TK_KEY_F5
+   * TK_KEY_F5
+   */
+  TK_KEY_F5 = 0x20 + 155,
+  /**
+   * @const TK_KEY_F6
+   * TK_KEY_F6
+   */
+  TK_KEY_F6 = 0x20 + 156,
+  /**
+   * @const TK_KEY_F7
+   * TK_KEY_F7
+   */
+  TK_KEY_F7 = 0x20 + 157,
+  /**
+   * @const TK_KEY_F8
+   * TK_KEY_F8
+   */
+  TK_KEY_F8 = 0x20 + 158,
+  /**
+   * @const TK_KEY_F9
+   * TK_KEY_F9
+   */
+  TK_KEY_F9 = 0x20 + 159,
+  /**
+   * @const TK_KEY_F10
+   * TK_KEY_F10
+   */
+  TK_KEY_F10 = 0x20 + 160,
+  /**
+   * @const TK_KEY_F11
+   * TK_KEY_F11
+   */
+  TK_KEY_F11 = 0x20 + 161,
+  /**
+   * @const TK_KEY_F12
+   * TK_KEY_F12
+   */
+  TK_KEY_F12 = 0x20 + 162,
+  /**
+   * @const TK_KEY_MENU
+   * TK_KEY_MENU
+   */
+  TK_KEY_MENU = 0x20 + 163,
+  /**
+   * @const TK_KEY_COMMAND
+   * TK_KEY_COMMAND
+   */
   TK_KEY_COMMAND = 0x20 + 164,
+  TK_KEY_LCOMMAND = 0x20 + 164,
+  TK_KEY_RCOMMAND = 0x20 + 165,
+  /**
+   * @const TK_KEY_BACK
+   * TK_KEY_BACK
+   */
+  TK_KEY_BACK = 0x20 + 166,
+  /**
+   * @const TK_KEY_CANCEL
+   * TK_KEY_CANCEL
+   */
+  TK_KEY_CANCEL = 0x20 + 167,
+  /**
+   * @const TK_KEY_KP_DIVIDE
+   * TK_KEY_KP_DIVIDE
+   */
+  TK_KEY_KP_DIVIDE = 0x20 + 169,
+  /**
+   * @const TK_KEY_KP_MULTIPLY
+   * TK_KEY_KP_MULTIPLY
+   */
+  TK_KEY_KP_MULTIPLY = 0x20 + 170,
+  /**
+   * @const TK_KEY_KP_MINUS
+   * TK_KEY_KP_MINUS
+   */
+  TK_KEY_KP_MINUS = 0x20 + 171,
+  /**
+   * @const TK_KEY_KP_PLUS
+   * TK_KEY_KP_PLUS
+   */
+  TK_KEY_KP_PLUS = 0x20 + 172,
+  /**
+   * @const TK_KEY_KP_ENTER
+   * TK_KEY_KP_ENTER
+   */
+  TK_KEY_KP_ENTER = 0x20 + 173,
+  /**
+   * @const TK_KEY_KP_1
+   * TK_KEY_KP_1
+   */
+  TK_KEY_KP_1 = 0x20 + 174,
+  /**
+   * @const TK_KEY_KP_2
+   * TK_KEY_KP_2
+   */
+  TK_KEY_KP_2 = 0x20 + 175,
+  /**
+   * @const TK_KEY_KP_3
+   * TK_KEY_KP_3
+   */
+  TK_KEY_KP_3 = 0x20 + 176,
+  /**
+   * @const TK_KEY_KP_4
+   * TK_KEY_KP_4
+   */
+  TK_KEY_KP_4 = 0x20 + 177,
+  /**
+   * @const TK_KEY_KP_5
+   * TK_KEY_KP_5
+   */
+  TK_KEY_KP_5 = 0x20 + 178,
+  /**
+   * @const TK_KEY_KP_6
+   * TK_KEY_KP_6
+   */
+  TK_KEY_KP_6 = 0x20 + 179,
+  /**
+   * @const TK_KEY_KP_7
+   * TK_KEY_KP_7
+   */
+  TK_KEY_KP_7 = 0x20 + 180,
+  /**
+   * @const TK_KEY_KP_8
+   * TK_KEY_KP_8
+   */
+  TK_KEY_KP_8 = 0x20 + 181,
+  /**
+   * @const TK_KEY_KP_9
+   * TK_KEY_KP_9
+   */
+  TK_KEY_KP_9 = 0x20 + 182,
+  /**
+   * @const TK_KEY_KP_0
+   * TK_KEY_KP_0
+   */
+  TK_KEY_KP_0 = 0x20 + 183,
+  /**
+   * @const TK_KEY_KP_PERIOD
+   * TK_KEY_KP_PERIOD
+   */
+  TK_KEY_KP_PERIOD = 0x20 + 184,
+  /**
+   * @const TK_KEY_NUMLOCKCLEAR
+   * TK_KEY_NUMLOCKCLEAR
+   */
+  TK_KEY_NUMLOCKCLEAR = 0x20 + 185,
 #endif
-
+  /**
+   * @const TK_KEY_WHEEL
+   * TK_KEY_WHEEL
+   */
+  TK_KEY_WHEEL = 0x20 + 168,
 } key_code_t;
+
+#ifndef TK_KEY_CLOSE_INPUT_METHOD
+#define TK_KEY_CLOSE_INPUT_METHOD TK_KEY_F7
+#endif /*TK_KEY_CLOSE_INPUT_METHOD*/
+
+#ifndef TK_KEY_OPEN_INPUT_METHOD
+#define TK_KEY_OPEN_INPUT_METHOD TK_KEY_F8
+#endif /*TK_KEY_OPEN_INPUT_METHOD*/
+
+#ifndef TK_KEY_TOGGLE_INPUT_METHOD
+#define TK_KEY_TOGGLE_INPUT_METHOD TK_KEY_F9
+#endif /*TK_KEY_TOGGLE_INPUT_METHOD*/
+
+static inline bool_t key_code_is_enter(int key) {
+  if (keys_type_have_custom_keys()) {
+    const key_type_value_t* key_value = keys_type_find_by_value((uint32_t)key);
+    return_value_if_fail(key_value != NULL, FALSE);
+
+    return tk_str_eq("RETURN", key_value->name) || tk_str_eq("ENTER", key_value->name);
+  } else {
+    return (TK_KEY_RETURN == key || TK_KEY_KP_ENTER == key);
+  }
+}
+
+static inline bool_t key_code_is_up(int key) {
+  if (keys_type_have_custom_keys()) {
+    const key_type_value_t* key_value = keys_type_find_by_value((uint32_t)key);
+    return_value_if_fail(key_value != NULL, FALSE);
+
+    return tk_str_eq("UP", key_value->name);
+  } else {
+    return TK_KEY_UP == key;
+  }
+}
+
+static inline bool_t key_code_is_left(int key) {
+  if (keys_type_have_custom_keys()) {
+    const key_type_value_t* key_value = keys_type_find_by_value((uint32_t)key);
+    return_value_if_fail(key_value != NULL, FALSE);
+
+    return tk_str_eq("LEFT", key_value->name);
+  } else {
+    return TK_KEY_LEFT == key;
+  }
+}
+
+static inline bool_t key_code_is_down(int key) {
+  if (keys_type_have_custom_keys()) {
+    const key_type_value_t* key_value = keys_type_find_by_value((uint32_t)key);
+    return_value_if_fail(key_value != NULL, FALSE);
+
+    return tk_str_eq("DOWN", key_value->name);
+  } else {
+    return TK_KEY_DOWN == key;
+  }
+}
+
+static inline bool_t key_code_is_right(int key) {
+  if (keys_type_have_custom_keys()) {
+    const key_type_value_t* key_value = keys_type_find_by_value((uint32_t)key);
+    return_value_if_fail(key_value != NULL, FALSE);
+
+    return tk_str_eq("RIGHT", key_value->name);
+  } else {
+    return TK_KEY_RIGHT == key;
+  }
+}
 
 END_C_DECLS
 

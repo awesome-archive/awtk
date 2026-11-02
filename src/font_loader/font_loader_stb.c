@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   font_stb.h
  * Author: AWTK Develop Team
  * Brief:  stb truetype font loader
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -16,13 +16,17 @@
  * History:
  * ================================================================
  * 2018-01-21 Li XianJing <xianjimli@hotmail.com> created
+ * 2021-03-22 Li YuXin <liuyuxin@zlg.cn> improve mono
  *
  */
 
 #include "tkc/utils.h"
+#include "base/bidi.h"
 #include "base/types_def.h"
+#include "font_loader/font_loader_stb.h"
 
-#ifdef WITH_STB_FONT
+#if defined(WITH_STB_FONT) && !defined(WITH_HARFBUZZ_DATA_TEXT_SHAPING) && \
+    !defined(WITH_HARFBUZZ_TEXT_SHAPING)
 
 #define STB_TRUETYPE_IMPLEMENTATION
 
@@ -33,7 +37,6 @@
 
 #include "base/glyph_cache.h"
 #include "stb/stb_truetype.h"
-#include "font_loader/font_loader_stb.h"
 
 typedef struct _font_stb_t {
   font_t base;
@@ -41,59 +44,181 @@ typedef struct _font_stb_t {
   glyph_cache_t cache;
   int ascent;
   int descent;
-  int lineGap;
-
+  int line_gap;
+  bool_t mono;
 } font_stb_t;
+
+static ret_t font_stb_gray_to_mono_by_threshold(const glyph_t* gray, glyph_t* mono,
+                                                uint32_t threshold) {
+  return_value_if_fail(gray != NULL && mono != NULL && gray->format == GLYPH_FMT_ALPHA,
+                       RET_BAD_PARAMS);
+  uint32_t i = 0;
+  uint32_t j = 0;
+  uint16_t h = gray->h;
+  uint16_t w = gray->w;
+
+  mono->format = GLYPH_FMT_MONO;
+  mono->h = h;
+  mono->w = w;
+  mono->pitch = ((mono->w + 15) >> 4) << 1;
+  mono->x = gray->x;
+  mono->y = gray->y;
+  mono->advance = gray->advance;
+
+  uint32_t nmemb = mono->pitch * h;
+  uint8_t* bitmap = TKMEM_CALLOC(nmemb, sizeof(uint8_t));
+  return_value_if_fail(bitmap != NULL, RET_OOM);
+  for (j = 0; j < h; ++j) {
+    for (i = 0; i < w; ++i) {
+      if (gray->data[w * j + i] > threshold) {
+        uint32_t offset = j * mono->pitch + (i >> 3);
+        uint32_t offset_bit = 7 - (i % 8);
+        bitmap[offset] += 0x1 << offset_bit;
+      }
+    }
+  }
+  mono->data = bitmap;
+  return RET_OK;
+}
 
 static bool_t font_stb_match(font_t* f, const char* name, font_size_t font_size) {
   (void)font_size;
   return (name == NULL || strcmp(name, f->name) == 0);
 }
 
-static int32_t font_stb_get_baseline(font_t* f, font_size_t font_size) {
+static font_vmetrics_t font_stb_get_vmetrics(font_t* f, font_size_t font_size) {
+  int ascender = 0;
+  int descender = 0;
+  float scale = 0.0f;
   font_stb_t* font = (font_stb_t*)f;
-  stbtt_fontinfo* sf = &(font->stb_font);
-  float scale = stbtt_ScaleForPixelHeight(sf, font_size);
+  const stbtt_fontinfo* sf = &(font->stb_font);
+  font_vmetrics_t vmetrics = {font_size, 0, 0, 0, 0, 0};
 
-  return scale * font->ascent;
+  return_value_if_fail(sf != NULL, vmetrics);
+  scale = stbtt_ScaleForPixelHeight(sf, font_size);
+  if (scale == INFINITY) {
+    scale = stbtt_ScaleForMappingEmToPixels(sf, font_size);
+  }
+  vmetrics.ascent = tk_roundi(scale * font->ascent);
+  vmetrics.descent = tk_roundi(scale * font->descent);
+  vmetrics.line_gap = scale * font->line_gap;
+
+  stbtt_GetFontVMetrics(sf, &ascender, &descender, NULL);
+  vmetrics.font_ascender = ascender;
+  vmetrics.font_descender = descender;
+  vmetrics.units_per_em = ttUSHORT(sf->data + sf->head + 18);
+
+  return vmetrics;
 }
 
-static ret_t font_stb_get_glyph(font_t* f, wchar_t c, font_size_t font_size, glyph_t* g) {
+static glyph_t* font_stb_get_glyph_impl(font_t* f, wchar_t c, font_size_t font_size, glyph_t* g) {
   int x = 0;
   int y = 0;
   int w = 0;
   int h = 0;
   int lsb = 0;
   int advance = 0;
+  glyph_t* gg = NULL;
+  uint8_t* bitmap = NULL;
   font_stb_t* font = (font_stb_t*)f;
   stbtt_fontinfo* sf = &(font->stb_font);
+  /* 计算公式：scale = font_size / (ascent - descent) */
   float scale = stbtt_ScaleForPixelHeight(sf, font_size);
 
-  if (glyph_cache_lookup(&(font->cache), c, font_size, g) == RET_OK) {
-    return RET_OK;
+  /* 某些字库存在ascent - descent等于0的情况，算出来的scale为无穷大inf，此时采用EM size */
+  if (scale == INFINITY) {
+    scale = stbtt_ScaleForMappingEmToPixels(sf, font_size);
   }
 
-  g->data = stbtt_GetCodepointBitmap(sf, 0, scale, c, &w, &h, &x, &y);
+  bitmap = stbtt_GetCodepointBitmap(sf, 0, scale, c, &w, &h, &x, &y);
   stbtt_GetCodepointHMetrics(sf, c, &advance, &lsb);
 
   g->x = x;
   g->y = y;
   g->w = w;
   g->h = h;
-  g->advance = advance * scale;
+  g->format = GLYPH_FMT_ALPHA;
+  g->advance = tk_roundi(advance * scale);
+  g->data = NULL;
+  g->bidi_type = FONT_BIDI_TYPE_LTR;
+  g->chr = (uint16_t)c;
+  g->glyph_index = stbtt_FindGlyphIndex(sf, c);
 
-  if (g->data != NULL) {
-    glyph_t* gg = glyph_clone(g);
-    if (gg != NULL) {
-      glyph_cache_add(&(font->cache), c, font_size, gg);
+  if (bitmap != NULL) {
+    if (font->mono) {
+      glyph_t* gray_g = glyph_clone(g);
+      gray_g->data = bitmap;
+      uint32_t threshold =
+          font_size > 24
+              ? (font_size > 48 ? (font_size > 71 ? (font_size > 95 ? 195 : 175) : 160) : 118)
+              : 95;
+      font_stb_gray_to_mono_by_threshold(gray_g, g, threshold);
+      STBTT_free(bitmap, NULL);
+      glyph_destroy(gray_g);
     } else {
+      g->data = bitmap;
+    }
+    return_value_if_fail(g->data != NULL, NULL);
+
+    gg = glyph_clone(g);
+    if (gg != NULL) {
+      if (glyph_cache_add(&(font->cache), c, font_size, gg) != RET_OK) {
+        TKMEM_FREE(gg);
+        gg = NULL;
+      }
+    }
+    if (gg == NULL) {
       STBTT_free(g->data, NULL);
       log_warn("out of memory\n");
       g->data = NULL;
     }
   }
 
-  return g->data != NULL ? RET_OK : RET_NOT_FOUND;
+  return gg;
+}
+
+static ret_t font_stb_get_glyph(font_t* f, wchar_t c, font_size_t font_size, glyph_t* g) {
+  font_stb_t* font = (font_stb_t*)f;
+  if (glyph_cache_lookup(&(font->cache), c, font_size, g) == RET_OK) {
+    return RET_OK;
+  }
+  return font_stb_get_glyph_impl(f, c, font_size, g) != NULL || c == ' ' ? RET_OK : RET_NOT_FOUND;
+}
+
+static glyphs_t* font_stb_create_glyphs(font_t* f, const wchar_t* str, uint32_t len,
+                                        font_size_t font_size, font_raster_params_t* params) {
+  bidi_t b;
+  uint32_t i = 0;
+  glyphs_t* glyphs = NULL;
+  font_stb_t* font = (font_stb_t*)f;
+  font_vmetrics_t vmetrics = font_get_vmetrics(f, font_size);
+  bidi_init(&b, FALSE, FALSE, params->bidi_type);
+  if (bidi_log2vis(&b, str, len) == RET_OK) {
+    glyphs = glyphs_create(b.vis_str, b.vis_str_size, len, FALSE, font_size, &vmetrics);
+    goto_error_if_fail(glyphs != NULL);
+    glyphs->font = f;
+    for (i = 0; i < b.vis_str_size; i++) {
+      wchar_t c = b.vis_str[i];
+      if (glyph_cache_lookup(&(font->cache), c, font_size, &glyphs->glyphs[i]) != RET_OK) {
+        if (font_stb_get_glyph_impl(f, c, font_size, &glyphs->glyphs[i]) == NULL) {
+          glyphs->glyphs[i].chr = (uint16_t)c;
+          glyphs->glyphs[i].w = 0;
+          glyphs->glyphs[i].h = 0;
+        }
+      }
+      glyphs->glyphs[i].str_count = 1;
+      glyphs->glyphs[i].glyph_count = 1;
+    }
+  }
+error:
+  bidi_deinit(&b);
+  return glyphs;
+}
+
+static ret_t font_stb_shrink_cache(font_t* f, uint32_t cache_nr) {
+  font_stb_t* font = (font_stb_t*)f;
+
+  return glyph_cache_shrink(&(font->cache), cache_nr);
 }
 
 static ret_t font_stb_destroy(font_t* f) {
@@ -115,25 +240,49 @@ static ret_t destroy_glyph(void* data) {
   return RET_OK;
 }
 
-font_t* font_stb_create(const char* name, const uint8_t* buff, uint32_t buff_size) {
+static font_t* font_stb_create_ex(const char* name, const uint8_t* buff, uint32_t buff_size,
+                                  bool_t mono) {
   font_stb_t* f = NULL;
   return_value_if_fail(buff != NULL && name != NULL, NULL);
 
   f = TKMEM_ZALLOC(font_stb_t);
   return_value_if_fail(f != NULL, NULL);
 
+  f->mono = mono;
   f->base.match = font_stb_match;
   f->base.destroy = font_stb_destroy;
   f->base.get_glyph = font_stb_get_glyph;
-  f->base.get_baseline = font_stb_get_baseline;
+  f->base.create_glyphs = font_stb_create_glyphs;
+  f->base.get_vmetrics = font_stb_get_vmetrics;
+  f->base.shrink_cache = font_stb_shrink_cache;
+  f->base.desc = mono ? "mono(stb)" : "truetype(stb)";
 
-  tk_strncpy(f->base.name, name, TK_NAME_LEN);
+  tk_strncpy(f->base.name, name, MAX_PATH);
 
   glyph_cache_init(&(f->cache), TK_GLYPH_CACHE_NR, destroy_glyph);
   stbtt_InitFont(&(f->stb_font), buff, stbtt_GetFontOffsetForIndex(buff, 0));
-  stbtt_GetFontVMetrics(&(f->stb_font), &(f->ascent), &(f->descent), &(f->lineGap));
+  stbtt_GetFontVMetrics(&(f->stb_font), &(f->ascent), &(f->descent), &(f->line_gap));
+
+  if (f->ascent == 0 && f->descent == 0) {
+    float scale = stbtt_ScaleForMappingEmToPixels(&(f->stb_font), 18);
+    f->ascent = (int)(18 / scale);
+    f->descent = 0;
+    f->line_gap = 0;
+  }
 
   return &(f->base);
+}
+
+font_t* font_stb_mono_create(const char* name, const uint8_t* buff, uint32_t size) {
+  return font_stb_create_ex(name, buff, size, TRUE);
+}
+
+font_t* font_stb_create(const char* name, const uint8_t* buff, uint32_t size) {
+#ifdef WITH_LCD_MONO
+  return font_stb_create_ex(name, buff, size, TRUE);
+#else
+  return font_stb_create_ex(name, buff, size, FALSE);
+#endif
 }
 
 static font_t* font_stb_load(font_loader_t* loader, const char* name, const uint8_t* buff,
@@ -151,4 +300,34 @@ font_loader_t* font_loader_stb(void) {
   return &loader;
 }
 
+static font_t* font_stb_load_mono(font_loader_t* loader, const char* name, const uint8_t* buff,
+                                  uint32_t buff_size) {
+  (void)loader;
+
+  return font_stb_create_ex(name, buff, buff_size, TRUE);
+}
+
+font_loader_t* font_loader_stb_mono(void) {
+  static font_loader_t loader;
+  loader.type = ASSET_TYPE_FONT_TTF;
+  loader.load = font_stb_load_mono;
+
+  return &loader;
+}
+#else
+font_loader_t* font_loader_stb(void) {
+  return NULL;
+}
+
+font_loader_t* font_loader_stb_mono(void) {
+  return NULL;
+}
+
+font_t* font_stb_mono_create(const char* name, const uint8_t* buff, uint32_t size) {
+  return NULL;
+}
+
+font_t* font_stb_create(const char* name, const uint8_t* buff, uint32_t size) {
+  return NULL;
+}
 #endif /*WITH_STB_FONT*/

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  font bitmap font loader
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -27,14 +27,23 @@
 BEGIN_C_DECLS
 
 typedef struct _font_bitmap_index_t {
+  uint32_t gid;
   uint16_t c;
-  uint16_t offset;
+  uint16_t size;
+  uint32_t offset;
 } font_bitmap_index_t;
 
 typedef struct _font_bitmap_header_t {
+  uint16_t version;
+  uint16_t format;
   uint16_t char_nr;
-  uint8_t font_size;
-  uint8_t baseline;
+  int16_t font_size;
+  int16_t ascent;
+  int16_t descent;
+  int16_t line_gap;
+  int16_t reserved;
+  int16_t font_ascender;
+  int16_t font_descender;
   font_bitmap_index_t index[1];
 } font_bitmap_header_t;
 

@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   vgcanvas_nanovg_soft.c
  * Author: AWTK Develop Team
  * Brief:  vector graphics canvas base on nanovg-soft
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,28 +21,33 @@
 
 #include "nanovg.h"
 #include "tkc/utf8.h"
+#include "tkc/wstr.h"
 #include "tkc/mem.h"
 #include "base/vgcanvas.h"
+#include "base/font.h"
 #include "base/image_manager.h"
-#include "base/assets_manager.h"
+
+#ifdef WITH_VGCANVAS
 
 #ifdef WITH_NANOVG_AGGE
 #include "agge/nanovg_agge.h"
-#elif defined(WITH_NANOVG_AGG)
-#include "agg/nanovg_agg.h"
-#endif /*WITH_NANOVG_AGGE|WITH_NANOVG_AGG*/
+#endif /*WITH_NANOVG_AGGE*/
 
 typedef struct _vgcanvas_nanovg_t {
   vgcanvas_t base;
 
+  struct _vgcanvas_nanovg_soft_text_cache_item_t* text_cache_items;
+  wstr_t tmp_wstr;
   int font_id;
   NVGcontext* vg;
   uint32_t text_align_v;
   uint32_t text_align_h;
+  font_t* awtk_font;
+  font_t* awtk_fallback_font;
+  font_size_t awtk_font_size;
 } vgcanvas_nanovg_t;
 
 #include "vgcanvas_nanovg_soft.inc"
-#include "vgcanvas_nanovg.inc"
 
 vgcanvas_t* vgcanvas_create(uint32_t w, uint32_t h, uint32_t stride, bitmap_format_t format,
                             void* data) {
@@ -55,15 +60,18 @@ vgcanvas_t* vgcanvas_create(uint32_t w, uint32_t h, uint32_t stride, bitmap_form
   nanovg->base.vt = &vt;
   nanovg->base.ratio = 1;
   nanovg->base.format = format;
+  nanovg->base.stride = stride;
   nanovg->base.buff = (uint32_t*)data;
 
-#if defined(WITH_NANOVG_AGG)
-  nanovg->vg = nvgCreateAGG(w, h, stride, f, (uint8_t*)data);
-#elif defined(WITH_NANOVG_AGGE)
+  vgcanvas_nanovg_init((vgcanvas_t*)nanovg);
+#if defined(WITH_NANOVG_AGGE)
   nanovg->vg = nvgCreateAGGE(w, h, stride, f, (uint8_t*)data);
 #else
   assert(!"not support backend");
 #endif
+  wstr_init(&nanovg->tmp_wstr, 128);
+  vgcanvas_nanovg_soft_set_asset_manager(&(nanovg->base));
 
   return &(nanovg->base);
 }
+#endif

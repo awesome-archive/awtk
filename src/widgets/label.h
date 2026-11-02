@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  label
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -46,7 +46,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[label.xml](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/label.xml)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/ui/label.xml)
  *
  * 在c代码中使用函数label\_create创建文本控件。如：
  *
@@ -70,7 +70,7 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme default](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L144)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L144)
  *
  */
 typedef struct _label_t {
@@ -79,10 +79,44 @@ typedef struct _label_t {
   /**
    * @property {int32_t} length
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 显示字符的个数(小余0时全部显示)。
+   * 显示字符的个数(小于0时全部显示)。
    * 主要用于动态改变显示字符的个数，来实现类似[拨号中...]的动画效果。
    */
   int32_t length;
+
+  /**
+   * @property {bool_t} line_wrap
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否自动换行(默认FALSE)。
+   */
+  bool_t line_wrap;
+
+  /**
+   * @property {bool_t} word_wrap
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否只允许在单词之间自动换行(默认FALSE)。
+   * > 需要开启自动换行才有效果
+   */
+  bool_t word_wrap;
+
+  /**
+   * @property {bool_t} ellipses
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否开启缩写，开启后，当文字长度操作控件长度后，自动变为... 
+   * > 和换行是冲突的，换行后，该属性不生效
+   */
+  bool_t ellipses;
+
+  /**
+   * @property {int32_t} max_w
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 当auto_adjust_size为TRUE时，用于控制控件的最大宽度，超出该宽度后才自动换行。
+   * >为0表示忽略该参数。小于0时取父控件宽度加上max_w。
+   */
+  int32_t max_w;
+
+  /*private*/
+  glyphs_t* glyphs;
 } label_t;
 
 /**
@@ -101,7 +135,7 @@ widget_t* label_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 
 /**
  * @method label_set_length
- * 设置显示字符的个数(小余0时全部显示)。。
+ * 设置显示字符的个数(小于0时全部显示)。
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
  * @param {int32_t}  length 最大可显示字符个数。
@@ -109,6 +143,50 @@ widget_t* label_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t label_set_length(widget_t* widget, int32_t length);
+
+/**
+ * @method label_set_max_w
+ * 设置max_w。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {int32_t}  max_w 最大宽度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t label_set_max_w(widget_t* widget, int32_t max_w);
+
+/**
+ * @method label_set_line_wrap
+ * 设置是否自动换行。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  line_wrap 是否自动换行。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t label_set_line_wrap(widget_t* widget, bool_t line_wrap);
+
+/**
+ * @method label_set_word_wrap
+ * 设置是否只允许在单词之间自动换行(需要开启自动换行才有效果)。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  word_wrap 是否只允许在单词之间自动换行。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t label_set_word_wrap(widget_t* widget, bool_t word_wrap);
+
+/**
+ * @method label_set_ellipses
+ * 是否开启缩写，开启后，当文字长度操作控件长度后，自动变为... 
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  ellipses 是否开启缩写。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t label_set_ellipses(widget_t* widget, bool_t ellipses);
 
 /**
  * @method label_resize_to_content
@@ -142,10 +220,6 @@ widget_t* label_cast(widget_t* widget);
 TK_EXTERN_VTABLE(label);
 
 /*public for test*/
-uint32_t line_breaker_count(const wchar_t* str);
-typedef ret_t (*line_breaker_on_line_t)(void* ctx, uint32_t index, const wchar_t* str,
-                                        uint32_t size);
-ret_t line_breaker_break(const wchar_t* str, line_breaker_on_line_t on_line, void* ctx);
 
 END_C_DECLS
 

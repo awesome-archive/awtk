@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  buffer
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -61,7 +61,7 @@ typedef struct _wbuffer_t {
   /**
    * @property {uint8_t*} data
    * @annotation ["readable"]
-   * 缓存区。
+   * 数据缓冲区。用于保存写入的数据。
    */
   uint8_t* data;
   /**
@@ -73,13 +73,13 @@ typedef struct _wbuffer_t {
   /**
    * @property {uint32_t} capacity
    * @annotation ["readable"]
-   * 缓存区最大容量。
+   * 数据缓冲区最大容量。
    */
   uint32_t capacity;
   /**
    * @property {bool_t} extendable
    * @annotation ["readable"]
-   * 容量是否可扩展。
+   * 容量不够时是否支持自动扩展。
    */
   bool_t extendable;
 } wbuffer_t;
@@ -89,16 +89,16 @@ typedef struct _wbuffer_t {
  * 初始wbuffer对象。
  * @annotation ["constructor"]
  * @param {wbuffer_t*} wbuffer wbuffer对象。
- * @param {uint8_t*} data 缓冲区。
- * @param {uint16_t} capacity 缓冲区的容量。
+ * @param {void*} data 缓冲区。
+ * @param {uint32_t} capacity 缓冲区的容量。
  *
  * @return {wbuffer_t*} wbuffer对象本身。
  */
-wbuffer_t* wbuffer_init(wbuffer_t* wbuffer, uint8_t* data, uint32_t capacity);
+wbuffer_t* wbuffer_init(wbuffer_t* wbuffer, void* data, uint32_t capacity);
 
 /**
  * @method wbuffer_init_extendable
- * 初始wbuffer对象，自动扩展buffer，使用完成后需要调用wbuffer\_deinit释放资源。
+ * 初始化可自动扩展的wbuffer对象。使用完成后需要调用wbuffer\_deinit释放资源。
  *
  * @annotation ["constructor"]
  * @param {wbuffer_t*} wbuffer wbuffer对象。
@@ -108,6 +108,57 @@ wbuffer_t* wbuffer_init(wbuffer_t* wbuffer, uint8_t* data, uint32_t capacity);
 wbuffer_t* wbuffer_init_extendable(wbuffer_t* wbuffer);
 
 /**
+ * @method wbuffer_create
+ * 创建wbuffer对象。
+ * @annotation ["constructor"]
+ * @param {void*} data 缓冲区。
+ * @param {uint32_t} capacity 缓冲区的容量。
+ *
+ * @return {wbuffer_t*} wbuffer对象本身。
+ */
+wbuffer_t* wbuffer_create(void* data, uint32_t capacity);
+
+/**
+ * @method wbuffer_create_extendable
+ * 创建可自动扩展的wbuffer对象。
+ *
+ * @annotation ["constructor"]
+ *
+ * @return {wbuffer_t*} wbuffer对象本身。
+ */
+wbuffer_t* wbuffer_create_extendable(void);
+
+/**
+ * @method wbuffer_clone
+ * 克隆wbuffer对象。（需要使用 wbuffer_destroy 来销毁对象）
+ * @annotation ["constructor"]
+ * @param {const wbuffer_t*} wbuffer wbuffer对象。
+ *
+ * @return {wbuffer_t*} 成功返回 wbuffer 对象，失败返回 NULL。
+ */
+wbuffer_t* wbuffer_clone(const wbuffer_t* wbuffer);
+
+/**
+ * @method wbuffer_rewind
+ * 重置当前写入位置。
+ * @annotation ["constructor"]
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_rewind(wbuffer_t* wbuffer);
+
+/**
+ * @method wbuffer_extend_capacity
+ * 扩展缓冲区至指定的大小。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {uint32_t} capacity 缓冲区的容量。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_extend_capacity(wbuffer_t* wbuffer, uint32_t capacity);
+
+/**
  * @method wbuffer_deinit
  * 释放资源。
  * @param {wbuffer_t*} wbuffer wbuffer对象。
@@ -115,6 +166,15 @@ wbuffer_t* wbuffer_init_extendable(wbuffer_t* wbuffer);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t wbuffer_deinit(wbuffer_t* wbuffer);
+
+/**
+ * @method wbuffer_destroy
+ * 销毁wbuffer对象。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_destroy(wbuffer_t* wbuffer);
 
 /**
  * @method wbuffer_skip
@@ -127,10 +187,50 @@ ret_t wbuffer_deinit(wbuffer_t* wbuffer);
 ret_t wbuffer_skip(wbuffer_t* wbuffer, int32_t delta);
 
 /**
+ * @method wbuffer_write_int8
+ * 写入int8数据。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {int8_t} value 要写入的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_write_int8(wbuffer_t* wbuffer, int8_t value);
+
+/**
+ * @method wbuffer_write_int16
+ * 写入int16数据。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {int16_t} value 要写入的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_write_int16(wbuffer_t* wbuffer, int16_t value);
+
+/**
+ * @method wbuffer_write_int32
+ * 写入int32数据。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {int32_t} value 要写入的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_write_int32(wbuffer_t* wbuffer, int32_t value);
+
+/**
+ * @method wbuffer_write_int64
+ * 写入int64数据。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {int64_t} value 要写入的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_write_int64(wbuffer_t* wbuffer, int64_t value);
+
+/**
  * @method wbuffer_write_uint8
  * 写入uint8数据。
  * @param {wbuffer_t*} wbuffer wbuffer对象。
- * @param {uint8_t} value 写入的数据。
+ * @param {uint8_t} value 要写入的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -140,7 +240,7 @@ ret_t wbuffer_write_uint8(wbuffer_t* wbuffer, uint8_t value);
  * @method wbuffer_write_uint16
  * 写入uint16数据。
  * @param {wbuffer_t*} wbuffer wbuffer对象。
- * @param {uint16_t} value 写入的数据。
+ * @param {uint16_t} value 要写入的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -150,42 +250,108 @@ ret_t wbuffer_write_uint16(wbuffer_t* wbuffer, uint16_t value);
  * @method wbuffer_write_uint32
  * 写入uint32数据。
  * @param {wbuffer_t*} wbuffer wbuffer对象。
- * @param {uint32_t} value 写入的数据。
+ * @param {uint32_t} value 要写入的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t wbuffer_write_uint32(wbuffer_t* wbuffer, uint32_t value);
 
 /**
- * @method wbuffer_write_float
- * 写入float数据。
+ * @method wbuffer_write_uint64
+ * 写入uint64数据。
  * @param {wbuffer_t*} wbuffer wbuffer对象。
- * @param {float_t} value 写入的数据。
+ * @param {uint64_t} value 要写入的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t wbuffer_write_float(wbuffer_t* wbuffer, float_t value);
+ret_t wbuffer_write_uint64(wbuffer_t* wbuffer, uint64_t value);
+
+/**
+ * @method wbuffer_write_float
+ * 写入float数据。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {float} value 要写入的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_write_float(wbuffer_t* wbuffer, float value);
+
+/**
+ * @method wbuffer_write_double
+ * 写入double数据。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {double} value 要写入的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_write_double(wbuffer_t* wbuffer, double value);
 
 /**
  * @method wbuffer_write_binary
  * 写入指定长度的二进制数据。
  * @param {wbuffer_t*} wbuffer wbuffer对象。
- * @param {void*} data 写入的数据。
- * @param {uint32_t} size 写入的数据长度。
+ * @param {const void*} data 要写入的数据。
+ * @param {uint32_t} size 要写入的数据长度。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t wbuffer_write_binary(wbuffer_t* wbuffer, const void* data, uint32_t size);
 
 /**
+ * @method wbuffer_modify_binary
+ * 修改指定位置的二进制数据。
+ *
+ * @param {wbuffer_t*}  wb      wbuffer对象。
+ * @param {uint32_t}    offset  要修改的位置。
+ * @param {const void*} data    要修改的数据。
+ * @param {uint32_t}    dsize   要修改的数据长度。
+ *
+ * @return {ret_t} 返回 ret_t 值
+ */
+ret_t wbuffer_modify_binary(wbuffer_t* wb, uint32_t offset, const void* data, uint32_t dsize);
+
+/**
+ * @method wbuffer_insert_binary
+ * 在指定位置插入二进制数据。
+ *
+ * @param {wbuffer_t*}  wb      wbuffer对象。
+ * @param {uint32_t}    offset  插入位置。
+ * @param {const void*} data    要插入的数据。
+ * @param {uint32_t}    dsize   要插入的数据长度。
+ *
+ * @return {ret_t} 返回 ret_t 值
+ */
+ret_t wbuffer_insert_binary(wbuffer_t* wb, uint32_t offset, const void* data, uint32_t dsize);
+
+/**
+ * @method wbuffer_write_value
+ * 写入value数据。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {const value_t*} v 要写入的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t wbuffer_write_value(wbuffer_t* wbuffer, const value_t* v);
+
+/**
  * @method wbuffer_write_string
  * 写入字符串。
  * @param {wbuffer_t*} wbuffer wbuffer对象。
- * @param {char*} data 写入的字符串。
+ * @param {const char*} data 要写入的字符串。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t wbuffer_write_string(wbuffer_t* wbuffer, const char* data);
+
+/**
+ * @method wbuffer_has_room
+ * 是否还有空间。
+ * @param {wbuffer_t*} wbuffer wbuffer对象。
+ * @param {uint32_t} size 空间大小。
+ *
+ * @return {bool_t} 返回FALSE表示无，否则表示有。
+ */
+bool_t wbuffer_has_room(wbuffer_t* wbuffer, uint32_t size);
 
 /**
  * @class rbuffer_t
@@ -208,9 +374,9 @@ ret_t wbuffer_write_string(wbuffer_t* wbuffer, const char* data);
  */
 typedef struct _rbuffer_t {
   /**
-   * @property {uint8_t*} data
+   * @property {const uint8_t*} data
    * @annotation ["readable"]
-   * 缓存区。
+   * 数据缓冲区。
    */
   const uint8_t* data;
   /**
@@ -222,7 +388,7 @@ typedef struct _rbuffer_t {
   /**
    * @property {uint32_t} capacity
    * @annotation ["readable"]
-   * 缓存区最大容量。
+   * 缓存区的容量。
    */
   uint32_t capacity;
 } rbuffer_t;
@@ -232,12 +398,23 @@ typedef struct _rbuffer_t {
  * 初始rbuffer对象。
  * @annotation ["constructor"]
  * @param {rbuffer_t*} rbuffer rbuffer对象。
- * @param {uint8_t*} data 缓冲区。
- * @param {uint16_t} capacity 缓冲区的容量。
+ * @param {const void*} data 缓冲区。
+ * @param {uint32_t} capacity 缓冲区的容量。
  *
  * @return {rbuffer_t*} rbuffer对象本身。
  */
-rbuffer_t* rbuffer_init(rbuffer_t* rbuffer, const uint8_t* data, uint32_t capacity);
+rbuffer_t* rbuffer_init(rbuffer_t* rbuffer, const void* data, uint32_t capacity);
+
+/**
+ * @method rbuffer_create
+ * 创建rbuffer对象。
+ * @annotation ["constructor"]
+ * @param {const void*} data 缓冲区。
+ * @param {uint32_t} capacity 缓冲区的容量。
+ *
+ * @return {rbuffer_t*} rbuffer对象本身。
+ */
+rbuffer_t* rbuffer_create(const void* data, uint32_t capacity);
 
 /**
  * @method rbuffer_has_more
@@ -247,6 +424,16 @@ rbuffer_t* rbuffer_init(rbuffer_t* rbuffer, const uint8_t* data, uint32_t capaci
  * @return {bool_t} 返回TRUE表示还有数据可读，否则表示无数据可读。
  */
 bool_t rbuffer_has_more(rbuffer_t* rbuffer);
+
+/**
+ * @method rbuffer_rewind
+ * 重置当前读取位置。
+ * @annotation ["constructor"]
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_rewind(rbuffer_t* rbuffer);
 
 /**
  * @method rbuffer_skip
@@ -262,7 +449,7 @@ ret_t rbuffer_skip(rbuffer_t* rbuffer, int32_t offset);
  * @method rbuffer_read_uint8
  * 读取uint8数据。
  * @param {rbuffer_t*} rbuffer rbuffer对象。
- * @param {uint8_t*} value 读取的数据。
+ * @param {uint8_t*} value 返回读取的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -282,27 +469,87 @@ ret_t rbuffer_read_uint16(rbuffer_t* rbuffer, uint16_t* value);
  * @method rbuffer_read_uint32
  * 读取uint32数据。
  * @param {rbuffer_t*} rbuffer rbuffer对象。
- * @param {uint32_t*} value 读取的数据。
+ * @param {uint32_t*} value 返回读取的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t rbuffer_read_uint32(rbuffer_t* rbuffer, uint32_t* value);
 
 /**
- * @method rbuffer_read_float
- * 读取float数据。
+ * @method rbuffer_read_uint64
+ * 读取uint64数据。
  * @param {rbuffer_t*} rbuffer rbuffer对象。
- * @param {float_t*} value 读取的数据。
+ * @param {uint64_t*} value 返回读取的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t rbuffer_read_float(rbuffer_t* rbuffer, float_t* value);
+ret_t rbuffer_read_uint64(rbuffer_t* rbuffer, uint64_t* value);
+
+/**
+ * @method rbuffer_read_int8
+ * 读取int8数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {int8_t*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_int8(rbuffer_t* rbuffer, int8_t* value);
+
+/**
+ * @method rbuffer_read_int16
+ * 读取int16数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {int16_t*} value 读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_int16(rbuffer_t* rbuffer, int16_t* value);
+
+/**
+ * @method rbuffer_read_int32
+ * 读取int32数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {int32_t*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_int32(rbuffer_t* rbuffer, int32_t* value);
+
+/**
+ * @method rbuffer_read_int64
+ * 读取int64数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {int64_t*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_int64(rbuffer_t* rbuffer, int64_t* value);
+
+/**
+ * @method rbuffer_read_float
+ * 读取float数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {float*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_float(rbuffer_t* rbuffer, float* value);
+
+/**
+ * @method rbuffer_read_double
+ * 读取double数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {double*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_double(rbuffer_t* rbuffer, double* value);
 
 /**
  * @method rbuffer_read_binary
  * 读取指定长度的二进制数据。
  * @param {rbuffer_t*} rbuffer rbuffer对象。
- * @param {void*} data 读取的数据。
+ * @param {void*} data 返回读取的数据。
  * @param {uint32_t} size 读取的数据长度。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -310,20 +557,69 @@ ret_t rbuffer_read_float(rbuffer_t* rbuffer, float_t* value);
 ret_t rbuffer_read_binary(rbuffer_t* rbuffer, void* data, uint32_t size);
 
 /**
+ * @method rbuffer_read_value
+ * 读取value数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {value_t*} v 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_value(rbuffer_t* rbuffer, value_t* v);
+
+/**
  * @method rbuffer_read_string
  * 读取字符串。
  * @param {rbuffer_t*} rbuffer rbuffer对象。
- * @param {char**} str 用于返回字符串。
+ * @param {const char**} str 返回字符串。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t rbuffer_read_string(rbuffer_t* rbuffer, const char** str);
 
 /**
+ * @method rbuffer_read_uint8_from_hexstr
+ * 从hex字符串读取uint8数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {uint8_t*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_uint8_from_hexstr(rbuffer_t* rbuffer, uint8_t* value);
+
+/**
+ * @method rbuffer_read_uint16_from_hexstr
+ * 从hex字符串读取uint16数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {uint16_t*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_uint16_from_hexstr(rbuffer_t* rbuffer, uint16_t* value);
+/**
+ * @method rbuffer_read_uint32_from_hexstr
+ * 从hex字符串读取uint32数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {uint32_t*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_uint32_from_hexstr(rbuffer_t* rbuffer, uint32_t* value);
+
+/**
+ * @method rbuffer_read_uint64_from_hexstr
+ * 从hex字符串读取uint64数据。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ * @param {uint64_t*} value 返回读取的数据。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_read_uint64_from_hexstr(rbuffer_t* rbuffer, uint64_t* value);
+
+/**
  * @method rbuffer_peek_uint8
  * 读取uint8数据，但不改变cursor的位置。
  * @param {rbuffer_t*} rbuffer rbuffer对象。
- * @param {uint8_t*} value 读取的数据。
+ * @param {uint8_t*} value 返回读取的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -333,7 +629,7 @@ ret_t rbuffer_peek_uint8(rbuffer_t* rbuffer, uint8_t* value);
  * @method rbuffer_peek_uint16
  * 读取uint16数据，但不改变cursor的位置。
  * @param {rbuffer_t*} rbuffer rbuffer对象。
- * @param {uint16_t*} value 读取的数据。
+ * @param {uint16_t*} value 返回读取的数据。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -349,15 +645,38 @@ ret_t rbuffer_peek_uint16(rbuffer_t* rbuffer, uint16_t* value);
  */
 ret_t rbuffer_peek_uint32(rbuffer_t* rbuffer, uint32_t* value);
 
+/**
+ * @method rbuffer_deinit
+ * 释放rbuffer资源。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_deinit(rbuffer_t* rbuffer);
+
+/**
+ * @method rbuffer_destroy
+ * 销毁rbuffer对象。
+ * @param {rbuffer_t*} rbuffer rbuffer对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t rbuffer_destroy(rbuffer_t* rbuffer);
+
 #define load_uint32(p, v)                                   \
   (v) = (p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24)); \
   p += 4;
+
+#define load_int32(p, v) load_uint32(p, v)
+
 #define save_uint32(p, v)  \
   p[0] = (v & 0xff);       \
   p[1] = (v >> 8) & 0xff;  \
   p[2] = (v >> 16) & 0xff; \
   p[3] = (v >> 24) & 0xff; \
   p += 4;
+
+#define save_int32(p, v) save_uint32(p, v)
 
 #define load_uint16(p, v)     \
   (v) = (p[0] | (p[1] << 8)); \

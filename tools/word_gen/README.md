@@ -4,17 +4,51 @@
 
 在当前目录下运行：
 
+* 准备
+
 ```
 npm install
-node gen.js
+```
+
+* 抓取网页，生成words.json
+
+> 可以修改maxURLS改变最大网页数量。
+
+```
+node gen_words_json.js 
+```
+
+
+* 生成二进制的words.bin文件
+
+> 可以根据自己的需要进行编辑words.json。
+
+```
+node to_words_bin.js
+```
+
+### 使用现有数据
+
+chinese\_with\_freq.txt是从 https://github.com/ling0322/webdict 下载的。
+
+如果不想自己生成，可以直接使用该文件：
+
+```
+node to_json.js
 ```
 
 ### 更新数据
 
-在awtk目录下运行：
+在awtk根目录下运行：
 
 ```
-./bin/resgen tools/word_gen/words.bin src/input_methods/suggest_words.inc 
+cp tools/word_gen/words.bin demos/assets/default/raw/data/suggest_words_zh_cn.dat
+```
+
+如果不支持文件系统，还需要运行更新资源的脚本：
+
+```
+python scripts/update_res.py all
 ```
 
 ### 注意：

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  children layouter
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -41,6 +41,7 @@ typedef bool_t (*children_layouter_is_valid_t)(children_layouter_t* layouter);
 typedef ret_t (*children_layouter_destroy_t)(children_layouter_t* layouter);
 
 typedef children_layouter_t* (*children_layouter_create_t)(void);
+typedef children_layouter_t* (*children_layouter_clone_t)(children_layouter_t* layouter);
 
 typedef struct _children_layouter_vtable_t {
   const char* type;
@@ -49,6 +50,7 @@ typedef struct _children_layouter_vtable_t {
   children_layouter_is_valid_t is_valid;
   children_layouter_get_param_t get_param;
   children_layouter_set_param_t set_param;
+  children_layouter_clone_t clone;
   children_layouter_destroy_t destroy;
 } children_layouter_vtable_t;
 
@@ -69,7 +71,7 @@ struct _children_layouter_t {
  * 获取全部参数。
  * @param {children_layouter_t*} layouter layouter对象。
  *
- * @return {ret_t} 返回字符串格式的参数。
+ * @return {const char*} 返回字符串格式的参数。
  */
 const char* children_layouter_to_string(children_layouter_t* layouter);
 
@@ -130,7 +132,7 @@ ret_t children_layouter_set_param_str(children_layouter_t* layouter, const char*
  * @param {const char*} name 参数名。
  * @param {float_t} defval 缺省值。
  *
- * @return {ret_t} 成功返回参数的值，失败返回缺省值。
+ * @return {float_t} 成功返回参数的值，失败返回缺省值。
  */
 float_t children_layouter_get_param_float(children_layouter_t* layouter, const char* name,
                                           float_t defval);
@@ -143,7 +145,7 @@ float_t children_layouter_get_param_float(children_layouter_t* layouter, const c
  * @param {const char*} name 参数名。
  * @param {int32_t} defval 缺省值。
  *
- * @return {ret_t} 成功返回参数的值，失败返回缺省值。
+ * @return {int32_t} 成功返回参数的值，失败返回缺省值。
  */
 int32_t children_layouter_get_param_int(children_layouter_t* layouter, const char* name,
                                         int32_t defval);
@@ -175,6 +177,15 @@ ret_t children_layouter_destroy(children_layouter_t* layouter);
  * @return {children_layouter_t*} 返回layouter对象。
  */
 children_layouter_t* children_layouter_create(const char* params);
+
+/**
+ * @method children_layouter_clone
+ * 克隆layouter对象。
+ * @param {children_layouter_t*} layouter 被克隆的对象。
+ *
+ * @return {children_layouter_t*} 返回layouter对象。
+ */
+children_layouter_t* children_layouter_clone(children_layouter_t* layouter);
 
 END_C_DECLS
 

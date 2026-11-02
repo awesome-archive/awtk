@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  text_edit
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,6 +26,28 @@
 
 BEGIN_C_DECLS
 
+#define TEXT_EDIT_GET_STYLE_MARGIN(style, out_value, type)             \
+  do {                                                                 \
+    if ((out_value) == 0) {                                            \
+      (out_value) = style_get_int((style), STYLE_ID_MARGIN_##type, 0); \
+    }                                                                  \
+    if ((out_value) == 0) {                                            \
+      (out_value) = style_get_int((style), STYLE_ID_MARGIN, 0);        \
+    }                                                                  \
+  } while (0)
+
+#define CHAR_IS_LINE_BREAK(c) ((c) == '\r' || (c) == '\n')
+#define TWINS_CHAR_IS_LINE_BREAK(c1, c2) ((c1) == '\r' && (c2) == '\n')
+
+#define WCHAR_IS_LINE_BREAK(c) ((c) == (wchar_t)'\r' || (c) == (wchar_t)'\n')
+#define TWINS_WCHAR_IS_LINE_BREAK(c1, c2) ((c1) == (wchar_t)'\r' && (c2) == (wchar_t)'\n')
+
+typedef enum _delete_type_t {
+  DELETE_BY_INPUT,
+  DELETE_BY_KEY_DELETE,
+  DELETE_BY_KEY_BACKSPACE,
+} delete_type_t;
+
 /**
  * @class text_edit_state_t
  */
@@ -39,34 +61,42 @@ typedef struct _text_edit_state_t {
   point_t caret;
   uint32_t cursor;
   uint32_t max_rows;
+  uint32_t max_chars;
   uint32_t select_start;
   uint32_t select_end;
+  uint32_t last_row_number;
+  uint32_t last_line_number;
 
   bool_t mask;
+  bool_t preedit;
   bool_t wrap_word;
   wchar_t mask_char;
   bool_t caret_visible;
   bool_t single_line;
+  uint32_t current_row_index;
+  uint32_t current_line_index;
 } text_edit_state_t;
 
 typedef ret_t (*text_edit_on_state_changed_t)(void* ctx, text_edit_state_t* state);
+typedef ret_t (*text_edit_on_text_will_delete_t)(void* ctx, delete_type_t delete_type);
+typedef ret_t (*text_edit_on_char_will_input_t)(void* ctx, wchar_t c);
 
 /**
  * @class text_edit_t
  */
 typedef struct _text_edit_t {
-  canvas_t* c;
   widget_t* widget;
 
+  bool_t ignore_layout;
 } text_edit_t;
 
 /**
  * @method text_edit_create
  * 创建text_edit对象
  * @param {widget_t*} widget 控件
- * @param {boo_t} single_line 是否是单行编辑器。
+ * @param {bool_t} single_line 是否是单行编辑器。
  *
- * @return {widget_t*} 对象。
+ * @return {text_edit_t*} 对象。
  */
 text_edit_t* text_edit_create(widget_t* widget, bool_t single_line);
 
@@ -132,6 +162,16 @@ ret_t text_edit_cut(text_edit_t* text_edit);
 ret_t text_edit_copy(text_edit_t* text_edit);
 
 /**
+ * @method text_edit_get_selected_text
+ * 获取选中文本。
+ * 使用完后需调用 TKMEM_FREE() 进行释放文本占有内存。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {char*} 返回选中文本。
+ */
+char* text_edit_get_selected_text(text_edit_t* text_edit);
+
+/**
  * @method text_edit_key_down
  * 处理按键事件。
  * @param {text_edit_t*} text_edit text_edit对象。
@@ -140,6 +180,16 @@ ret_t text_edit_copy(text_edit_t* text_edit);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t text_edit_key_down(text_edit_t* text_edit, key_event_t* evt);
+
+/**
+ * @method text_edit_key_up
+ * 处理按键事件。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {key_event_t*} evt event
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_key_up(text_edit_t* text_edit, key_event_t* evt);
 
 /**
  * @method text_edit_set_select
@@ -151,6 +201,34 @@ ret_t text_edit_key_down(text_edit_t* text_edit, key_event_t* evt);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t text_edit_set_select(text_edit_t* text_edit, uint32_t start, uint32_t end);
+
+/**
+ * @method text_edit_select_word
+ * 选中指定光标位置的词。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} cursor 光标位置。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_select_word(text_edit_t* text_edit, uint32_t cursor);
+
+/**
+ * @method text_edit_select_all
+ * 全选。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_select_all(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_unselect
+ * 取消选择。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_unselect(text_edit_t* text_edit);
 
 /**
  * @method text_edit_set_cursor
@@ -167,7 +245,7 @@ ret_t text_edit_set_cursor(text_edit_t* text_edit, uint32_t cursor);
  * 获取光标位置。
  * @param {text_edit_t*} text_edit text_edit对象。
  *
- * @return {uin32_t} 返回光标的位置。
+ * @return {uint32_t} 返回光标的位置。
  */
 uint32_t text_edit_get_cursor(text_edit_t* text_edit);
 
@@ -221,6 +299,104 @@ ret_t text_edit_set_caret_visible(text_edit_t* text_edit, bool_t caret_visible);
 ret_t text_edit_set_max_rows(text_edit_t* text_edit, uint32_t max_rows);
 
 /**
+ * @method text_edit_set_max_chars
+ * 设置最大字符数（0 为不限制字符）。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} max_chars 最大行数。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_set_max_chars(text_edit_t* text_edit, uint32_t max_chars);
+
+/**
+ * @method text_edit_get_offset_at_line
+ * 获取指定视觉行对应的偏移位置。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} line 行号。
+ * @param {uint32_t*} start 起始偏移。
+ * @param {uint32_t*} end 结束偏移。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_get_offset_at_line(text_edit_t* text_edit, uint32_t line, uint32_t* start,
+                                   uint32_t* end);
+
+/**
+ * @method text_edit_get_offset_at_row
+ * 获取指定物理行对应的偏移位置。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} row 行号。
+ * @param {uint32_t*} start 起始偏移。
+ * @param {uint32_t*} end 结束偏移。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_get_offset_at_row(text_edit_t* text_edit, uint32_t row, uint32_t* start,
+                                  uint32_t* end);
+
+/**
+ * @method text_edit_get_line_at
+ * 获取指定偏移所在的视觉行号(一行文本可能分多行显示)。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} offset 偏移。
+ *
+ * @return {int32_t} 返回行号，不在范围内则返回-1。
+ */
+int32_t text_edit_get_line_at(text_edit_t* text_edit, uint32_t offset);
+
+/**
+ * @method text_edit_get_row_at
+ * 获取指定偏移所在的物理行号。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} offset 偏移。
+ *
+ * @return {int32_t} 返回行号，不在范围内则返回-1。
+ */
+int32_t text_edit_get_row_at(text_edit_t* text_edit, uint32_t offset);
+
+/**
+ * @method text_edit_get_row_of_line
+ * 获取指定视觉行号所在的物理行号。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} line 视觉行号。
+ *
+ * @return {int32_t} 返回物理行号，不在范围内则返回-1。
+ */
+int32_t text_edit_get_row_of_line(text_edit_t* text_edit, uint32_t line);
+
+/**
+ * @method text_edit_get_line_of_row
+ * 获取指定物理行号所在的视觉行号。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} row 物理行号。
+ * @param {uint32_t*} start 起始视觉行号。
+ * @param {uint32_t*} end 结束视觉行号。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_get_line_of_row(text_edit_t* text_edit, uint32_t row, uint32_t* start,
+                                uint32_t* end);
+
+/**
+ * @method text_edit_get_height
+ * 获取偏移字符位置高度。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} offset 偏移位置。
+ *
+ * @return {uint32_t} 返回偏移位置字符位置高度。
+ */
+uint32_t text_edit_get_height(text_edit_t* text_edit, uint32_t offset);
+
+/**
+ * @method text_edit_get_lines_of_each_row
+ * 获取每一个逻辑行(row)占几个物理行(line)。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {const uint32_t*} 返回每一个 row 占用多少个 line 数组。
+ */
+const uint32_t* text_edit_get_lines_of_each_row(text_edit_t* text_edit);
+
+/**
  * @method text_edit_set_mask
  * 设置是否马赛克字符(用于密码)。
  * @param {text_edit_t*} text_edit text_edit对象。
@@ -235,10 +411,11 @@ ret_t text_edit_set_mask(text_edit_t* text_edit, bool_t mask);
  * 设置提示信息。
  * @param {text_edit_t*} text_edit text_edit对象。
  * @param {const char*} tips 提示信息。
+ * @param {bool_t} mlines 提示信息是否多行显示。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t text_edit_set_tips(text_edit_t* text_edit, const char* tips);
+ret_t text_edit_set_tips(text_edit_t* text_edit, const char* tips, bool_t mlines);
 
 /**
  * @method text_edit_set_mask_char
@@ -260,10 +437,98 @@ ret_t text_edit_set_mask_char(text_edit_t* text_edit, wchar_t mask_char);
  */
 ret_t text_edit_paint(text_edit_t* text_edit, canvas_t* c);
 
+/**
+ * @method text_edit_layout
+ * 重新排版。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_layout(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_set_text_changed
+ * 标记文本已被外部修改，并失效行级缓存。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_set_text_changed(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_set_partial_layout
+ * 设置是否启用部分 layout。关闭时会强制下一次执行全量 layout。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {bool_t} partial_layout 是否只 layout 可见区域。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_set_partial_layout(text_edit_t* text_edit, bool_t partial_layout);
+
+/**
+ * @method text_edit_multi_line_insert_text_layout
+ * 插入字符串后的重新排版。（内部使用函数）
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} offset 插入的字符串偏移。
+ * @param {uint32_t} insert_length 插入的字符串长度。
+ * @param {const wchar_t*} wtext 插入的字符串。
+ * @param {bool_t} overwrite 是否为覆写模式。
+ * @param {uint32_t} rm_num 移除的字符串长度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_multi_line_insert_text_layout(text_edit_t* text_edit, uint32_t offset,
+                                              uint32_t insert_length, const wchar_t* wtext,
+                                              bool_t overwrite, uint32_t rm_num);
+
+/**
+ * @method text_edit_set_offset
+ * 设置滚动偏移。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {int32_t} ox x偏移量。
+ * @param {int32_t} oy y偏移量。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t text_edit_set_offset(text_edit_t* text_edit, int32_t ox, int32_t oy);
 
+/**
+ * @method text_edit_set_on_state_changed
+ * 设置状态改变回调函数。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {text_edit_on_state_changed_t} on_state_changed 回调函数。
+ * @param {void*} ctx 回调函数上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
 ret_t text_edit_set_on_state_changed(text_edit_t* text_edit,
                                      text_edit_on_state_changed_t on_state_changed, void* ctx);
+
+/**
+ * @method text_edit_set_on_text_will_delete
+ * 设置文本删除回调函数。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {text_edit_on_text_will_delete_t} on_text_will_delete 回调函数。
+ * @param {void*} ctx 回调函数上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_set_on_text_will_delete(text_edit_t* text_edit,
+                                        text_edit_on_text_will_delete_t on_text_will_delete,
+                                        void* ctx);
+
+/**
+ * @method text_edit_set_on_char_will_input
+ * 设置字符输入回调函数。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {text_edit_on_char_will_input_t} on_char_will_input 回调函数。
+ * @param {void*} ctx 回调函数上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_set_on_char_will_input(text_edit_t* text_edit,
+                                       text_edit_on_char_will_input_t on_char_will_input,
+                                       void* ctx);
 
 /**
  * @method text_edit_destroy
@@ -273,6 +538,80 @@ ret_t text_edit_set_on_state_changed(text_edit_t* text_edit,
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t text_edit_destroy(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_preedit_clear
+ * 清除预编辑文本。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_preedit_clear(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_preedit
+ * 进入预编辑状态。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_preedit(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_preedit_confirm
+ * 提交预编辑的文本，并退出预编辑状态。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_preedit_confirm(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_preedit_abort
+ * 取消预编辑的文本，并退出预编辑状态。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_preedit_abort(text_edit_t* text_edit);
+
+/**
+ * @method text_edit_insert_text
+ * 插入一段文本。
+ * @annotation ["scriptable"]
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {uint32_t} offset 插入的偏移位置。
+ * @param {const char*} text 待插入的文本。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_insert_text(text_edit_t* text_edit, uint32_t offset, const char* text);
+
+/**
+ * @method text_edit_show_context_menu
+ * 显示上下文菜单。
+ * @param {text_edit_t*} text_edit text_edit对象。
+ * @param {int32_t} x x位置。
+ * @param {int32_t} y y位置。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t text_edit_show_context_menu(text_edit_t* text_edit, int32_t x, int32_t y);
+
+ret_t text_edit_set_lock_scrollbar_value(text_edit_t* text_edit, bool_t lock);
+
+/**
+ * @method text_edit_adjust_ime_rect
+ * 将控件坐标系下的输入法候选区矩形转换为原生 IME 坐标。
+ *
+ * @param {rect_t*} r 输入为控件/窗口坐标，输出为原生 IME 坐标。
+ * @param {float_t} device_pixel_ratio 设备像素比。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ *
+ * 备注：macOS 上 SDL/Cocoa 使用窗口点坐标，与 widget_to_screen 一致，不再乘 device_pixel_ratio。
+ */
+ret_t text_edit_adjust_ime_rect(rect_t* r, float_t device_pixel_ratio);
 
 END_C_DECLS
 

@@ -31,11 +31,15 @@ TEST(ScrollView, basic) {
 
   value_set_int(&v1, 60);
   ASSERT_EQ(widget_set_prop(widget, WIDGET_PROP_XOFFSET, &v1), RET_OK);
-  ASSERT_EQ(scroll_view->xoffset, value_int(&v1));
+  ASSERT_EQ(scroll_view->xoffset, (scroll_view->xoffset + widget->w >= scroll_view->virtual_w)
+                                      ? scroll_view->virtual_w - widget->w
+                                      : value_int(&v1));
 
   value_set_int(&v1, 70);
   ASSERT_EQ(widget_set_prop(widget, WIDGET_PROP_YOFFSET, &v1), RET_OK);
-  ASSERT_EQ(scroll_view->yoffset, value_int(&v1));
+  ASSERT_EQ(scroll_view->yoffset, (scroll_view->yoffset + widget->h >= scroll_view->virtual_h)
+                                      ? scroll_view->virtual_h - widget->h
+                                      : value_int(&v1));
 
   value_set_bool(&v1, TRUE);
   ASSERT_EQ(widget_set_prop(widget, WIDGET_PROP_XSLIDABLE, &v1), RET_OK);
@@ -55,7 +59,7 @@ TEST(ScrollView, layout) {
   ASSERT_EQ(scroll_view_set_virtual_w(widget, 400), RET_OK);
   ASSERT_EQ(scroll_view_set_virtual_h(widget, 800), RET_OK);
 
-  widget_set_self_layout_params(button, "right", "bottom", "10%", "10%");
+  widget_set_self_layout(button, "default(x=right,y=bottom,w=10%,h=10%)");
   widget_layout(widget);
 
   ASSERT_EQ(button->x, 360);

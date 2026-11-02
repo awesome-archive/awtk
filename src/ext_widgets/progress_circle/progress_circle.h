@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  progress_circle
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -41,7 +41,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：
- * [progress_circle.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/progress_circle.xml)
+ * [progress_circle.xml](https://github.com/zlgopen/awtk/blob/master/design/default/ui/progress_circle.xml)
  *
  * 在c代码中使用函数progress\_circle\_create创建进度圆环控件。如：
  *
@@ -65,7 +65,7 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme
- * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L467)
+ * default](https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L467)
  *
  */
 typedef struct _progress_circle_t {
@@ -79,11 +79,18 @@ typedef struct _progress_circle_t {
   float_t value;
 
   /**
-   * @property {uint32_t} max
+   * @property {float_t} max
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
    * 最大值(缺省为100)。
    */
-  uint32_t max;
+  float_t max;
+
+  /**
+   * @property {char*} format
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 数值到字符串转换时的格式，缺省为"%d"。
+   */
+  char* format;
 
   /**
    * @property {int32_t} start_angle
@@ -95,16 +102,16 @@ typedef struct _progress_circle_t {
   /**
    * @property {uint32_t} line_width
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 环线的厚度(缺省为8)。
+   * 环线的厚度(缺省为8)，line_width > r/2时，使用扇形绘制。
    */
   uint32_t line_width;
 
   /**
-   * @property {char*} unit
+   * @property {char*} line_cap
    * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
-   * 单元(缺省无)。
+   * 线帽类型(round:圆头，square:方头，butt:平头)。
    */
-  char* unit;
+  char* line_cap;
 
   /**
    * @property {bool_t} counter_clock_wise
@@ -119,15 +126,20 @@ typedef struct _progress_circle_t {
    * 是否显示文本(缺省为TRUE)。
    */
   bool_t show_text;
+
+  /* private */
+  bool_t is_redraw;
+  rect_t dirty_rect;
+  rect_t last_dirty_rect;
 } progress_circle_t;
 
 /**
- * @event {event_t} EVT_VALUE_WILL_CHANGE
+ * @event {value_change_event_t} EVT_VALUE_WILL_CHANGE
  * 值即将改变事件。
  */
 
 /**
- * @event {event_t} EVT_VALUE_CHANGED
+ * @event {value_change_event_t} EVT_VALUE_CHANGED
  * 值改变事件。
  */
 
@@ -182,6 +194,17 @@ ret_t progress_circle_set_value(widget_t* widget, float_t value);
 ret_t progress_circle_set_max(widget_t* widget, uint32_t max);
 
 /**
+ * @method progress_circle_set_format
+ * 设置格式。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget progress_circle对象。
+ * @param {const char*} format 格式。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t progress_circle_set_format(widget_t* widget, const char* format);
+
+/**
  * @method progress_circle_set_line_width
  * 设置环线的厚度。
  *
@@ -206,16 +229,16 @@ ret_t progress_circle_set_line_width(widget_t* widget, uint32_t line_width);
 ret_t progress_circle_set_start_angle(widget_t* widget, int32_t start_angle);
 
 /**
- * @method progress_circle_set_unit
- * 设置单位。
+ * @method progress_circle_set_line_cap
+ * 设置线帽类型。
  *
  * @annotation ["scriptable"]
  * @param {widget_t*} widget 控件对象。
- * @param {const char*}  unit 单位。
+ * @param {const char*}  line_cap 线帽类型(round:圆头，square:方头)。。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t progress_circle_set_unit(widget_t* widget, const char* unit);
+ret_t progress_circle_set_line_cap(widget_t* widget, const char* line_cap);
 
 /**
  * @method progress_circle_set_show_text
@@ -242,6 +265,7 @@ ret_t progress_circle_set_show_text(widget_t* widget, bool_t show_text);
 ret_t progress_circle_set_counter_clock_wise(widget_t* widget, bool_t counter_clock_wise);
 
 #define PROGRESS_CIRCLE_PROP_UNIT "unit"
+#define PROGRESS_CIRCLE_PROP_LINE_CAP "line_cap"
 #define PROGRESS_CIRCLE_PROP_LINE_WIDTH "line_width"
 #define PROGRESS_CIRCLE_PROP_START_ANGLE "start_angle"
 #define PROGRESS_CIRCLE_PROP_COUNTER_CLOCK_WISE "counter_clock_wise"
@@ -251,6 +275,19 @@ ret_t progress_circle_set_counter_clock_wise(widget_t* widget, bool_t counter_cl
 
 /*public for subclass and runtime type check*/
 TK_EXTERN_VTABLE(progress_circle);
+
+/*public for tests*/
+
+/**
+ * @method progress_circle_calc_line_dirty_rect
+ * 获取progress_circle的新值和旧值之间的绘制脏矩形。
+ * @param {widget_t*} widget progress_circle控件对象。
+ * @param {float_t} old_value 旧值。
+ * @param {float_t} new_value 新值。
+ *
+ * @return {rect_t} 返回脏矩形。
+ */
+rect_t progress_circle_calc_line_dirty_rect(widget_t* widget, float_t old_value, float_t new_value);
 
 END_C_DECLS
 

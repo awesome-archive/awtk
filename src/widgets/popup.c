@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  popup
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,12 +21,14 @@
 
 #include "tkc/mem.h"
 #include "base/idle.h"
+#include "base/window.h"
 #include "widgets/label.h"
 #include "base/enums.h"
 #include "tkc/utils.h"
+#include "base/widget.h"
 #include "base/layout.h"
 #include "widgets/popup.h"
-#include "widgets/window.h"
+#include "base/widget_vtable.h"
 #include "base/image_manager.h"
 #include "base/window_manager.h"
 
@@ -39,6 +41,9 @@ static ret_t popup_get_prop(widget_t* widget, const char* name, value_t* v) {
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_CLOSE_WHEN_CLICK_OUTSIDE)) {
     value_set_bool(v, popup->close_when_click_outside);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_CLOSE_WHEN_TIMEOUT)) {
+    value_set_uint32(v, popup->close_when_timeout);
     return RET_OK;
   }
 
@@ -55,42 +60,127 @@ static ret_t popup_set_prop(widget_t* widget, const char* name, const value_t* v
   } else if (tk_str_eq(name, WIDGET_PROP_CLOSE_WHEN_CLICK_OUTSIDE)) {
     popup->close_when_click_outside = value_bool(v);
     return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_CLOSE_WHEN_TIMEOUT)) {
+    popup_set_close_when_timeout(widget, value_uint32(v));
+    return RET_OK;
   }
 
   return window_base_set_prop(widget, name, v);
 }
 
-static ret_t popup_on_event(widget_t* widget, event_t* e) {
-  uint16_t type = e->type;
+static ret_t popup_idle_window_close(const idle_info_t* idle) {
+  bool_t find_kb = FALSE;
+  widget_t* widget = WIDGET(idle->ctx);
+  widget_t* win = widget->parent;
+  return_value_if_fail(win && widget != NULL, RET_REMOVE);
+
+  widget_ungrab(win, widget);
+  WIDGET_FOR_EACH_CHILD_BEGIN_R(win, iter, i)
+  if (iter->visible && widget_is_keyboard(iter)) {
+    find_kb = TRUE;
+  } else if (iter == widget) {
+    break;
+  }
+  WIDGET_FOR_EACH_CHILD_END();
+
+  if (window_manager_is_animating(win) && (!widget_has_highlighter(widget) || !find_kb)) {
+    window_close_force(widget);
+  } else {
+    window_close(widget);
+  }
+  return RET_REMOVE;
+}
+
+static ret_t popup_update_close_timer(widget_t* widget) {
   popup_t* popup = POPUP(widget);
   return_value_if_fail(popup && widget != NULL, RET_BAD_PARAMS);
 
+  if (popup->timer_id != TK_INVALID_ID && popup->close_when_timeout > 0) {
+    timer_modify(popup->timer_id, popup->close_when_timeout);
+  }
+
+  return RET_OK;
+}
+
+static ret_t popup_on_event(widget_t* widget, event_t* e) {
+  uint16_t type = e->type;
+  popup_t* popup = POPUP(widget);
+  window_base_t* window_base = WINDOW_BASE(popup);
+
+  return_value_if_fail(popup != NULL && widget != NULL && window_base != NULL, RET_BAD_PARAMS);
+
   switch (type) {
     case EVT_WINDOW_OPEN: {
+      widget_t* active_win = popup->active_window_by_parent_widget;
+      if (active_win != NULL) {
+        int32_t stage = widget_get_prop_int(active_win, WIDGET_PROP_STAGE, WINDOW_STAGE_NONE);
+        if (stage == WINDOW_STAGE_OPENED) {
+          window_manager_dispatch_window_foreground_events(widget, active_win, NULL);
+        }
+      }
       widget_grab(widget->parent, widget);
       break;
     }
     case EVT_POINTER_DOWN: {
+      popup->is_outside = FALSE;
+      if (popup->close_when_click_outside) {
+        pointer_event_t* evt = (pointer_event_t*)e;
+        rect_t r = rect_init(widget->x, widget->y, widget->w, widget->h);
+        popup->is_outside = !rect_contains(&r, evt->x, evt->y);
+      }
       break;
     }
     case EVT_POINTER_UP: {
-      bool_t close_window = FALSE;
-      pointer_event_t* evt = (pointer_event_t*)e;
+      if (window_base->stage != WINDOW_STAGE_CLOSED) {
+        bool_t close_window = FALSE;
+        pointer_event_t* evt = (pointer_event_t*)e;
 
-      if (popup->close_when_click) {
-        close_window = TRUE;
-      } else if (popup->close_when_click_outside) {
-        rect_t r = rect_init(widget->x, widget->y, widget->w, widget->h);
-        if (!rect_contains(&r, evt->x, evt->y)) {
+        if (popup->close_when_click) {
           close_window = TRUE;
+        } else if (popup->close_when_click_outside && popup->is_outside) {
+          rect_t r = rect_init(widget->x, widget->y, widget->w, widget->h);
+          if (!rect_contains(&r, evt->x, evt->y)) {
+            close_window = TRUE;
+          }
+        }
+
+        if (close_window) {
+          widget_add_idle(widget, popup_idle_window_close);
         }
       }
+      break;
+    }
+    case EVT_CONTEXT_MENU: {
+      if (window_base->stage != WINDOW_STAGE_CLOSED) {
+        bool_t close_window = FALSE;
+        pointer_event_t* evt = (pointer_event_t*)e;
 
-      if (close_window) {
-        widget_ungrab(widget->parent, widget);
-        window_close(widget);
+        if (popup->close_when_click) {
+          close_window = TRUE;
+        } else if (popup->close_when_click_outside) {
+          rect_t r = rect_init(widget->x, widget->y, widget->w, widget->h);
+          if (!rect_contains(&r, evt->x, evt->y)) {
+            close_window = TRUE;
+          }
+        }
+
+        if (close_window) {
+          widget_add_idle(widget, popup_idle_window_close);
+        }
       }
+      break;
+    }
+    default:
+      break;
+  }
 
+  switch (type) {
+    case EVT_POINTER_DOWN:
+    case EVT_POINTER_MOVE:
+    case EVT_POINTER_UP:
+    case EVT_KEY_DOWN:
+    case EVT_KEY_UP: {
+      popup_update_close_timer(widget);
       break;
     }
     default:
@@ -100,30 +190,45 @@ static ret_t popup_on_event(widget_t* widget, event_t* e) {
   return window_base_on_event(widget, e);
 }
 
-static const char* s_popup_properties[] = {WIDGET_PROP_ANIM_HINT,
-                                           WIDGET_PROP_OPEN_ANIM_HINT,
-                                           WIDGET_PROP_CLOSE_ANIM_HINT,
-                                           WIDGET_PROP_THEME,
-                                           WIDGET_PROP_CLOSE_WHEN_CLICK,
-                                           WIDGET_PROP_CLOSE_WHEN_CLICK_OUTSIDE,
-                                           WIDGET_PROP_MOVE_FOCUS_PREV_KEY,
-                                           WIDGET_PROP_MOVE_FOCUS_NEXT_KEY,
-                                           NULL};
+static const char* const s_popup_properties[] = {WIDGET_PROP_CLOSE_WHEN_CLICK,
+                                                 WIDGET_PROP_CLOSE_WHEN_CLICK_OUTSIDE,
+                                                 WIDGET_PROP_CLOSE_WHEN_TIMEOUT, NULL};
+
+static ret_t popup_on_copy(widget_t* widget, widget_t* other) {
+  window_base_on_copy(widget, other);
+  return widget_on_copy_recursive(widget, other);
+}
+
+static ret_t popup_on_destroy(widget_t* widget) {
+  popup_t* popup = POPUP(widget);
+  return_value_if_fail(popup != NULL && widget != NULL, RET_REMOVE);
+  if (popup->active_window_by_parent_widget != NULL) {
+    widget_t* foreground_win = window_manager_get_foreground_window(window_manager());
+    if (foreground_win != popup->active_window_by_parent_widget) {
+      window_manager_dispatch_window_foreground_events(widget, foreground_win,
+                                                       popup->active_window_by_parent_widget);
+    }
+
+    popup_set_parent_widget_by_create(widget, NULL);
+  }
+  return window_base_on_destroy(widget);
+}
 
 TK_DECL_VTABLE(popup) = {.size = sizeof(popup_t),
                          .type = WIDGET_TYPE_POPUP,
                          .is_window = TRUE,
                          .clone_properties = s_popup_properties,
                          .persistent_properties = s_popup_properties,
-                         .parent = TK_PARENT_VTABLE(window_base),
+                         .get_parent_vt = TK_GET_PARENT_VTABLE(window_base),
                          .create = popup_create,
+                         .on_copy = popup_on_copy,
                          .get_prop = popup_get_prop,
                          .set_prop = popup_set_prop,
                          .on_event = popup_on_event,
                          .on_paint_self = window_base_on_paint_self,
                          .on_paint_begin = window_base_on_paint_begin,
                          .on_paint_end = window_base_on_paint_end,
-                         .on_destroy = window_base_on_destroy};
+                         .on_destroy = popup_on_destroy};
 
 widget_t* popup_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {
   return window_base_create(parent, TK_REF_VTABLE(popup), x, y, w, h);
@@ -151,4 +256,62 @@ ret_t popup_set_close_when_click_outside(widget_t* widget, bool_t close_when_cli
   popup->close_when_click_outside = close_when_click_outside;
 
   return RET_OK;
+}
+
+static ret_t popup_on_timeout(const timer_info_t* info) {
+  window_close(WIDGET(info->ctx));
+
+  return RET_REMOVE;
+}
+
+ret_t popup_set_close_when_timeout(widget_t* widget, uint32_t close_when_timeout) {
+  popup_t* popup = POPUP(widget);
+  return_value_if_fail(popup != NULL, RET_FAIL);
+
+  popup->close_when_timeout = close_when_timeout;
+  if (popup->timer_id != TK_INVALID_ID) {
+    timer_remove(popup->timer_id);
+    popup->timer_id = TK_INVALID_ID;
+  }
+
+  if (close_when_timeout > 0) {
+    popup->timer_id = widget_add_timer(widget, popup_on_timeout, close_when_timeout);
+  }
+
+  return RET_OK;
+}
+
+static ret_t popup_on_active_window_by_parent_widget_destroy(void* ctx, event_t* e) {
+  popup_t* popup = POPUP(ctx);
+  return_value_if_fail(popup != NULL, RET_BAD_PARAMS);
+
+  return popup_set_parent_widget_by_create(WIDGET(popup), NULL);
+}
+
+ret_t popup_set_parent_widget_by_create(widget_t* widget, widget_t* parent_widget) {
+  popup_t* popup = POPUP(widget);
+  return_value_if_fail(popup != NULL, RET_BAD_PARAMS);
+
+  if (popup->active_window_by_parent_widget != NULL) {
+    widget_off_by_func(popup->active_window_by_parent_widget, EVT_DESTROY,
+                       popup_on_active_window_by_parent_widget_destroy, popup);
+    popup->active_window_by_parent_widget = NULL;
+  }
+
+  if (parent_widget != NULL) {
+    popup->active_window_by_parent_widget = widget_get_real_window_or_keyboard(parent_widget);
+    return_value_if_fail(popup->active_window_by_parent_widget != NULL, RET_FAIL);
+
+    widget_on(popup->active_window_by_parent_widget, EVT_DESTROY,
+              popup_on_active_window_by_parent_widget_destroy, popup);
+  }
+
+  return RET_OK;
+}
+
+widget_t* popup_get_active_window_by_parent_widget(widget_t* widget) {
+  popup_t* popup = POPUP(widget);
+  return_value_if_fail(popup != NULL, NULL);
+
+  return popup->active_window_by_parent_widget;
 }

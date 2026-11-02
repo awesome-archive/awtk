@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  memory manager functions.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,22 +23,32 @@
 #define TK_TKMEM_MANAGER_H
 
 #include "tkc/types_def.h"
+#ifdef WITH_WASM
+
+BEGIN_C_DECLS
+void* realloc(void* ptr, size_t size);
+END_C_DECLS
+
+#define TKMEM_ALLOC(size) malloc(size)
+#define TKMEM_CALLOC(nmemb, size) calloc(nmemb, size)
+#define TKMEM_REALLOC(p, size) realloc(p, size)
+#define TKMEM_FREE(p) \
+  do {                \
+    if (p != NULL) {  \
+      free((void*)p); \
+      p = NULL;       \
+    }                 \
+  } while (0)
+#define TKMEM_ZALLOC(type) (type*)TKMEM_CALLOC(1, sizeof(type))
+#define TKMEM_REALLOCT(type, p, n) (type*)realloc(p, (n) * sizeof(type))
+#define TKMEM_ZALLOCN(type, n) (type*)calloc(n, sizeof(type))
+#else
+#include "tkc/platform.h"
+#include "tkc/mem_allocator.h"
 
 BEGIN_C_DECLS
 
-#ifdef HAS_STD_MALLOC
-#define TKMEM_INIT(size)
-#else
-ret_t tk_mem_init(void* buffer, uint32_t length);
-#define TKMEM_INIT(size)               \
-  {                                    \
-    static uint32_t mheap[size >> 2];  \
-    tk_mem_init(mheap, sizeof(mheap)); \
-  }
-#endif /*HAS_STD_MALLOC*/
-
 typedef ret_t (*tk_mem_on_out_of_memory_t)(void* ctx, uint32_t tried_times, uint32_t need_size);
-ret_t tk_mem_set_on_out_of_memory(tk_mem_on_out_of_memory_t on_out_of_memory, void* ctx);
 
 void* tk_calloc(uint32_t nmemb, uint32_t size, const char* func, uint32_t line);
 void* tk_realloc(void* ptr, uint32_t size, const char* func, uint32_t line);
@@ -69,6 +79,7 @@ void tk_free(void* ptr);
 
 /**
  * @method TKMEM_ALLOC
+ * @export tk_alloc
  * 分配一块内存。
  *
  * @annotation ["macro"]
@@ -80,6 +91,7 @@ void tk_free(void* ptr);
 
 /**
  * @method TKMEM_CALLOC
+ * @export tk_calloc
  * 分配一块内存，并将内容清零。
  *
  * @annotation ["macro"]
@@ -92,6 +104,7 @@ void tk_free(void* ptr);
 
 /**
  * @method TKMEM_REALLOC
+ * @export tk_realloc
  * 重新分配一块内存，如果原来的内存块大于等于需要的空间，直接返回原来的内存块。
  *
  * @annotation ["macro"]
@@ -104,6 +117,7 @@ void tk_free(void* ptr);
 
 /**
  * @method TKMEM_FREE
+ * @export tk_free
  * 释放内存。
  *
  * @annotation ["macro"]
@@ -114,26 +128,98 @@ void tk_free(void* ptr);
 #ifdef WITH_CPPCHECK
 #define TKMEM_FREE tk_free
 #else
-#define TKMEM_FREE(p)  \
-  {                    \
-    tk_free((void*)p); \
-    p = NULL;          \
-  }
+#define TKMEM_FREE(p)    \
+  do {                   \
+    if (p != NULL) {     \
+      tk_free((void*)p); \
+      p = NULL;          \
+    }                    \
+  } while (0)
 #endif /*WITH_CPPCHECK*/
 
-/*helpler*/
+/*helper*/
 #define TKMEM_ZALLOC(type) (type*)tk_calloc(1, sizeof(type), __FUNCTION__, __LINE__)
 #define TKMEM_ZALLOCN(type, n) (type*)tk_calloc(n, sizeof(type), __FUNCTION__, __LINE__)
 #define TKMEM_REALLOCT(type, p, n) (type*)tk_realloc(p, (n) * sizeof(type), __FUNCTION__, __LINE__)
 
-/*for memory debug*/
-typedef struct _mem_stat_t {
-  uint32_t used_bytes;
-  uint32_t used_block_nr;
-} mem_stat_t;
-
+/**
+ * @method tk_mem_dump
+ * 显示内存信息。
+ *
+ * @return {void} 返回void。
+ */
 void tk_mem_dump(void);
-mem_stat_t tk_mem_stat(void);
+
+/**
+ * @method tk_mem_set_on_out_of_memory
+ * 设置内存耗尽时的处理函数。
+ * @param {tk_mem_on_out_of_memory_t} on_out_of_memory 回调函数。
+ * @param {void*} ctx 回调函数的上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t tk_mem_set_on_out_of_memory(tk_mem_on_out_of_memory_t on_out_of_memory, void* ctx);
+
+/**
+ * @method tk_mem_init
+ * @export none
+ * 初始化内存管理器，把 buffer 作为堆。
+ *
+ * buffer 的地址必须按指针长度（sizeof(void*)）对齐。分配器把 buffer 起始处当作空闲块节点，
+ * 节点里含有指针成员；起始地址按指针长度对齐后，后续按同样粒度切分出来的空闲块地址也保持对齐。
+ * 用 uintptr_t 或 void* 数组提供这块内存即可满足该对齐。
+ *
+ * @param {void*} buffer 堆内存首地址，必须按 sizeof(void*) 对齐。
+ * @param {uint32_t} size 内存长度。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t tk_mem_init(void* buffer, uint32_t size);
+
+/**
+ * @method tk_mem_init_ex
+ * @export none
+ * 初始化内存，支持多块不连续的内存。
+ * > 最后一个参数必须为 NULL。
+ * > 每一块内存的首地址都必须按指针长度（sizeof(void*)）对齐，原因与 tk_mem_init 相同。
+ *
+ * 示例：
+ * ```c
+ * static uintptr_t mem1[1024];
+ * static uintptr_t mem2[512];
+ * static uintptr_t mem3[256];
+ * tk_mem_init_ex(mem1, sizeof(mem1), mem2, sizeof(mem2), mem3, sizeof(mem3), NULL);
+ * ```
+ *
+ * @param {void*} buffer 第一块内存的首地址，必须按 sizeof(void*) 对齐。
+ * @param {uint32_t} size 第一块内存的长度。后续参数成对出现（地址、长度），以 NULL 结束；每一块地址同样必须按 sizeof(void*) 对齐。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t tk_mem_init_ex(void* buffer, uint32_t size, ...);
+
+/**
+ * @method tk_mem_init_stage2
+ * 初始化互斥和oom。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t tk_mem_init_stage2(void);
+
+/**
+ * @method tk_mem_is_valid_addr
+ * 检查给定的地址是否是一个有效的heap地址。
+ * > 用于辅助发现内存问题。
+ * 
+ * @param {void*} addr 内存地址。
+ *
+ * @return {bool_t} 返回FALSE一定是无效地址，返回TRUE在PC则不太确定。
+ */
+bool_t tk_mem_is_valid_addr(void* addr);
+
+#define TK_IS_VALID_ADDR(addr) tk_mem_is_valid_addr(addr)
 
 END_C_DECLS
+#endif /*WITH_WASM*/
+
 #endif /*TK_TKMEM_MANAGER_H*/

@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  app_bar
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -25,7 +25,7 @@
 
 TK_DECL_VTABLE(app_bar) = {.size = sizeof(app_bar_t),
                            .type = WIDGET_TYPE_APP_BAR,
-                           .parent = TK_PARENT_VTABLE(widget),
+                           .get_parent_vt = TK_GET_PARENT_VTABLE(widget),
                            .create = app_bar_create};
 
 widget_t* app_bar_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {

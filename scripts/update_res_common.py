@@ -1,258 +1,1129 @@
+﻿# -*- coding: utf-8 -*-
 import os
 import sys
+import stat
+import re
+import io
 import copy
 import glob
 import shutil
 import platform
-from PIL import Image
+import subprocess
+import fnmatch
+import json
+import tempfile
+import threading
+
+try:
+    from concurrent.futures import ThreadPoolExecutor
+except ImportError:
+    ThreadPoolExecutor = None
 
 ###########################
-DPI = ''
+DPI = 'x1'
 ACTION = 'all'
 ASSET_C = ''
 BIN_DIR = ''
+THEMES = ['default']
 ASSETS_ROOT = ''
 AWTK_ROOT = ''
+OUTPUT_ROOT = None
 INPUT_DIR = ''
 OUTPUT_DIR = ''
-IMAGEGEN_OPTIONS = ''
+APP_THEME = 'default'
+THEME = 'default'
+THEME_PACKAGED = True
+IMAGEGEN_OPTIONS = 'bgra+bgr565'
+FONT_BPPS = None
+LCD_ORIENTATION = '0'
+IS_SAVE_SPECIAL_CHAR = 'False'
+LCD_FAST_ROTATION_MODE = False
+ON_GENERATE_RES_BEFORE = None
+ON_GENERATE_RES_AFTER = None
+EXEC_CMD_HANDLER = None
+IS_EXCLUDED_FILE_HANDLER = None
+IS_GENERATE_RAW = True
+IS_GENERATE_INC_RES = True
+IS_GENERATE_INC_BITMAP = True
+ASSETS_SUBNAME = '__assets_'
+STORAGE_DIR = None
+# 并行子进程数。设为 1 时按原顺序逐条执行。未设置时使用 CPU 核数。
+UPDATE_RES_JOBS_ENV = 'AWTK_UPDATE_RES_JOBS'
+IMAGE_DPI_DIR_NAMES = ('xx', 'x1', 'x2', 'x3', 'x4')
+# resgen 会根据输入路径里是否含有这些目录名决定资源类型。
+RES_PATH_MARKERS = ('images', 'flows')
+MIN_FILES_TO_SHARD = 2
 ###########################
 
-
-def to_var_name(s):
-    out = ''
-    for c in s:
-        if(c.isalpha() or c.isdigit()):
-            out += c
-        else:
-            out += '_'
-    return out
-
-
-def fix_output_file_name(name):
-    filename, extname = os.path.splitext(name)
-    basename = os.path.basename(filename)
-    dirname = os.path.dirname(filename)
-    newname = os.path.normpath(os.path.join(
-        dirname, to_var_name(basename) + extname))
-    return newname
-
-
-def joinPath(root, subdir):
-    return os.path.normpath(os.path.join(root, subdir))
+_EXEC_POOL = None
+_EXEC_FUTURES = []
+_EXEC_LOCK = threading.Lock()
+_PRINT_LOCK = threading.Lock()
 
 
 OS_NAME = platform.system()
 
 
-def toExe(name):
-    if OS_NAME == 'Windows':
-        return joinPath(BIN_DIR, name+'.exe')
+def get_action():
+    return ACTION
+
+def set_action(action):
+    global ACTION
+    ACTION = action
+
+def get_assets_subname():
+    return ASSETS_SUBNAME
+
+def set_assets_subname(subname):
+    global ASSETS_SUBNAME
+    ASSETS_SUBNAME = subname
+
+def get_asset_c():
+    return ASSET_C
+
+def set_asset_c(asset_c):
+    global ASSET_C
+    ASSET_C = asset_c
+
+def get_output_root():
+    return OUTPUT_ROOT
+
+def get_assets_root():
+    return ASSETS_ROOT
+
+def on_generate_res_before(handler):
+    global ON_GENERATE_RES_BEFORE
+    ON_GENERATE_RES_BEFORE = handler
+
+
+def on_generate_res_after(handler):
+    global ON_GENERATE_RES_AFTER
+    ON_GENERATE_RES_AFTER = handler
+
+
+def emit_generate_res_before(type):
+    if ON_GENERATE_RES_BEFORE != None:
+        ctx = {
+            'type': type,
+            'theme': THEME,
+            'imagegen_options': IMAGEGEN_OPTIONS,
+            'font_bpps': FONT_BPPS,
+            'lcd_orientation' : LCD_ORIENTATION,
+            'lcd_fast_rotation_mode' : LCD_FAST_ROTATION_MODE,
+            'input': INPUT_DIR,
+            'output': OUTPUT_DIR,
+            'awtk_root': AWTK_ROOT
+        }
+        ON_GENERATE_RES_BEFORE(ctx)
+
+
+def emit_generate_res_after(type):
+    if ON_GENERATE_RES_AFTER != None:
+        # 钩子会读取刚生成的文件，必须等已提交的子进程结束。
+        wait_exec_cmds()
+        ctx = {
+            'type': type,
+            'theme': THEME,
+            'imagegen_options': IMAGEGEN_OPTIONS,
+            'font_bpps': FONT_BPPS,
+            'lcd_orientation' : LCD_ORIENTATION,
+            'lcd_fast_rotation_mode' : LCD_FAST_ROTATION_MODE,
+            'input': INPUT_DIR,
+            'output': OUTPUT_DIR,
+            'awtk_root': AWTK_ROOT
+        }
+        ON_GENERATE_RES_AFTER(ctx)
+
+
+def set_is_excluded_file_handler(handler):
+    global IS_EXCLUDED_FILE_HANDLER
+    IS_EXCLUDED_FILE_HANDLER = handler
+
+
+def set_exec_command_handler(handler):
+    global EXEC_CMD_HANDLER
+    EXEC_CMD_HANDLER = handler
+
+
+def set_tools_dir(dir):
+    global BIN_DIR
+    BIN_DIR = dir
+
+def set_lcd_rortrail_info(lcd_orientation, lcd_fast_rotation_mode):
+    global LCD_ORIENTATION
+    global LCD_FAST_ROTATION_MODE
+    LCD_ORIENTATION = lcd_orientation
+    LCD_FAST_ROTATION_MODE = lcd_fast_rotation_mode
+
+def set_dpi(dpi):
+    global DPI
+    DPI = dpi
+
+
+def set_enable_generate_raw(enable):
+    global IS_GENERATE_RAW
+    IS_GENERATE_RAW = enable
+
+
+def set_enable_generate_inc_res(enable):
+    global IS_GENERATE_INC_RES
+    IS_GENERATE_INC_RES = enable
+
+
+def set_enable_generate_inc_bitmap(enable):
+    global IS_GENERATE_INC_BITMAP
+    IS_GENERATE_INC_BITMAP = enable
+
+def set_save_special_char(save_special_char):
+    global IS_SAVE_SPECIAL_CHAR
+    IS_SAVE_SPECIAL_CHAR = save_special_char
+
+def set_app_theme(theme):
+    global APP_THEME
+    APP_THEME = theme
+
+
+def set_current_theme(index):
+    global THEME
+    global THEME_PACKAGED
+    global IMAGEGEN_OPTIONS
+    global FONT_BPPS
+    global INPUT_DIR
+    global OUTPUT_DIR
+    global STORAGE_DIR
+
+    if index >= len(THEMES):
+        return
+
+    theme = THEMES[index]
+
+    if isinstance(theme, str):
+        THEME = theme
+    elif isinstance(theme, dict):
+        THEME = theme['name']
+        THEME_PACKAGED = True
+        IMAGEGEN_OPTIONS = 'bgra+bgr565'
+        if 'imagegen_options' in theme:
+            IMAGEGEN_OPTIONS = theme['imagegen_options']
+        FONT_BPPS = None
+        if 'font_bpps' in theme:
+            FONT_BPPS = theme['font_bpps']
+        if 'packaged' in theme:
+            THEME_PACKAGED = theme['packaged']
+        if 'storage_dir' in theme:
+            STORAGE_DIR = theme['storage_dir']
+
+    INPUT_DIR = join_path(ASSETS_ROOT, THEME+'/raw')
+    if not os.path.exists(INPUT_DIR):
+        INPUT_DIR = join_path(ASSETS_ROOT, THEME)
+
+    OUTPUT_DIR = join_path(OUTPUT_ROOT, THEME)
+
+
+def theme_foreach(visit, ctx = None):
+    for i in range(len(THEMES)):
+        set_current_theme(i)
+
+        if ctx != None:
+            visit(ctx)
+        else:
+            visit()
+
+
+def get_imagegen_options_of_default_theme():
+    opt = 'bgra+bgr565'
+
+    if len(THEMES) > 0:
+        if isinstance(THEMES[0], str):
+            opt = IMAGEGEN_OPTIONS
+        elif isinstance(THEMES[0], dict):
+            for iter in THEMES:
+                if iter['name'] == 'default':
+                    if 'imagegen_options' in iter:
+                        opt = iter['imagegen_options']
+                    break
+    return opt
+
+
+def is_packaged_of_default_theme():
+    packaged = True
+
+    if len(THEMES) > 0:
+        if isinstance(THEMES[0], str):
+            packaged = THEME_PACKAGED
+        elif isinstance(THEMES[0], dict):
+            for iter in THEMES:
+                if iter['name'] == 'default':
+                    if 'packaged' in iter:
+                        packaged = iter['packaged']
+                    break
+    return packaged
+
+
+def getcwd():
+    if sys.version_info >= (3, 0):
+        return os.getcwd()
     else:
-        return joinPath(BIN_DIR, name)
+        return os.getcwdu()
 
 
-def buildAll():
+def to_file_system_coding(s):
+    if sys.version_info >= (3, 0): return s
+    coding = sys.getfilesystemencoding()
+    return s.encode(coding)
+
+
+def join_path(root, subdir):
+    return os.path.normpath(os.path.join(root, subdir))
+
+
+def make_dirs(path):
+    if os.path.isdir(path):
+        return
+    try:
+        os.makedirs(path)
+    except OSError:
+        if not os.path.isdir(path):
+            raise
+
+
+def copy_dir(src, dst):
+    if not os.path.exists(src):
+        print('copy directory: ' + src + ' is not exists.')
+    else:
+        print('copy directory: ' + src + ' ==> ' + dst)
+        shutil.copytree(src, dst)
+
+
+def copy_file(src, dst):
+    if not os.path.exists(src):
+        print('copy file: ' + src + ' is not exists.')
+    else:
+        print('copy file: ' + src + ' ==> ' + dst)
+        shutil.copy(src, dst)
+
+
+def remove_dir(dir):
+    if os.path.isdir(dir):
+        for root, dirs, files in os.walk(dir):
+            for f in files:
+                real_path = join_path(root, f)
+                os.chmod(real_path, stat.S_IRWXU)
+
+        shutil.rmtree(dir)
+    elif os.path.isfile(dir):
+        os.chmod(dir, stat.S_IRWXU)
+        os.remove(dir)
+    else:
+        print('dir ' + dir + ' not exist')
+
+
+def get_appint_folder_ex(path, regex = '/', folder_list = [], parent = ''):
+    if not os.path.exists(path) or not os.path.isdir(path):
+        return folder_list
+
+    for f in os.listdir(path):
+        src = join_path(path, f)
+        if os.path.isdir(src) and f != '.' and f != '..':
+            file_path = os.path.join(parent, f)
+            if regex == '/':
+                folder_list.append(tuple((src, file_path)))
+            folder_list = get_appint_folder_ex(src, regex, folder_list, file_path)
+        elif (regex == os.path.splitext(f)[1]):
+            file_path = os.path.join(parent, f)
+            folder_list.append(tuple((src, file_path)))
+    return folder_list
+
+
+def get_appint_folder(path, regex = '/', include_self = True):
+    folder_list = []
+    regex_list = regex.split("|")
+
+    if not os.path.exists(path) or not os.path.isdir(path):
+        return folder_list
+
+    for reg in regex_list:
+        folder_list += get_appint_folder_ex(path, reg, [], '')
+
+    if include_self == True:
+        folder_list.append(tuple((path, '')))
+    return folder_list
+
+
+def to_exe(name):
+    if OS_NAME == 'Windows':
+        return join_path(BIN_DIR, name+'.exe')
+    else:
+        return join_path(BIN_DIR, name)
+
+
+def glob_asset_files(path):
+    filename, ext_name = os.path.splitext(path)
+    result = []
+    dir = os.path.dirname(path)
+    if os.path.isdir(dir):
+        for root, dirs, files in os.walk(dir):
+            for f in files:
+                filename, extname = os.path.splitext(f)
+                if extname == ext_name:
+                    result.append(join_path(root, f))
+
+    result.sort(key=lambda item: item.replace('\\', '/'))
+    return result
+
+
+def write_file(filename, s):
+    if sys.version_info >= (3, 0):
+        with open(filename, 'w', encoding='utf8') as f:
+            f.write(s)
+    else:
+        with open(filename, 'w') as f:
+            s = s.encode('utf8')
+            f.write(s)
+
+
+def is_excluded_file(filename):
+    return (IS_EXCLUDED_FILE_HANDLER and IS_EXCLUDED_FILE_HANDLER(filename))
+
+
+def to_asset_const_name(filename, root):
+    basename = ''
+    with io.open(filename, 'r', encoding='utf-8') as file :
+        head = 'TK_CONST_DATA_ALIGN(const unsigned char '
+        str_tmp = file.readline()
+        basename = str_tmp[len(head):str_tmp.find('[')]
+    return basename.strip()
+
+
+def build_all():
     os.system('scons')
 
 
-def removeDir(path):
-    if os.path.isdir(path):
-        print('rmdir:' + path)
-        shutil.rmtree(path)
+def get_parallel_jobs():
+    if EXEC_CMD_HANDLER or ThreadPoolExecutor is None:
+        return 1
+    text = os.environ.get(UPDATE_RES_JOBS_ENV, '').strip()
+    if text != '':
+        try:
+            jobs = int(text)
+        except ValueError:
+            jobs = 1
+        if jobs < 1:
+            jobs = 1
+        return jobs
+    cpu_count = os.cpu_count() if hasattr(os, 'cpu_count') else None
+    if not cpu_count or cpu_count < 1:
+        return 1
+    return cpu_count
 
 
-def prepareOutputDir(name):
-    fullpath = joinPath(OUTPUT_DIR, name)
-    if os.path.exists(fullpath):
-        print(fullpath+" exist.")
+def _log_cmd_output(cmd, out_str):
+    with _PRINT_LOCK:
+        print(cmd)
+        print(out_str)
+        sys.stdout.flush()
+
+
+def _exec_cmd_sync(cmd):
+    if EXEC_CMD_HANDLER:
+        EXEC_CMD_HANDLER(cmd)
+        return
+    # 转为文件系统的编码格式，避免中文乱码
+    coded_cmd = to_file_system_coding(cmd)
+    # 启动子进程
+    p = subprocess.Popen(coded_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+    exe_name = coded_cmd.split(' ', 1)[0]
+    out_bytes = p.communicate()[0]
+    out_str = ''
+    if out_bytes != None:
+        encoding = sys.stdout.encoding or 'utf-8'
+        out_str = out_bytes.decode(encoding, errors='ignore')
+    _log_cmd_output(cmd, out_str)
+    # 如果程序出现异常或某个资源打包失败则直接退出
+    if p.returncode != 0:
+        sys.exit(exe_name + ' exit code:' + str(p.returncode))
+    if 'gen fail' in out_str:
+        sys.exit(1)
+
+
+def _remove_tree_quiet(path):
+    if path and os.path.isdir(path):
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def _exec_cmd_worker(cmd, cleanup_dir):
+    try:
+        _exec_cmd_sync(cmd)
+    finally:
+        _remove_tree_quiet(cleanup_dir)
+
+
+def _ensure_exec_pool():
+    global _EXEC_POOL
+    jobs = get_parallel_jobs()
+    if jobs <= 1:
+        return None
+    if _EXEC_POOL is None:
+        _EXEC_POOL = ThreadPoolExecutor(max_workers=jobs)
+    return _EXEC_POOL
+
+
+def exec_cmd(cmd, cleanup_dir=None):
+    pool = _ensure_exec_pool()
+    if pool is None:
+        try:
+            _exec_cmd_sync(cmd)
+        finally:
+            _remove_tree_quiet(cleanup_dir)
+        return
+    future = pool.submit(_exec_cmd_worker, cmd, cleanup_dir)
+    with _EXEC_LOCK:
+        _EXEC_FUTURES.append(future)
+
+
+def wait_exec_cmds():
+    with _EXEC_LOCK:
+        futures = list(_EXEC_FUTURES)
+        del _EXEC_FUTURES[:]
+    first_error = None
+    for future in futures:
+        try:
+            future.result()
+        except BaseException as ex:
+            if first_error is None:
+                first_error = ex
+    if first_error is None:
+        return
+    if isinstance(first_error, SystemExit):
+        code = first_error.code
+        if code is None:
+            code = 0
+        sys.exit(code)
+    raise first_error
+
+
+def shutdown_exec_pool():
+    global _EXEC_POOL
+    wait_exec_cmds()
+    pool = _EXEC_POOL
+    _EXEC_POOL = None
+    if pool is not None:
+        pool.shutdown(wait=True)
+
+
+def _walk_regular_files(folder):
+    rel_files = []
+    for root, dirs, files in os.walk(folder):
+        dirs.sort()
+        for name in sorted(files):
+            full = join_path(root, name)
+            if os.path.isfile(full):
+                rel_files.append(os.path.relpath(full, folder))
+    return rel_files
+
+
+def _rel_files_from_sources(folder, sources_file):
+    text = ''
+    if sources_file is not None:
+        text = sources_file.strip()
+    if text == '':
+        return _walk_regular_files(folder)
+    names = get_res_names_from_sources_file(text)
+    if not isinstance(names, list):
+        return None
+    base = os.path.basename(os.path.normpath(folder))
+    rel_files = []
+    for name in names:
+        name = name.replace('\\', '/')
+        if base in IMAGE_DPI_DIR_NAMES and name.startswith(base):
+            # 与 imagegen/resgen 一致：去掉 dpi 目录名和紧随的一个分隔符。
+            name = name[len(base) + 1:]
+        full = join_path(folder, name)
+        if os.path.isfile(full):
+            rel_files.append(name)
+    return rel_files
+
+
+def _clone_input_file(src, dst):
+    parent = os.path.dirname(dst)
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent)
+    # 硬链接保留原 mtime，增量判断与直接处理原目录一致。
+    try:
+        os.link(os.path.realpath(src), dst)
+        return
+    except OSError:
+        pass
+    shutil.copy2(src, dst)
+
+
+def _make_input_shard(src_dir, rel_files):
+    tmp = tempfile.mkdtemp(prefix='awtk_update_res_')
+    src_norm = os.path.normpath(src_dir)
+    base = os.path.basename(src_norm)
+    parent = os.path.basename(os.path.dirname(src_norm))
+    if parent in RES_PATH_MARKERS:
+        shard = join_path(join_path(tmp, parent), base)
     else:
-        os.makedirs(fullpath)
+        shard = join_path(tmp, base)
+    for rel in rel_files:
+        _clone_input_file(join_path(src_dir, rel), join_path(shard, rel))
+    return tmp, shard
 
 
-def prepare():
-    prepareOutputDir('styles')
-    prepareOutputDir('images')
-    prepareOutputDir('fonts')
-    prepareOutputDir('strings')
-    prepareOutputDir('ui')
-    prepareOutputDir('scripts')
-    prepareOutputDir('data')
-    prepareOutputDir('xml')
+def _exec_on_dir(raw, sources_file, build_cmd):
+    if (not os.path.isdir(raw)) or get_parallel_jobs() <= 1:
+        exec_cmd(build_cmd(raw))
+        return
+    rel_files = _rel_files_from_sources(raw, sources_file)
+    if rel_files is None or len(rel_files) < MIN_FILES_TO_SHARD:
+        exec_cmd(build_cmd(raw))
+        return
+    jobs = get_parallel_jobs()
+    if len(rel_files) < jobs:
+        jobs = len(rel_files)
+    groups = []
+    for _ in range(jobs):
+        groups.append([])
+    for index, rel in enumerate(rel_files):
+        groups[index % jobs].append(rel)
+    for group in groups:
+        if len(group) == 0:
+            continue
+        tmp_root, shard = _make_input_shard(raw, group)
+        exec_cmd(build_cmd(shard), tmp_root)
 
 
-def execCmd(cmd):
-    print(cmd)
-    os.system(cmd)
+def themegen(raw, inc, theme, sources_file = ' '):
+    exec_cmd('\"' + to_exe('themegen') + '\" \"' + raw + '\" \"' + inc + '\" data ' + theme + ' \"' + sources_file + '\"')
 
 
-def themegen(raw, inc):
-    execCmd(toExe('themegen') + ' ' + joinPath(INPUT_DIR, raw) +
-            ' ' + joinPath(OUTPUT_DIR, inc))
+def themegen_bin(raw, bin, sources_file = ' '):
+    exec_cmd('\"' + to_exe('themegen') + '\" \"' + raw + '\" \"' + bin + '\" bin' + ' \"' + sources_file + '\"')
 
 
-def themegen_bin(raw, bin):
-    execCmd(toExe('themegen') + ' ' + joinPath(INPUT_DIR, raw) +
-            ' ' + joinPath(INPUT_DIR, bin) + ' bin')
-
-
-def strgen(raw, inc):
-    execCmd(toExe('strgen') + ' ' + joinPath(INPUT_DIR, raw) +
-            ' ' + joinPath(OUTPUT_DIR, inc))
+def strgen(raw, inc, theme):
+    exec_cmd('\"' + to_exe('strgen') + '\" \"' + raw + '\" \"' + inc + '\" data ' + theme)
 
 
 def strgen_bin(raw, bin):
-    execCmd(toExe('strgen') + ' ' + joinPath(INPUT_DIR, raw) +
-            ' ' + joinPath(INPUT_DIR, bin) + ' bin')
+    exec_cmd('\"' + to_exe('strgen') + '\" \"' + raw + '\" \"' + bin + '\" bin')
+
+def resgen(raw, inc, theme, outExtname, sources_file = ' '):
+    def build_cmd(folder):
+        return '\"' + to_exe('resgen') + '\" \"' + folder + '\" \"' + inc + '\" ' + theme + ' ' + outExtname + ' \"' + sources_file + '\"'
+    _exec_on_dir(raw, sources_file, build_cmd)
 
 
-def resgen(raw, inc):
-    execCmd(toExe('resgen') + ' ' + joinPath(INPUT_DIR, raw) +
-            ' ' + joinPath(OUTPUT_DIR, inc))
+def fontgen(raw, text, inc, size, options, theme, save_special_char='False'):
+    fontgenName = 'fontgen'
+    if options == 'mono' and os.path.exists(to_exe('fontgen_ft')):
+        fontgenName = 'fontgen_ft'
+
+    exec_cmd('\"' + to_exe(fontgenName) + '\" \"' + raw + '\" \"' + text + '\" \"' + inc + '\" ' +
+        str(size) + ' ' + options + ' ' + theme + ' ' + save_special_char)
 
 
-def fontgen(raw, text, inc, size):
-    execCmd(toExe('fontgen') + ' ' + joinPath(INPUT_DIR, raw) + ' ' +
-            joinPath(INPUT_DIR, text) + ' ' + joinPath(OUTPUT_DIR, inc) + ' ' + str(size))
+def imagegen(raw, inc, options, theme, lcd_orientation, lcd_fast_rotation_mode, sources_file = ' '):
+    if not lcd_fast_rotation_mode :
+        lcd_orientation = '0'
+    def build_cmd(folder):
+        return '\"' + to_exe('imagegen') + '\" \"' + folder + '\" \"' + inc + '\" ' + options + ' ' + theme + ' ' + lcd_orientation + ' \"' + sources_file + '\"'
+    _exec_on_dir(raw, sources_file, build_cmd)
 
 
-def imagegen(raw, inc):
-    execCmd(toExe('imagegen') + ' ' + raw + ' ' + inc + ' ' + IMAGEGEN_OPTIONS)
-    inc = inc.replace('.data', '.res')
-    resgen(raw, inc)
+def svggen(raw, inc, theme, sources_file = ' '):
+    exec_cmd('\"' + to_exe('bsvggen') + '\" \"' + raw + '\" \"' + inc + '\" data ' + theme + ' \"' + sources_file + '\"')
 
 
-def svggen(raw, inc, bin):
-    execCmd(toExe('bsvggen') + ' ' + raw + ' ' + inc)
-    execCmd(toExe('bsvggen') + ' ' + raw + ' ' + bin + ' bin')
+def svggen_bin(raw, bin, sources_file = ' '):
+    exec_cmd('\"' + to_exe('bsvggen') + '\" \"' + raw + '\" \"' + bin + '\" bin' + ' \"' + sources_file + '\"')
 
 
-def xml_to_ui(raw, inc):
-    execCmd(toExe('xml_to_ui') + ' ' + raw + ' ' + inc)
+def xml_to_ui(raw, inc, theme, sources_file = ' '):
+    exec_cmd('\"' + to_exe('xml_to_ui') + '\" \"' + raw + '\" \"' + inc  + '\" data \"\" ' + theme + ' \"' + sources_file + '\"')
 
 
-def xml_to_ui_bin(raw, bin):
-    execCmd(toExe('xml_to_ui') + ' ' + raw + ' ' + bin + ' bin')
+def xml_to_ui_bin(raw, bin, sources_file = ' '):
+    exec_cmd('\"' + to_exe('xml_to_ui') + '\" \"' + raw + '\" \"' + bin + '\" bin \"\" \"\" \"' + sources_file + '\"')
 
 
 def gen_res_all_style():
-    for f in glob.glob(joinPath(INPUT_DIR, 'styles/*.xml')):
-        inc = copy.copy(f)
-        raw = copy.copy(f)
-        bin = copy.copy(f)
-        inc = inc.replace('.xml', '.data')
-        inc = inc.replace(INPUT_DIR, OUTPUT_DIR)
-        inc = fix_output_file_name(inc)
-        themegen(raw, inc)
-        bin = bin.replace('.xml', '.bin')
-        themegen_bin(raw, bin)
+    if not THEME_PACKAGED and THEME != 'default':
+        return
+
+    raw = join_path(INPUT_DIR, 'styles')
+    if not os.path.exists(raw):
+        return
+
+    emit_generate_res_before('style')
+
+    sources_file = ' '
+    if STORAGE_DIR:
+        sources_file = join_path(STORAGE_DIR, THEME + '/styles.json')
+
+    if IS_GENERATE_RAW:
+        bin = join_path(OUTPUT_DIR, 'raw/styles')
+        make_dirs(bin)
+        themegen_bin(raw, bin, sources_file)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/styles')
+        make_dirs(inc)
+        themegen(raw, inc, THEME, sources_file)
+
+    emit_generate_res_after('style')
 
 
 def gen_res_svg():
-    for f in glob.glob(joinPath(INPUT_DIR, 'images/svg/*.svg')):
-        inc = copy.copy(f)
-        bin = copy.copy(f)
-        raw = copy.copy(f)
-        basename = os.path.basename(inc)
-        inc = joinPath(OUTPUT_DIR, 'images/'+basename)
-        inc = inc.replace('.svg', '.bsvg')
-        inc = fix_output_file_name(inc)
-        bin = bin.replace('.svg', '.bsvg')
-        svggen(raw, inc, bin)
+    raw = join_path(INPUT_DIR, 'images/svg')
+    if not os.path.exists(raw):
+        return
+
+    sources_file = ' '
+    if STORAGE_DIR:
+        sources_file = join_path(STORAGE_DIR, THEME + '/images.json')
+
+    if IS_GENERATE_RAW:
+        bin = join_path(OUTPUT_DIR, 'raw/images/svg')
+        make_dirs(bin)
+        svggen_bin(raw, bin, sources_file)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/images')
+        make_dirs(inc)
+        svggen(raw, inc, THEME, sources_file)
 
 
 def gen_res_png_jpg():
-    for f in glob.glob(joinPath(INPUT_DIR, 'images/'+DPI+'/*.*')):
-        inc = copy.copy(f)
-        raw = copy.copy(f)
-        basename = os.path.basename(inc)
-        inc = joinPath(OUTPUT_DIR, 'images/'+basename)
-        inc = inc.replace('.png', '.data')
-        inc = inc.replace('.jpg', '.data')
-        inc = inc.replace('.bmp', '.data')
-        inc = inc.replace('.gif', '.data')
-        inc = fix_output_file_name(inc)
-        imagegen(raw, inc)
+    if IS_GENERATE_RAW:
+        if INPUT_DIR != join_path(OUTPUT_DIR, 'raw'):
+            names = None
+            in_folder = join_path(INPUT_DIR, 'images/')
+            out_folder = in_folder.replace(INPUT_DIR, join_path(OUTPUT_DIR, 'raw'))
+            if STORAGE_DIR:
+                sources_file = join_path(STORAGE_DIR, THEME + '/images.json')
+                names = get_res_names_from_sources_file(sources_file)
+            if isinstance(names, list):
+                for name in names:
+                    if name.startswith('svg/'):
+                        continue
+                    in_file = join_path(in_folder, name)
+                    out_file = join_path(out_folder, name)
+                    make_dirs(os.path.dirname(out_file))
+                    copy_file(in_file, out_file)
+            else:
+                dirs = ['xx', 'x1', 'x2', 'x3', 'x4']
+                for d in dirs:
+                    raw = join_path(INPUT_DIR, 'images/'+d)
+                    if os.path.exists(raw):
+                        dst = join_path(OUTPUT_DIR, 'raw/images/'+d)
+                        if os.path.exists(dst):
+                            remove_dir(dst)
+                        copy_dir(raw, dst)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/images')
+        dirs = [DPI, 'xx']
+        sources_file = ' '
+        if STORAGE_DIR:
+            sources_file = join_path(STORAGE_DIR, THEME + '/images.json')
+        for d in dirs:
+            raw = join_path(INPUT_DIR, 'images/'+d)
+            if os.path.exists(raw):
+                make_dirs(inc)
+                if IS_GENERATE_INC_RES:
+                    resgen(raw, inc, THEME, '.res', sources_file)
+                if IS_GENERATE_INC_BITMAP:
+                    imagegen(raw, inc, IMAGEGEN_OPTIONS, THEME, LCD_ORIENTATION, LCD_FAST_ROTATION_MODE, sources_file)
+
+        # 如果当前主题的gen选项与default主题不一致，则按新的gen选项重新生成图片的位图数据
+        if IS_GENERATE_INC_BITMAP and THEME != 'default':
+            if get_imagegen_options_of_default_theme() != IMAGEGEN_OPTIONS:
+                wait_exec_cmds()
+                for d in dirs:
+                    raw = join_path(ASSETS_ROOT, 'default/raw')
+                    if not os.path.exists(raw):
+                        raw = join_path(ASSETS_ROOT, 'default')
+                    raw = join_path(raw, 'images/'+d)
+
+                    if os.path.exists(raw):
+                        make_dirs(inc)
+                        imagegen(raw, inc, IMAGEGEN_OPTIONS, THEME, LCD_ORIENTATION, LCD_FAST_ROTATION_MODE, sources_file)
 
 
 def gen_res_all_image():
+    if not THEME_PACKAGED and THEME != 'default':
+        return
+
+    emit_generate_res_before('image')
     gen_res_png_jpg()
     gen_res_svg()
-
+    emit_generate_res_after('image')
 
 def gen_res_all_ui():
-    for f in glob.glob(joinPath(INPUT_DIR, 'ui/*.xml')):
-        inc = copy.copy(f)
-        raw = copy.copy(f)
-        bin = copy.copy(f)
-        inc = inc.replace('.xml', '.data')
-        inc = inc.replace(INPUT_DIR, OUTPUT_DIR)
-        inc = fix_output_file_name(inc)
-        xml_to_ui(raw, inc)
-        bin = bin.replace('.xml', '.bin')
-        xml_to_ui_bin(raw, bin)
+    if not THEME_PACKAGED and THEME != 'default':
+        return
 
+    raw = join_path(INPUT_DIR, 'ui')
+    if not os.path.exists(raw):
+        return
+
+    emit_generate_res_before('ui')
+
+    sources_file = ' '
+    if STORAGE_DIR:
+        sources_file = join_path(STORAGE_DIR, THEME + '/ui.json')
+
+    if IS_GENERATE_RAW:
+        bin = join_path(OUTPUT_DIR, 'raw/ui')
+        make_dirs(bin)
+        xml_to_ui_bin(raw, bin, sources_file)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/ui')
+        make_dirs(inc)
+        xml_to_ui(raw, inc, THEME, sources_file)
+
+    emit_generate_res_after('ui')
+
+def gen_res_all_harfbuzz(out_folder):
+    raw = join_path(INPUT_DIR, 'data')
+    inc = join_path(OUTPUT_DIR, 'inc/data')
+    json_path = join_path(INPUT_DIR, 'data/_s_harfbuzz_data_info.json')
+    bin_path = join_path(out_folder, '_s_harfbuzz_data_info.bin')
+    if not os.path.exists(json_path):
+        return
+    else:
+        import update_res_hb as update_hb
+        update_hb.uharfbuzz_gen_bin(json_path, bin_path)
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        wait_exec_cmds()
+        resgen(raw, inc, THEME, '.data')
 
 def gen_res_all_data():
-    for f in glob.glob(joinPath(INPUT_DIR, 'data/*.*')):
-        inc = copy.copy(f)
-        raw = copy.copy(f)
-        _, extname = os.path.splitext(inc)
-        uextname = extname.replace('.', '_')
-        inc = inc.replace(extname, uextname+'.data')
-        inc = inc.replace(INPUT_DIR, OUTPUT_DIR)
-        inc = fix_output_file_name(inc)
-        resgen(raw, inc)
+    if not THEME_PACKAGED and THEME != 'default':
+        return
+    out_folder = ""
+    raw = join_path(INPUT_DIR, 'data')
+    if not os.path.exists(raw):
+        return
+
+    emit_generate_res_before('data')
+
+    sources_file = ' '
+    if STORAGE_DIR:
+        sources_file = join_path(STORAGE_DIR, THEME + '/data.json')
+
+    if IS_GENERATE_RAW:
+        if INPUT_DIR != join_path(OUTPUT_DIR, 'raw'):
+            in_folder = join_path(INPUT_DIR, 'data')
+            out_folder = join_path(OUTPUT_DIR, 'raw/data')
+            if sources_file != ' ':
+                names = get_res_names_from_sources_file(sources_file)
+                for name in names:
+                    in_file = join_path(in_folder, name)
+                    out_file = join_path(out_folder, name)
+                    make_dirs(os.path.dirname(out_file))
+                    copy_file(in_file, out_file)
+            else:
+                if os.path.exists(out_folder):
+                    remove_dir(out_folder)
+                copy_dir(raw, out_folder)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/data')
+        make_dirs(inc)
+        resgen(raw, inc, THEME, '.data', sources_file)
+
+    gen_res_all_harfbuzz(out_folder)
+
+    emit_generate_res_after('data')
+
+def gen_res_all_flows():
+    if not THEME_PACKAGED and THEME != 'default':
+        return
+
+    raw = join_path(INPUT_DIR, 'flows')
+    if not os.path.exists(raw):
+        return
+
+    emit_generate_res_before('flows')
+
+    if IS_GENERATE_RAW:
+        if INPUT_DIR != join_path(OUTPUT_DIR, 'raw'):
+            dst = join_path(OUTPUT_DIR, 'raw/flows')
+            if os.path.exists(dst):
+                remove_dir(dst)
+            copy_dir(raw, dst)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/flows')
+        make_dirs(inc)
+        resgen(raw, inc, THEME, '.flows')
+
+    emit_generate_res_after('flows')
 
 
 def gen_res_all_xml():
-    for f in glob.glob(joinPath(INPUT_DIR, 'xml/*.xml')):
-        inc = copy.copy(f)
-        raw = copy.copy(f)
-        inc = inc.replace('.xml', '.data')
-        inc = inc.replace(INPUT_DIR, OUTPUT_DIR)
-        inc = fix_output_file_name(inc)
-        resgen(raw, inc)
+    if not THEME_PACKAGED and THEME != 'default':
+        return
+
+    raw = join_path(INPUT_DIR, 'xml')
+    if not os.path.exists(raw):
+        return
+
+    emit_generate_res_before('xml')
+
+    if IS_GENERATE_RAW:
+        if INPUT_DIR != join_path(OUTPUT_DIR, 'raw'):
+            dst = join_path(OUTPUT_DIR, 'raw/xml')
+            if os.path.exists(dst):
+                remove_dir(dst)
+            copy_dir(raw, dst)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/xml')
+        make_dirs(inc)
+        resgen(raw, inc, THEME, '.data')
+
+    emit_generate_res_after('xml')
+
+
+def gen_res_bitmap_font(input_dir, font_options, theme):
+    storage_dir = input_dir
+    save_special_char = 'False'
+    if STORAGE_DIR:
+        storage_dir = join_path(STORAGE_DIR, theme)
+    if IS_SAVE_SPECIAL_CHAR:
+        save_special_char = IS_SAVE_SPECIAL_CHAR
+
+    if not os.path.exists(join_path(storage_dir, 'fonts/config')):
+        return
+
+    # 获取指定要打包的字体资源名称
+    font_names = None
+    if STORAGE_DIR:
+        sources_file = join_path(storage_dir, 'fonts.json')
+        font_names = get_res_names_from_sources_file(sources_file)
+        if font_names:
+            font_names = list(map(lambda s: os.path.splitext(s)[0], font_names))
+
+    for f in glob.glob(join_path(storage_dir, 'fonts/config/*.txt')):
+        filename, extname = os.path.splitext(f)
+        fontname = os.path.basename(filename)
+        index = fontname.rfind('_')
+        if index > 0:
+            size = fontname[index + 1 : len(fontname)]
+            fontname = fontname[0: index]
+
+            # 如果指定了要打包的字体资源，但当前字体不在其中，则跳过
+            if font_names and fontname not in font_names:
+                continue
+
+            bpp = font_options
+            if bpp != 'mono' and FONT_BPPS != None and fontname in FONT_BPPS:
+                bpp = FONT_BPPS[fontname]
+
+            raw = get_origin_font(os.path.dirname(input_dir), fontname, theme)
+            if raw and size.isdigit():
+                inc = join_path(OUTPUT_DIR, 'inc/fonts/' + fontname + '_' + str(size) + '.data')
+                fontgen(raw, f, inc, size, bpp, theme, save_special_char)
+
+
+def get_origin_font(design_dir, fontname, theme):
+    fonts_dir = join_path(design_dir, theme + '/fonts')
+    storage_fonts_dir = join_path(fonts_dir, 'origin')
+    default_fonts_dir = join_path(design_dir, 'default/fonts')
+    default_storage_fonts_dir = join_path(default_fonts_dir, 'origin')
+    if STORAGE_DIR:
+        storage_dir = join_path(STORAGE_DIR, theme + '/fonts/origin')
+        default_storage_dir = join_path(STORAGE_DIR, 'default/fonts/origin')
+
+    dirs = [storage_fonts_dir, fonts_dir, default_storage_fonts_dir, default_fonts_dir]
+    for dir in dirs:
+        for ext in ['.ttf', '.otf']:
+            origin_font = join_path(dir, fontname + ext)
+            if os.path.exists(origin_font):
+                return origin_font
+    return None
 
 
 def gen_res_all_font():
-    for f in glob.glob(joinPath(INPUT_DIR, 'fonts/*.ttf')):
-        res = copy.copy(f)
-        raw = copy.copy(f)
-        res = res.replace(INPUT_DIR, '.')
-        res = res.replace('.ttf', '.res')
-        raw = raw.replace(INPUT_DIR, '.')
-        resgen(raw, res)
-    fontgen('fonts/default_full.ttf', 'fonts/text.txt', 'fonts/default.data', 18)
+    if not THEME_PACKAGED and THEME != 'default':
+        return
+
+    emit_generate_res_before('font')
+    font_files = None
+    if STORAGE_DIR:
+        sources_file = join_path(STORAGE_DIR, THEME + '/fonts.json')
+        names = get_res_names_from_sources_file(sources_file)
+        if isinstance(names, list):
+            font_files = list(map(lambda n: join_path(join_path(INPUT_DIR, 'fonts/'), n), names))
+
+    if IS_GENERATE_RAW:
+        if INPUT_DIR != join_path(OUTPUT_DIR, 'raw'):
+            make_dirs(join_path(OUTPUT_DIR, 'raw/fonts'))
+            in_folder = join_path(INPUT_DIR, 'fonts/')
+            if isinstance(font_files, list):
+                for in_file in font_files:
+                    out_file = in_file.replace(INPUT_DIR, join_path(OUTPUT_DIR, 'raw'))
+                    out_folder = os.path.dirname(out_file)
+                    if not os.path.exists(out_folder):
+                        make_dirs(out_folder)
+                    copy_file(in_file, out_file)
+            else:
+                for ext in ['.ttf', '.otf']:
+                    for f in get_appint_folder(in_folder, ext, False):
+                        out_files = f[0].replace(INPUT_DIR, join_path(OUTPUT_DIR, 'raw'))
+                        out_folder = os.path.dirname(out_files)
+                        if 'origin' in out_folder:
+                            continue
+                        if not os.path.exists(out_folder):
+                            make_dirs(out_folder)
+                        copy_file(f[0], out_files)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc_dir = join_path(OUTPUT_DIR, 'inc/fonts')
+        make_dirs(inc_dir)
+
+        if IS_GENERATE_INC_BITMAP:
+            font_options = 'none'
+            if IMAGEGEN_OPTIONS == 'mono':
+                font_options = 'mono'
+
+            # 位图字体的保留设置在fonts/config目录中，比如default_18.txt中设置default字体18字号的保留字符
+            gen_res_bitmap_font(INPUT_DIR, font_options, THEME)
+            if THEME != 'default':
+                # 如果当前主题的gen选项与default主题不同时为mono，则按新的gen选项重新生成位图字体
+                opt = get_imagegen_options_of_default_theme()
+                if (opt == 'mono' or IMAGEGEN_OPTIONS == 'mono') and opt != IMAGEGEN_OPTIONS:
+                    wait_exec_cmds()
+                    input_dir = join_path(ASSETS_ROOT, 'default/raw')
+                    if not os.path.exists(input_dir):
+                        input_dir = join_path(ASSETS_ROOT, 'default')
+                    gen_res_bitmap_font(input_dir, font_options, THEME)
+
+            # 对default_full的特殊处理，兼容awtk的demos
+            IS_AWTK_DEMO = False
+            if os.path.exists('scripts/update_res_common.py'):
+                IS_AWTK_DEMO = True
+
+            raw = None
+            for ext in ['.ttf', '.otf']:
+                candidate = join_path(INPUT_DIR, 'fonts/default_full' + ext)
+                if os.path.exists(candidate):
+                    raw = candidate
+                    break
+            if IS_AWTK_DEMO and raw:
+                text = join_path(INPUT_DIR, 'fonts/text.txt')
+                if os.path.exists(text):
+                    fontsizes = [16, 18, 20, 24, 28, 32, 96]
+                    for size in fontsizes:
+                        inc = join_path(OUTPUT_DIR, 'inc/fonts/default_%d.data' % size)
+                        fontgen(raw, text, inc, size, font_options, THEME)
+                text = join_path(INPUT_DIR, 'fonts/trado.txt')
+                if os.path.exists(text):
+                    raw_trado = None
+                    for ext in ['.ttf', '.otf']:
+                        candidate = join_path(INPUT_DIR, 'fonts/trado' + ext)
+                        if os.path.exists(candidate):
+                            raw_trado = candidate
+                            break
+                    if raw_trado:
+                        fontsizes = [60]
+                        for size in fontsizes:
+                            inc = join_path(OUTPUT_DIR, 'inc/fonts/trado_%d.data' % size)
+                            fontgen(raw_trado, text, inc, size, font_options, THEME)
+
+        if IS_GENERATE_INC_RES:
+            in_folder = join_path(INPUT_DIR, 'fonts')
+            if not os.path.exists(in_folder):
+                return
+
+            if isinstance(font_files, list):
+                for in_file in font_files:
+                    filename, extname = os.path.splitext(in_file)
+                    out_file = filename.replace(INPUT_DIR, join_path(OUTPUT_DIR, 'inc'))
+                    out_file = out_file + '.res'
+                    out_folder = os.path.dirname(out_file)
+                    if not os.path.exists(out_folder):
+                        make_dirs(out_folder)
+                    resgen(in_file, out_file, THEME, '.res')
+            else:
+                for ext in ['.ttf', '.otf']:
+                    for f in get_appint_folder(in_folder, ext, False):
+                        filename, extname = os.path.splitext(f[0])
+                        raw = f[0]
+                        filename = filename.replace(INPUT_DIR, join_path(OUTPUT_DIR, 'inc'))
+                        inc = filename + '.res'
+                        if "origin" in inc:
+                            continue
+                        resgen(raw, inc, THEME, '.res')
+    emit_generate_res_after('font')
 
 
 def gen_res_all_script():
-    for f in glob.glob(joinPath(INPUT_DIR, 'scripts/*.js')):
-        res = copy.copy(f)
-        raw = copy.copy(f)
-        res = res.replace(INPUT_DIR, '.')
-        res = res.replace('.js', '.res')
-        raw = raw.replace(INPUT_DIR, '.')
-        raw = fix_output_file_name(raw)
-        resgen(raw, res)
+    if not THEME_PACKAGED and THEME != 'default':
+        return
+
+    raw = join_path(INPUT_DIR, 'scripts')
+    if not os.path.exists(raw):
+        return
+
+    emit_generate_res_before('script')
+
+    if IS_GENERATE_RAW:
+        if INPUT_DIR != join_path(OUTPUT_DIR, 'raw'):
+            dst = join_path(OUTPUT_DIR, 'raw/scripts')
+            if os.path.exists(dst):
+                remove_dir(dst)
+            copy_dir(raw, dst)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/scripts')
+        make_dirs(inc)
+        resgen(raw, inc, THEME, '.res')
+
+    emit_generate_res_after('script')
 
 
 def gen_res_all_string():
-    print('gen_res_all_string');
-    strgen('strings/strings.xml', 'strings')
-    strgen_bin('strings/strings.xml', 'strings')
+    if not THEME_PACKAGED and THEME != 'default':
+        return
 
+    raw = join_path(INPUT_DIR, 'strings')
+    if not os.path.exists(raw):
+        return
+
+    emit_generate_res_before('string')
+
+    if IS_GENERATE_RAW:
+        bin = join_path(OUTPUT_DIR, 'raw/strings')
+        make_dirs(bin)
+        strgen_bin(raw, bin)
+
+    if IS_GENERATE_INC_RES or IS_GENERATE_INC_BITMAP:
+        inc = join_path(OUTPUT_DIR, 'inc/strings')
+        make_dirs(inc)
+        strgen(raw, inc, THEME)
+
+    emit_generate_res_after('string')
 
 def gen_gpinyin():
-    execCmd(toExe('resgen') + ' ' + joinPath('3rd', 'gpinyin/data/gpinyin.dat') +
-            ' ' + joinPath('3rd', 'gpinyin/src/gpinyin.inc'))
-    execCmd(toExe('resgen') + ' ' + joinPath('tools', 'word_gen/words.bin') +
-            ' ' + joinPath('src', 'input_methods/suggest_words.inc'))
-    execCmd(toExe('resgen') + ' ' + joinPath('tools',
-                                             'word_gen/words.bin') + ' ' + joinPath('tests', 'suggest_test.inc'))
+    emit_generate_res_before('gpinyin')
+    exec_cmd('\"' + to_exe('resgen') + '\" \"' + join_path('3rd', 'gpinyin/data/gpinyin.dat') +
+            '\" \"' + join_path('3rd', 'gpinyin/src/gpinyin.inc') + '\"')
+    exec_cmd('\"' + to_exe('resgen') + '\" ' + join_path('tools', 'word_gen/words.bin') +
+            '\" \"' + join_path('src', 'input_methods/suggest_words.inc') + '\"')
+    exec_cmd('\"' + to_exe('resgen') + '\" \"' + join_path('tools','word_gen/words.bin') +
+            '\" \"' + join_path('tests', 'suggest_test.inc') + '\"')
+    emit_generate_res_after('gpinyin')
 
 
 def gen_res_all():
+    print('=========================================================')
+    emit_generate_res_before('all')
     gen_res_all_string()
     gen_res_all_font()
     gen_res_all_script()
@@ -260,304 +1131,613 @@ def gen_res_all():
     gen_res_all_ui()
     gen_res_all_style()
     gen_res_all_data()
+    gen_res_all_flows()
     gen_res_all_xml()
+    emit_generate_res_after('all')
+    print('=========================================================')
 
 
-def writeResult(str):
-    with open(ASSET_C, "w") as text_file:
-        text_file.write(str);
+def gen_includes(files, inherited, with_multi_theme):
+    result = ""
 
-def writeResultJSON(str):
-    with open('assets.js', "w") as text_file:
-        text_file.write(str);
+    if with_multi_theme:
+        remove = OUTPUT_ROOT
+    else:
+        remove = os.path.dirname(OUTPUT_ROOT)
 
-def genIncludes(files):
-    str1 = ""
     for f in files:
+        if is_excluded_file(f):
+            continue
+
+        if inherited:
+            filename = f.replace(join_path(OUTPUT_ROOT, 'default'), join_path(OUTPUT_ROOT, THEME))
+            if os.path.exists(filename):
+                continue
+
         incf = copy.copy(f)
-        incf = incf.replace(os.path.dirname(ASSETS_ROOT), ".")
+        incf = incf.replace(remove, ".")
         incf = incf.replace('\\', '/')
         incf = incf.replace('./', '')
-        str1 += '#include "'+incf+'"\n'
+        result += '#include "'+incf+'"\n'
 
-    return str1
-
-
-def gen_add_assets(files):
-    result = ""
-    for f in files:
-        incf = copy.copy(f)
-        basename = incf.replace(OUTPUT_DIR, '.')
-        basename = basename.replace('\\', '/')
-        basename = basename.replace('/fonts/', '/font/')
-        basename = basename.replace('/images/', '/image/')
-        basename = basename.replace('/styles/', '/style/')
-        basename = basename.replace('./', '')
-        basename = basename.replace('/', '_')
-        basename = basename.replace('.data', '')
-        basename = basename.replace('.bsvg', '')
-        if basename == 'font_default':
-            result += '  assets_manager_add(rm, font_default);\n'
-        else:
-            result += '  assets_manager_add(rm, '+basename+');\n'
     return result
 
 
-def gen_res_c():
+def gen_extern_declares(files):
+    result = ""
+    for f in files:
+        if is_excluded_file(f):
+            continue
+
+        filename = f.replace(join_path(OUTPUT_ROOT, 'default'), join_path(OUTPUT_ROOT, THEME))
+        if not os.path.exists(filename):
+            constname = to_asset_const_name(f, join_path(OUTPUT_ROOT, 'default/inc'))
+            result += 'extern TK_CONST_DATA_ALIGN(const unsigned char '+constname+'[]);\n'
+
+    return result
+
+
+def gen_assets_includes(curr_theme_path, defl_theme_path = None, with_multi_theme = True):
+    files = glob_asset_files(curr_theme_path)
+    result = gen_includes(files, False, with_multi_theme)
+
+    if defl_theme_path != None and THEME != 'default':
+        files = glob_asset_files(defl_theme_path)
+        if with_multi_theme and is_packaged_of_default_theme():
+            result += gen_extern_declares(files)
+        else:
+            result += gen_includes(files, True, with_multi_theme)
+
+    return result
+
+
+def gen_assets_add(filename, is_default_theme):
+    if is_default_theme:
+        constname = to_asset_const_name(filename, join_path(OUTPUT_ROOT, 'default/inc'))
+        return '  assets_manager_add(am, '+constname+');\n'
+    else:
+        constname = to_asset_const_name(filename, join_path(OUTPUT_DIR, 'inc'))
+        return '  assets_manager_add(am, '+constname+');\n'
+
+
+def gen_assets_adds(curr_theme_path, defl_theme_path = None):
+    result = ""
+    is_default_theme = THEME == 'default'
+
+    files = glob_asset_files(curr_theme_path)
+
+    for f in files:
+        if is_excluded_file(f):
+            continue
+        result += gen_assets_add(f, is_default_theme)
+    if defl_theme_path != None and not is_default_theme:
+        files = glob_asset_files(defl_theme_path)
+        for f in files:
+            if is_excluded_file(f):
+                continue
+
+            filename = f.replace(join_path(OUTPUT_ROOT, 'default'), join_path(OUTPUT_ROOT, THEME))
+            if not os.path.exists(filename):
+                result += gen_assets_add(f, True)
+
+    return result
+
+
+def gen_assets_c_of_one_theme(with_multi_theme = True):
+    if not THEME_PACKAGED:
+        return
+
+    if with_multi_theme:
+        filename = join_path(OUTPUT_ROOT, ASSETS_SUBNAME+THEME+'.inc')
+    else:
+        filename, extname = os.path.splitext(ASSET_C)
+        filename = filename + '_' + THEME + extname
+
+    func_name = 'assets_init'
+    if with_multi_theme:
+        func_name = 'assets_init_'+THEME
+
     result = '#include "awtk.h"\n'
     result += '#include "base/assets_manager.h"\n'
+    result += '#if !defined(WITH_FS_RES) || defined(AWTK_WEB)\n'
 
-    result += '#ifndef WITH_FS_RES\n'
-    files = glob.glob(joinPath(OUTPUT_DIR, 'strings/*.data')) \
-        + glob.glob(joinPath(OUTPUT_DIR, 'styles/*.data'))  \
-        + glob.glob(joinPath(OUTPUT_DIR, 'ui/*.data')) \
-        + glob.glob(joinPath(OUTPUT_DIR, 'xml/*.data')) \
-        + glob.glob(joinPath(OUTPUT_DIR, 'data/*.data'))
-
-    result += genIncludes(files)
-
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/strings/*.data'), join_path(OUTPUT_ROOT, 'default/inc/strings/*.data'), with_multi_theme)
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/styles/*.data'), join_path(OUTPUT_ROOT, 'default/inc/styles/*.data'), with_multi_theme)
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/ui/*.data'), join_path(OUTPUT_ROOT, 'default/inc/ui/*.data'), with_multi_theme)
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/xml/*.data'), join_path(OUTPUT_ROOT, 'default/inc/xml/*.data'), with_multi_theme)
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/data/*.data'), join_path(OUTPUT_ROOT, 'default/inc/data/*.data'), with_multi_theme)
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/flows/*.flows'), join_path(OUTPUT_ROOT, 'default/inc/flows/*.flows'), with_multi_theme)
+    result += "#ifndef AWTK_WEB\n"
     result += "#ifdef WITH_STB_IMAGE\n"
-    files = glob.glob(joinPath(OUTPUT_DIR, 'images/*.res'))
-    result += genIncludes(files)
-    result += "#else\n"
-    files = glob.glob(joinPath(OUTPUT_DIR, 'images/*.data'))
-    result += genIncludes(files)
-    result += '#endif/*WITH_STB_IMAGE*/\n'
-
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/images/*.res'), join_path(OUTPUT_ROOT, 'default/inc/images/*.res'), with_multi_theme)
+    result += "#else /*WITH_STB_IMAGE*/\n"
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/images/*.data'), join_path(OUTPUT_ROOT, 'default/inc/images/*.data'), with_multi_theme)
+    result += '#endif /*WITH_STB_IMAGE*/\n'
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/scripts/*.res'), join_path(OUTPUT_ROOT, 'default/inc/scripts/*.res'), with_multi_theme)
+    result += '#endif /*AWTK_WEB*/\n'
+    result += "#ifdef WITH_TRUETYPE_FONT\n"
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/fonts/*.res'), join_path(OUTPUT_ROOT, 'default/inc/fonts/*.res'), with_multi_theme)
+    result += "#else /*WITH_TRUETYPE_FONT*/\n"
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/fonts/*.data'), join_path(OUTPUT_ROOT, 'default/inc/fonts/*.data'), with_multi_theme)
+    result += '#endif /*WITH_TRUETYPE_FONT*/\n'
     result += "#ifdef WITH_VGCANVAS\n"
-    files = glob.glob(joinPath(OUTPUT_DIR, 'images/*.bsvg'))
-    result += genIncludes(files)
-    result += '#endif/*WITH_VGCANVAS*/\n'
-
-    result += "#if defined(WITH_STB_FONT) || defined(WITH_FT_FONT)\n"
-    files = glob.glob(joinPath(OUTPUT_DIR, 'fonts/default.res'))
-    result += genIncludes(files)
-    result += "#else/*WITH_STB_FONT or WITH_FT_FONT*/\n"
-    files = glob.glob(joinPath(OUTPUT_DIR, 'fonts/*.data'))
-    result += genIncludes(files)
-    result += '#endif/*WITH_STB_FONT or WITH_FT_FONT*/\n'
-
-    result += '#endif/*WITH_FS_RES*/\n'
-
+    result += gen_assets_includes(join_path(OUTPUT_DIR, 'inc/images/*.bsvg'), join_path(OUTPUT_ROOT, 'default/inc/images/*.bsvg'), with_multi_theme)
+    result += '#endif /*WITH_VGCANVAS*/\n'
+    result += '#endif /*!defined(WITH_FS_RES) || defined(AWTK_WEB)*/\n'
     result += '\n'
-    result += 'ret_t assets_init(void) {\n'
-    result += '  assets_manager_t* rm = assets_manager();\n\n'
-    result += ''
 
-    result += '#ifdef WITH_FS_RES\n'
-    result += '  assets_manager_preload(rm, ASSET_TYPE_FONT, "default");\n'
-    result += '  assets_manager_preload(rm, ASSET_TYPE_STYLE, "default");\n'
-    result += '#else\n'
+    result += 'ret_t ' + func_name + '(void) {\n'
+    result += '  assets_manager_t* am = assets_manager();\n'
+    result += '  assets_manager_set_theme(am, "' + THEME + '");\n'
+    result += '\n'
 
-    files = glob.glob(joinPath(OUTPUT_DIR, '**/*.data'))
-    result += gen_add_assets(files)
-
+    result += '#if defined(WITH_FS_RES) && !defined(AWTK_WEB)\n'
+    result += '  assets_manager_preload(am, ASSET_TYPE_STYLE, "default");\n'
+    result += '#else /*defined(WITH_FS_RES) && !defined(AWTK_WEB)*/\n'
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/strings/*.data'), join_path(OUTPUT_ROOT, 'default/inc/strings/*.data'))
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/styles/*.data'), join_path(OUTPUT_ROOT, 'default/inc/styles/*.data'))
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/ui/*.data'), join_path(OUTPUT_ROOT, 'default/inc/ui/*.data'))
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/xml/*.data'), join_path(OUTPUT_ROOT, 'default/inc/xml/*.data'))
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/data/*.data'), join_path(OUTPUT_ROOT, 'default/inc/data/*.data'))
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/flows/*.flows'), join_path(OUTPUT_ROOT, 'default/inc/flows/*.flows'))
+    result += '#ifndef AWTK_WEB\n'
+    if IS_GENERATE_INC_RES:
+        result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/images/*.res'), join_path(OUTPUT_ROOT, 'default/inc/images/*.res'))
+    else:
+        result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/images/*.data'), join_path(OUTPUT_ROOT, 'default/inc/images/*.data'))
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/scripts/*.res'), join_path(OUTPUT_ROOT, 'default/inc/scripts/*.res'))
+    result += '#endif /*AWTK_WEB*/\n'
+    result += "#ifdef WITH_TRUETYPE_FONT\n"
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/fonts/*.res'), join_path(OUTPUT_ROOT, 'default/inc/fonts/*.res'))
+    result += "#else /*WITH_TRUETYPE_FONT*/\n"
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/fonts/*.data'), join_path(OUTPUT_ROOT, 'default/inc/fonts/*.data'))
+    result += '#endif /*WITH_TRUETYPE_FONT*/\n'
     result += "#ifdef WITH_VGCANVAS\n"
-    files = glob.glob(joinPath(OUTPUT_DIR, 'images/*.bsvg'))
-    result += gen_add_assets(files)
-    result += '#endif/*WITH_VGCANVAS*/\n'
-
-    result += '#endif\n'
-
+    result += gen_assets_adds(join_path(OUTPUT_DIR, 'inc/images/*.bsvg'), join_path(OUTPUT_ROOT, 'default/inc/images/*.bsvg'))
+    result += '#endif /*WITH_VGCANVAS*/\n'
+    result += '#endif /*defined(WITH_FS_RES) && !defined(AWTK_WEB)*/\n'
     result += '\n'
+
     result += '  tk_init_assets();\n'
     result += '  return RET_OK;\n'
     result += '}\n'
-    writeResult(result)
+
+    write_file(filename, result)
 
 
-def gen_res_web_c():
+def gen_asset_c_entry_with_multi_theme():
     result = '#include "awtk.h"\n'
     result += '#include "base/assets_manager.h"\n'
 
-    files = glob.glob(joinPath(OUTPUT_DIR, 'images/*.bsvg')) \
-        + glob.glob(joinPath(OUTPUT_DIR, 'strings/*.data')) \
-        + glob.glob(joinPath(OUTPUT_DIR, 'styles/*.data'))  \
-        + glob.glob(joinPath(OUTPUT_DIR, 'ui/*.data')) \
-        + glob.glob(joinPath(OUTPUT_DIR, 'xml/*.data')) \
-        + glob.glob(joinPath(OUTPUT_DIR, 'data/*.data'))
-
-    result += genIncludes(files)
+    assets_root = os.path.relpath(OUTPUT_ROOT, os.path.dirname(ASSET_C)).replace('\\', '/')
+    for i in range(len(THEMES)):
+        set_current_theme(i)
+        if THEME_PACKAGED:
+            result += '#include "'+assets_root+'/'+ASSETS_SUBNAME+THEME+'.inc"\n'
 
     result += '\n'
-    result += 'ret_t assets_init(void) {\n'
-    result += '  assets_manager_t* rm = assets_manager();\n\n'
-    result += ''
+    result += '#ifndef APP_THEME\n'
+    result += '#define APP_THEME "' + APP_THEME + '"\n'
+    result += '#endif /*APP_THEME*/\n\n'
 
-    result += gen_add_assets(files)
+    result += 'bool_t assets_has_theme(const char* name) {\n'
+    result += '  return_value_if_fail(name != NULL, FALSE);\n\n'
+    result += '  '
+    for i in range(len(THEMES)):
+        set_current_theme(i)
+        if THEME_PACKAGED:
+            result +=   'if (tk_str_eq(name, "'+THEME+'")) {\n'
+            result += '    return TRUE;\n'
+            result += '  } else '
+    result += '{\n'
+    result += '    return FALSE;\n  }\n}\n\n'
 
-    result += '\n'
-    result += '  tk_init_assets();\n'
+    result += 'static ret_t assets_init_internal(const char* theme) {\n'
+    result += '  assets_manager_t* am = assets_manager();\n'
+    result += '  return_value_if_fail(theme != NULL && am != NULL, RET_BAD_PARAMS);\n\n'
+    result += '  assets_manager_set_theme(am, theme);\n\n'
+    result += '  '
+    for i in range(len(THEMES)):
+        set_current_theme(i)
+        if THEME_PACKAGED:
+            result +=   'if (tk_str_eq(theme, "'+THEME+'")) {\n'
+            result += '    return assets_init_'+THEME+'();\n'
+            result += '  } else '
+    result += '{\n'
+    result += '    log_debug(\"%s not support.\\n\", theme);\n'
+    result += '    return RET_NOT_IMPL;\n  }\n}\n\n'
+
+    result += '#if !defined(WITH_FS_RES) || defined(AWTK_WEB)\n'
+    result += 'static ret_t widget_set_theme_without_file_system(widget_t* widget, const char* name) {\n'
+    result += '  const asset_info_t* info = NULL;\n'
+    result += '  theme_change_event_t event;\n'
+    result += '  event_t* e = theme_change_event_init(&event, EVT_THEME_CHANGED, name);\n'
+    result += '  widget_t* wm = widget_get_window_manager(widget);\n'
+    result += '  font_manager_t* fm = widget_get_font_manager(widget);\n'
+    result += '  image_manager_t* imm = widget_get_image_manager(widget);\n'
+    result += '  assets_manager_t* am = widget_get_assets_manager(widget);\n'
+    result += '  locale_info_t* locale_info = widget_get_locale_info(widget);\n\n'
+    result += '  return_value_if_fail(am != NULL && name != NULL, RET_BAD_PARAMS);\n'
+    result += '  return_value_if_fail(assets_has_theme(name), RET_BAD_PARAMS);\n\n'
+    result += '  font_manager_unload_all(fm);\n'
+    result += '  image_manager_unload_all(imm);\n'
+    result += '  assets_manager_clear_all(am);\n'
+    result += '  widget_reset_canvas(widget);\n\n'
+    result += '  assets_init_internal(name);\n'
+    result += '  locale_info_reload(locale_info);\n\n'
+    result += '  info = assets_manager_ref(am, ASSET_TYPE_STYLE, "default");\n'
+    result += '  theme_set_theme_data(theme(), info->data);\n'
+    result += '  assets_manager_unref(assets_manager(), info);\n\n'
+    result += '  widget_dispatch(wm, e);\n'
+    result += '  widget_invalidate_force(wm, NULL);\n\n'
+    result += '  log_debug("theme changed: %s\\n", name);\n\n'
+    result += '  return RET_OK;\n'
+    result += '}\n\n'
+    result += 'static ret_t on_set_theme_without_file_system(void* ctx, event_t* e) {\n'
+    result += '  theme_change_event_t* evt = theme_change_event_cast(e);\n'
+    result += '  widget_set_theme_without_file_system(window_manager(), evt->name);\n'
     result += '  return RET_OK;\n'
     result += '}\n'
+    result += '#endif /*!defined(WITH_FS_RES) || defined(AWTK_WEB)*/\n\n'
 
-    global ASSET_C
-    ASSET_C = ASSET_C.replace('.c', '_web.c');
-    writeResult(result)
+    result += 'ret_t assets_init(void) {\n'
+    result += '#if !defined(WITH_FS_RES) || defined(AWTK_WEB)\n'
+    result += '  widget_on(window_manager(), EVT_THEME_WILL_CHANGE, on_set_theme_without_file_system, NULL);\n'
+    result += '#endif /*!defined(WITH_FS_RES) || defined(AWTK_WEB)*/\n'
+    result += '  return assets_init_internal(APP_THEME);\n}\n\n'
+
+    result += 'ret_t assets_set_global_theme(const char* name) {\n'
+    result += '  return widget_set_theme(window_manager(), name);\n'
+    result += '}\n'
+
+    write_file(ASSET_C, result)
+
+def gen_res_c(with_multi_theme = True):
+    wait_exec_cmds()
+    theme_foreach(gen_assets_c_of_one_theme, with_multi_theme)
+
+    if with_multi_theme:
+        gen_asset_c_entry_with_multi_theme()
 
 def gen_res_json_one(res_type, files):
-    result= "\n  " + res_type + ': [\n'
+    result = ''
     for f in files:
         uri = f.replace(os.getcwd(), "")[1:]
-        uri = uri.replace('\\', '/');
+        uri = uri.replace('\\', '/')
         filename, extname = os.path.splitext(uri)
         basename = os.path.basename(filename)
-        result = result + '    {name:"' + basename + '\", uri:"' + uri;
+        result = result + '    {name:"' + basename + '\", uri:"' + uri
         if res_type == 'image' and extname != '.svg' and extname != '.bsvg':
+            from PIL import Image
             img = Image.open(f)
             w, h = img.size
-            result = result + '", w:' + str(w) + ', h:' + str(h)+ '},\n';
+            result = result + '", w:' + str(w) + ', h:' + str(h) + '},\n'
         else:
-            result = result + '"},\n';
-    result = result + '  ],'
+            result = result + '"},\n'
 
-    return result;
+    return result
+
+def gen_res_json_all_theme(res_type, sub_filepath):
+    result = "\n  " + res_type + ': [\n'
+    for i in range(len(THEMES)):
+        set_current_theme(i)
+        files = glob.glob(join_path(INPUT_DIR, sub_filepath))
+        result += gen_res_json_one(res_type, files)
+    result += '  ],'
+
+    return result
 
 def gen_res_json():
-    result = 'const g_awtk_assets = {';
+    result = 'const g_awtk_assets = {'
+    result += gen_res_json_all_theme("image", 'images/*/*.*')
+    result += gen_res_json_all_theme("ui", 'ui/*.bin')
+    result += gen_res_json_all_theme("style",'styles/*.bin')
+    result += gen_res_json_all_theme("string", 'strings/*.bin')
+    result += gen_res_json_all_theme("xml", 'xml/*.xml')
+    result += gen_res_json_all_theme("data", 'data/*.*')
+    result += gen_res_json_all_theme("script", 'scripts/*.*')
+    result += gen_res_json_all_theme("font", 'fonts/*.[ot]tf')
+    result += '\n};\n'
 
-    result = result + gen_res_json_one("image", glob.glob(joinPath(INPUT_DIR, 'images/*/*.*')));
-    result = result + gen_res_json_one("ui", glob.glob(joinPath(INPUT_DIR, 'ui/*.bin')));
-    result = result + gen_res_json_one("style", glob.glob(joinPath(INPUT_DIR, 'styles/*.bin')));
-    result = result + gen_res_json_one("string", glob.glob(joinPath(INPUT_DIR, 'strings/*.bin')));
-    result = result + gen_res_json_one("xml", glob.glob(joinPath(INPUT_DIR, 'xml/*.xml')));
-    result = result + gen_res_json_one("data", glob.glob(joinPath(INPUT_DIR, 'data/*.*')));
-    result = result + gen_res_json_one("script", glob.glob(joinPath(INPUT_DIR, 'scripts/*.*')));
-    result = result + gen_res_json_one("font", glob.glob(joinPath(INPUT_DIR, 'fonts/*.ttf')));
-    result = result + '\n};';
-
-    global ASSET_C
-    ASSET_C = ASSET_C.replace('.c', '_web.js');
-    writeResult(result);
-
-def gen_res():
-    prepare()
-    gen_res_all()
-    gen_res_c()
+    write_file(ASSET_C.replace('.c', '_web.js'), result)
 
 
-def init(awtk_root, assets_root, asset_c):
-    global DPI
+def init(awtk_root, assets_root, themes, asset_c, output = None):
+    global THEMES
     global ASSET_C
     global BIN_DIR
     global ASSETS_ROOT
     global AWTK_ROOT
-    global INPUT_DIR
-    global OUTPUT_DIR
-    global IMAGEGEN_OPTIONS
+    global OUTPUT_ROOT
 
     ASSET_C = asset_c
     AWTK_ROOT = awtk_root
     ASSETS_ROOT = assets_root
+    BIN_DIR = join_path(AWTK_ROOT, 'bin')
 
-    BIN_DIR = joinPath(AWTK_ROOT, 'bin')
-    INPUT_DIR = joinPath(ASSETS_ROOT, 'raw')
-    OUTPUT_DIR = joinPath(ASSETS_ROOT, 'inc')
+    if output != None:
+        OUTPUT_ROOT = output
+    else:
+        OUTPUT_ROOT = ASSETS_ROOT
 
+    if isinstance(themes, str):
+        THEMES = [themes]
+    else:
+        THEMES = themes
 
-def dumpArgs():
-    print('ASSETS_ROOT='+ASSETS_ROOT)
-    print('AWTK_ROOT='+AWTK_ROOT)
-    print('INPUT_DIR='+INPUT_DIR)
-    print('OUTPUT_DIR='+OUTPUT_DIR)
-    print('ASSET_C='+ASSET_C)
-    print('DPI='+DPI)
-    print('IMAGEGEN_OPTIONS='+IMAGEGEN_OPTIONS)
-    print('BIN_DIR='+BIN_DIR)
+    set_current_theme(0)
 
 
-def updateRes():
-    global ACTION
+def dump_args():
+    print('---------------------------------------------------------')
+    print('DPI = '+DPI)
+    print('THEMES = '+str(THEMES))
+    print('IMAGEGEN_OPTIONS = '+IMAGEGEN_OPTIONS)
+    print('LCD_FAST_ROTATION_MODE = '+str(LCD_FAST_ROTATION_MODE))
+    print('LCD_ORIENTATION = LCD_ORIENTATION_'+LCD_ORIENTATION)
+    print('AWTK_ROOT = '+AWTK_ROOT)
+    print('BIN_DIR = '+BIN_DIR)
+    print('ASSETS_ROOT = '+ASSETS_ROOT)
+    print('ASSET_C = '+ASSET_C)
+    print('OUTPUT = '+OUTPUT_ROOT)
+    print('JOBS = '+str(get_parallel_jobs()))
+
+
+def update_res():
     if ACTION == 'all':
-        removeDir(OUTPUT_DIR)
-        gen_res()
+        clean_res()
+        theme_foreach(gen_res_all)
+        gen_res_c()
+    elif ACTION == 'res':
+        clean_res()
+        theme_foreach(gen_res_all)
     elif ACTION == 'clean':
-        cleanRes()
+        clean_res()
     elif ACTION == 'web':
-        gen_res_web_c()
+        gen_res_c()
     elif ACTION == 'json':
         gen_res_json()
     elif ACTION == 'string':
-        prepare()
-        gen_res_all_string()
+        theme_foreach(gen_res_all_string)
         gen_res_c()
     elif ACTION == "font":
-        prepare()
-        gen_res_all_font()
+        theme_foreach(gen_res_all_font)
         gen_res_c()
     elif ACTION == "script":
-        prepare()
-        gen_res_all_script()
+        theme_foreach(gen_res_all_script)
         gen_res_c()
     elif ACTION == 'image':
-        prepare()
-        gen_res_all_image()
+        theme_foreach(gen_res_all_image)
         gen_res_c()
     elif ACTION == 'ui':
-        prepare()
-        gen_res_all_ui()
+        theme_foreach(gen_res_all_ui)
         gen_res_c()
     elif ACTION == 'style':
-        prepare()
-        gen_res_all_style()
+        theme_foreach(gen_res_all_style)
         gen_res_c()
     elif ACTION == 'data':
-        prepare()
-        gen_res_all_data()
+        theme_foreach(gen_res_all_data)
+        gen_res_c()
+    elif ACTION == 'flows':
+        theme_foreach(gen_res_all_flows)
         gen_res_c()
     elif ACTION == 'xml':
-        prepare()
-        gen_res_all_xml()
+        theme_foreach(gen_res_all_xml)
         gen_res_c()
     elif ACTION == 'pinyin':
-        prepare()
         gen_gpinyin()
+    elif ACTION == 'assets.c':
         gen_res_c()
-    dumpArgs()
+
+    shutdown_exec_pool()
+    dump_args()
 
 
-def cleanRes():
-    print("==================================================================")
-    resFiles = glob.glob(joinPath(INPUT_DIR, '*/*.bin')) + \
-        glob.glob(joinPath(INPUT_DIR, '*/*/*.bin'))
-    for f in resFiles:
-        print("remove: " + f)
-        os.remove(f)
-    resFiles = glob.glob(joinPath(INPUT_DIR, '*/*.bin')) + \
-        glob.glob(joinPath(INPUT_DIR, '*/*/*.bsvg'))
-    for f in resFiles:
-        print("remove: " + f)
-        os.remove(f)
-    removeDir(OUTPUT_DIR)
-    print("==================================================================")
+def clean_res_bin(dir):
+    if os.path.isdir(dir):
+        for root, dirs, files in os.walk(dir):
+            for f in files:
+                filename, extname = os.path.splitext(f)
+                if extname == '.bin' or extname == '.bsvg':
+                    real_path = join_path(root, f)
+                    os.chmod(real_path, stat.S_IRWXU)
+                    os.remove(real_path)
 
 
-def showUsage():
-    global DPI
-    global ACTION
-    global IMAGEGEN_OPTIONS
-    args = ' action[clean|web|json|all|font|image|ui|style|string|script|data|xml] dpi[x1|x2] image_options[rgba|bgra+bgr565]'
-    if len(sys.argv) == 1:
-        print('=========================================================')
-        print('Usage: '+sys.argv[0] + args)
-        print('Example:')
-        print(sys.argv[0] + ' all')
-        print(sys.argv[0] + ' clean')
-        print(sys.argv[0] + ' style')
-        print(sys.argv[0] + ' all x1 bgra+bgr565')
-        print('=========================================================')
-        sys.exit(0)
+def clean_res_of_one_theme():
+    print('clean res: ' + OUTPUT_DIR)
+    clean_res_bin(join_path(OUTPUT_DIR, 'raw/ui'))
+    clean_res_bin(join_path(OUTPUT_DIR, 'raw/images/svg'))
+    clean_res_bin(join_path(OUTPUT_DIR, 'raw/strings'))
+    clean_res_bin(join_path(OUTPUT_DIR, 'raw/styles'))
+    remove_dir(join_path(OUTPUT_DIR, 'inc'))
+    remove_dir(join_path(OUTPUT_ROOT, ASSETS_SUBNAME+THEME+'.inc'))
+
+def clean_res():
+    wait_exec_cmds()
+    print('=========================================================')
+    if ASSETS_ROOT != OUTPUT_ROOT:
+        dir = os.path.dirname(OUTPUT_ROOT)
+        print('clean res: ' + dir)
+        remove_dir(dir)
     else:
-        ACTION = sys.argv[1]
-        if len(sys.argv) > 2:
-            DPI = sys.argv[2]
-        else:
-            DPI = 'x1'
+        theme_foreach(clean_res_of_one_theme)
+        remove_dir(ASSET_C)
+    print('=========================================================')
 
-        if len(sys.argv) > 3:
-            IMAGEGEN_OPTIONS = sys.argv[3]
-        else:
-            IMAGEGEN_OPTIONS = 'bgra+bgr565'
+def get_args(args) :
+    list_args = []
+    for arg in args:
+        if arg.startswith('--') :
+            continue
+        list_args.append(arg)
+    return list_args
 
+def get_opts(args) :
+    import getopt
+    longsots = ['awtk_root=', 'AWTK_ROOT=',
+                'action=', 'ACTION=',
+                'help', 'HELP',
+                'dpi=', 'DPI=',
+                'image_options=', 'IMAGE_OPTIONS=',
+                'lcd_orientation=', 'LCD_ORIENTATION=',
+                'lcd_enable_fast_rotation=', 'LCD_ENABLE_FAST_ROTATION=',
+                'res_config_file=', 'RES_CONFIG_FILE=',
+                'res_config_script=', 'RES_CONFIG_SCRIPT=',
+                'res_config_script_argv=', 'RES_CONFIG_SCRIPT_ARGV=',
+                'output_dir=', 'OUTPUT_DIR=',
+                'app_root=', 'APP_ROOT',
+                'save_special_char='
+                ]
+    try :
+        opts, tmp_args = getopt.getopt(args, 'h', longsots)
+        return opts
+    except getopt.GetoptError as err:
+        print(err.msg)
+    return None
 
-showUsage()
+def is_all_sopts_args(args) :
+    for arg in args:
+        if not arg.startswith('--') and not arg.startswith('-'):
+            return False
+    return True
+
+def get_longsopt_name_by_tuple(tuple) :
+    return tuple[0][2:].lower()
+
+def get_shortopt_name_by_tuple(tuple) :
+    return tuple[0][1:].lower()
+
+def get_longsopts_args(args) :
+    opts = get_opts(args)
+    if opts != None :
+        data = {}
+        for tmp_opts in opts :
+            value = tmp_opts[1]
+            if isinstance(value, str) and value[0] == '"' and value[-1] == '"' :
+                value = value[1:-1]
+            data[get_longsopt_name_by_tuple(tmp_opts)] = value
+        return data
+    else :
+        return None
+
+def show_usage_imlp(is_new_usage):
+    if is_new_usage :
+        print('=========================================================')
+        print('Usage: python '+sys.argv[0])
+        print('--action :'.ljust(30) + ' update res action, this sopt must set ')
+        print(''.ljust(30) + ' use : --action=clean|web|json|all|font|image|ui|style|string|script|data|xml|assets.c')
+        print(''.ljust(30) + ' clean'.ljust(10) +': clear res')
+        print(''.ljust(30) + ' all'.ljust(10) +': update all res')
+        print(''.ljust(30) + ' web'.ljust(10) +': update web res')
+        print(''.ljust(30) + ' json'.ljust(10) +': only update json res')
+        print(''.ljust(30) + ' font'.ljust(10) +': only update font res')
+        print(''.ljust(30) + ' image'.ljust(10) +': only update image res')
+        print(''.ljust(30) + ' ui'.ljust(10) +': only update ui res')
+        print(''.ljust(30) + ' style'.ljust(10) +': only update style res')
+        print(''.ljust(30) + ' string'.ljust(10) +': only update translator string res')
+        print(''.ljust(30) + ' script'.ljust(10) +': only update script res')
+        print(''.ljust(30) + ' data'.ljust(10) +': only update data res')
+        print(''.ljust(30) + ' xml'.ljust(10) +': only update xml res')
+        print(''.ljust(30) + ' assets.c'.ljust(10) +': only update assets.c file')
+
+        print('--awtk_root :'.ljust(30) + ' set awtk root')
+        print(''.ljust(30) + ' use : --awtk_root=XXXXX')
+
+        print('--dpi :'.ljust(30) + ' set update res dpi')
+        print(''.ljust(30) + ' use : --dpi=x1|x2|x3')
+
+        print('--image_options :'.ljust(30) + ' set image foramt')
+        print(''.ljust(30) + ' use : --image_options=rgba|bgra+bgr565|mono')
+
+        print('--res_config_file :'.ljust(30) + ' set res config file path, priority : res_config_script > res_config_file')
+        print(''.ljust(30) + ' use : --res_config_file=XXXXX')
+
+        print('--res_config_script :'.ljust(30) + ' set res config script file path, this is script must has get_res_config(argv) function ')
+        print(''.ljust(30) + ' use : --res_config_script=XXXXX')
+
+        print('--res_config_script_argv :'.ljust(30) + ' set res config script argv, this is get_res_config() function parameter')
+        print(''.ljust(30) + ' use : --res_config_script_argv=XXXXX')
+
+        print('--lcd_orientation :'.ljust(30) + ' set lcd orientation ')
+        print(''.ljust(30) + ' use : --lcd_orientation=90/180/270')
+
+        print('--lcd_enable_fast_rotation :'.ljust(30) + ' set enable lcd fast rotation ')
+        print(''.ljust(30) + ' use : --lcd_enable_fast_rotation=true/false')
+
+        print('--output_dir :'.ljust(30) + ' set res output dir, default value is ./res ')
+        print(''.ljust(30) + ' use : --output_dir=XXXXX')
+
+        print('AWTK_UPDATE_RES_JOBS :'.ljust(30) + ' parallel jobs, default is CPU count')
+        print(''.ljust(30) + ' use : AWTK_UPDATE_RES_JOBS=1 to run serially')
+
+        print('--app_root :'.ljust(30) + ' set app root dir, default value is getcwd() ')
+        print(''.ljust(30) + ' use : --app_root=XXXXX')
+
+        print('--help :'.ljust(30) + ' show all usage ')
+        print(''.ljust(30) + ' use : --help')
+
+        print('---------------------------------------------------------')
+        print('Example:')
+        print('python ' + sys.argv[0] + ' --action=all')
+        print('python ' + sys.argv[0] + ' --action=clean')
+        print('python ' + sys.argv[0] + ' --action=style --awtk_root=XXXXX ')
+        print('python ' + sys.argv[0] + ' --action=all --dpi=x1 --image_options=bgra+bgr565')
+        print('python ' + sys.argv[0] + ' --action=all --dpi=x1 --image_options=bgra+bgr565 --awtk_root=XXXXX')
+        print('=========================================================')
+    else :
+        args = ' action[clean|web|json|all|font|image|ui|style|string|script|data|xml|assets.c] dpi[x1|x2] image_options[rgba|bgra+bgr565|mono] awtk_root[--awtk_root=XXXXX]'
+        print('=========================================================')
+        print('Usage: python '+sys.argv[0] + args)
+        print('Example:')
+        print('python ' + sys.argv[0] + ' all')
+        print('python ' + sys.argv[0] + ' clean')
+        print('python ' + sys.argv[0] + ' style --awtk_root=XXXXX ')
+        print('python ' + sys.argv[0] + ' all x1 bgra+bgr565')
+        print('python ' + sys.argv[0] + ' all x1 bgra+bgr565 --awtk_root=XXXXX')
+        print('=========================================================')
+    if exit :
+        sys.exit(0)
+
+def show_usage(is_new_usage = False):
+    if len(sys.argv) == 1:
+        show_usage_imlp(is_new_usage)
+    else:
+        args = sys.argv[1:]
+        if is_all_sopts_args(args) :
+            opts = get_opts(args)
+            if opts == None :
+                show_usage_imlp(is_new_usage)
+            else :
+                find_action = False
+                for tmp_opts in opts :
+                    str_opt = get_longsopt_name_by_tuple(tmp_opts)
+                    if str_opt == 'help' or get_shortopt_name_by_tuple(tmp_opts) == 'h':
+                        show_usage_imlp(is_new_usage)
+                    elif str_opt == 'action' :
+                        find_action = True
+                if not find_action :
+                    show_usage_imlp(is_new_usage)
+        else :
+            sys_args = get_args(args)
+            if len(sys_args) == 0 :
+                show_usage_imlp(is_new_usage)
+
+def find_ttf_files(folder):
+    ttf_files = []
+    for root, dirs, files in os.walk(folder):
+        t_files = fnmatch.filter(files, '*.ttf')
+        for filename in t_files:
+            ttf_files.append(os.path.join(root, filename))
+    return ttf_files
+
+def get_res_names_from_sources_file(sources_file):
+    try:
+        with io.open(sources_file, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            if 'sources' in data:
+                return data['sources']
+            return []
+    except (IOError, ValueError) as e:
+        print('An error occurred: {}'.format(e))
+        return None

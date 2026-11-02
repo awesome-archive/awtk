@@ -1,20 +1,61 @@
-﻿#include <string>
+#include <string>
+#include <climits>
 #include "tkc/mem.h"
 #include "tkc/utils.h"
+#include "tkc/event.h"
+#include "tkc/object_default.h"
+#include "tkc/object_array.h"
 #include "gtest/gtest.h"
 
 using std::string;
 
 TEST(Utils, basic) {
-  char str[32];
+  char str[64 + 1];
 
+  ASSERT_EQ(tk_atoi("0015"), 15);
   ASSERT_EQ(tk_atoi("100"), 100);
+  ASSERT_EQ(tk_atoi("0xff"), 0xff);
+  ASSERT_EQ(tk_atoi("0x1"), 0x1);
+  ASSERT_EQ(tk_atoi("0xf"), 0xf);
+  ASSERT_EQ(tk_atoi("0Xf"), 0xf);
+
+  ASSERT_EQ(tk_atoi("#f"), 0xf);
+  ASSERT_EQ(tk_atoi("#f3"), 0xf3);
+  ASSERT_EQ(tk_atoi("#f321"), 0xf321);
+  ASSERT_EQ(tk_atoi("#f321"), 0xf321);
+  ASSERT_EQ(tk_atoi("#13211234"), 0x13211234);
+  ASSERT_EQ(tk_atol("#f"), 0xf);
+  ASSERT_EQ(tk_atol("#f3"), 0xf3);
+  ASSERT_EQ(tk_atol("#f321"), 0xf321);
+  ASSERT_EQ(tk_atol("#f321"), 0xf321);
+  ASSERT_EQ(tk_atol("#13211234"), 0x13211234);
+  ASSERT_EQ(tk_atoul("#f"), (unsigned long)0xf);
+  ASSERT_EQ(tk_atoul("#f3"), (unsigned long)0xf3);
+  ASSERT_EQ(tk_atoul("#f321"), (unsigned long)0xf321);
+  ASSERT_EQ(tk_atoul("#f321"), (unsigned long)0xf321);
+  ASSERT_EQ(tk_atoul("#f3211234"), (unsigned long)0xf3211234);
+
+  ASSERT_EQ(tk_atol("0b11"), 3);
+  ASSERT_EQ(tk_atol("0B101"), 5);
   ASSERT_EQ(tk_watoi(L"100"), 100);
   ASSERT_EQ(tk_atof("100"), 100);
   ASSERT_EQ(tk_atof("1e2"), 100);
   ASSERT_EQ(tk_watof(L"100"), 100);
 
+  ASSERT_EQ(tk_atol("0x1122334455667788"), 0x1122334455667788);
+  ASSERT_EQ(tk_atol("1122334455667788"), 1122334455667788);
+  ASSERT_EQ(tk_atol("-1122334455667788"), -1122334455667788);
   ASSERT_EQ(strcmp(tk_itoa(str, sizeof(str), tk_atoi("100")), "100"), 0);
+
+  ASSERT_EQ(tk_atol("0xFFFFFFFF"), 0xFFFFFFFF);
+  ASSERT_EQ(strcmp(tk_lltoa(str, sizeof(str), tk_atol("0xFFFFFFFF")), "4294967295"), 0);
+
+  memset(str, 0, sizeof(str));
+  ASSERT_EQ(strcmp(tk_ulltoa(str, sizeof(str), 1122334455667788), "1122334455667788"), 0);
+  memset(str, 0, sizeof(str));
+  ASSERT_EQ(tk_atoul("18446744073709551615"), 18446744073709551615ULL);
+  ASSERT_EQ(strcmp(tk_ulltoa(str, sizeof(str), 18446744073709551615ULL), "18446744073709551615"),
+            0);
 }
 
 static void check_buff16(uint16_t* buff, uint16_t val, uint32_t size) {
@@ -162,6 +203,91 @@ TEST(Utils, tk_strncpy) {
   ASSERT_EQ(string(tk_strncpy(dst, str, 1)), string("h"));
   ASSERT_EQ(string(tk_strncpy(dst, str, strlen(str))), string(str));
   ASSERT_EQ(string(tk_strncpy(dst, str, strlen(str) + 1)), string(str));
+  ASSERT_EQ(string(tk_strncpy(dst, str, strlen(str) + 10)), string(str));
+  ASSERT_EQ(string(tk_strncpy(dst, str, strlen(str) + 10)), string(str));
+
+  ASSERT_EQ(string(tk_strncpy(dst, dst, strlen(str) + 10)), string(str));
+}
+
+TEST(Utils, tk_strncpy_s) {
+  char dst[32];
+  const char* str = "hello world";
+
+  ASSERT_EQ(tk_strncpy_s(dst, 0, str, 4), (const char*)NULL);
+  ASSERT_EQ(string(tk_strncpy_s(dst, 1, str, 4)), string(""));
+  ASSERT_EQ(string(tk_strncpy_s(dst, 2, str, 4)), string("h"));
+  ASSERT_EQ(string(tk_strncpy_s(dst, 3, str, strlen(str))), string("he"));
+  ASSERT_EQ(string(tk_strncpy_s(dst, sizeof(dst), str, strlen(str) + 1)), string(str));
+}
+
+TEST(Utils, tk_strncpy_s_comprehensive) {
+  char dst[32];
+  const char* src = "hello world";
+  char* result = NULL;
+
+  /* 测试正常情况 */
+  memset(dst, 0xFF, sizeof(dst));
+  result = tk_strncpy_s(dst, sizeof(dst), src, strlen(src));
+  ASSERT_NE(result, (char*)NULL);
+  ASSERT_EQ(string(dst), string(src));
+  ASSERT_EQ(dst[strlen(src)], '\0');
+
+  /* 测试dst_len小于src_len */
+  memset(dst, 0xFF, sizeof(dst));
+  result = tk_strncpy_s(dst, 5, src, strlen(src));
+  ASSERT_NE(result, (char*)NULL);
+  ASSERT_EQ(string(dst), string("hell"));
+  ASSERT_EQ(dst[4], '\0');
+
+  /* 测试dst_len等于src_len+1（刚好容纳） */
+  memset(dst, 0xFF, sizeof(dst));
+  result = tk_strncpy_s(dst, 6, "hello", 5);
+  ASSERT_NE(result, (char*)NULL);
+  ASSERT_EQ(string(dst), string("hello"));
+  ASSERT_EQ(dst[5], '\0');
+
+  /* 测试空字符串 */
+  memset(dst, 0xFF, sizeof(dst));
+  result = tk_strncpy_s(dst, sizeof(dst), "", 0);
+  ASSERT_NE(result, (char*)NULL);
+  ASSERT_EQ(string(dst), string(""));
+  ASSERT_EQ(dst[0], '\0');
+
+  /* 测试src_len为0 */
+  memset(dst, 0xFF, sizeof(dst));
+  result = tk_strncpy_s(dst, sizeof(dst), src, 0);
+  ASSERT_NE(result, (char*)NULL);
+  ASSERT_EQ(string(dst), string(""));
+  ASSERT_EQ(dst[0], '\0');
+
+  /* 测试dst == src的情况 */
+  char same_buff[32];
+  tk_strcpy(same_buff, "test");
+  result = tk_strncpy_s(same_buff, sizeof(same_buff), same_buff, 4);
+  ASSERT_NE(result, (char*)NULL);
+  ASSERT_EQ(result, same_buff);
+  ASSERT_EQ(string(same_buff), string("test"));
+
+  /* 测试NULL参数 */
+  ASSERT_EQ(tk_strncpy_s(NULL, 10, src, 5), (char*)NULL);
+  ASSERT_EQ(tk_strncpy_s(dst, 10, NULL, 5), (char*)NULL);
+  ASSERT_EQ(tk_strncpy_s(dst, 0, src, 5), (char*)NULL);
+
+  /* 测试边界：dst_len=1 */
+  memset(dst, 0xFF, sizeof(dst));
+  result = tk_strncpy_s(dst, 1, src, strlen(src));
+  ASSERT_NE(result, (char*)NULL);
+  ASSERT_EQ(string(dst), string(""));
+  ASSERT_EQ(dst[0], '\0');
+
+  /* 测试包含null字符的源字符串 */
+  char src_with_null[10] = "ab\0def";
+  memset(dst, 0xFF, sizeof(dst));
+  result = tk_strncpy_s(dst, sizeof(dst), src_with_null, 6);
+  ASSERT_NE(result, (char*)NULL);
+  ASSERT_EQ(dst[0], 'a');
+  ASSERT_EQ(dst[1], 'b');
+  ASSERT_EQ(dst[2], '\0');
 }
 
 TEST(Utils, filename_to_name) {
@@ -208,14 +334,61 @@ TEST(Utils, sscanf) {
   ASSERT_EQ(b, 0x56);
 }
 
+TEST(Utils, xml_file_expand) {
+  str_t s;
+  str_init(&s, 0);
+  const char* filename = "./tests/testdata/main.xml";
+  const char* xml_string =
+      "<window><?include filename=\"button.xml\"?><?include filename=\"label.xml\"?></window>";
+  const char* xml_string_1 =
+      "<window><mledit text=\"<?include filename=\"button.xml\"?>\"/><?include "
+      "filename=\"label.xml\"?></window>";
+  const char* xml_string_2 =
+      "<window><mledit text=\"<?include filename=\"button.xml\"?>\"/><?include "
+      "filename=\"label.xml\"?><mledit text=\"<?include filename=\"button.xml\"?>\"/></window>";
+  const char* xml_string_3 =
+      "<window><mledit><property name=\"text\"><?include "
+      "filename=\"button.xml\"?></property></mledit><?include filename=\"label.xml\"?></window>";
+
+  ASSERT_EQ(xml_file_expand(filename, &s, xml_string), RET_OK);
+  str_replace(&s, "\r\n", "\n");
+  ASSERT_EQ(string(s.str), "<window><button />\n<label />\n</window>");
+  str_reset(&s);
+
+  str_init(&s, 0);
+  ASSERT_EQ(xml_file_expand(filename, &s, xml_string_1), RET_OK);
+  str_replace(&s, "\r\n", "\n");
+  ASSERT_EQ(string(s.str),
+            "<window><mledit text=\"<?include filename=\"button.xml\"?>\"/><label />\n</window>");
+  str_reset(&s);
+
+  str_init(&s, 0);
+  ASSERT_EQ(xml_file_expand(filename, &s, xml_string_2), RET_OK);
+  str_replace(&s, "\r\n", "\n");
+  ASSERT_EQ(string(s.str),
+            "<window><mledit text=\"<?include filename=\"button.xml\"?>\"/><label />\n<mledit "
+            "text=\"<?include filename=\"button.xml\"?>\"/></window>");
+  str_reset(&s);
+
+  str_init(&s, 0);
+  ASSERT_EQ(xml_file_expand(filename, &s, xml_string_3), RET_OK);
+  str_replace(&s, "\r\n", "\n");
+  ASSERT_EQ(string(s.str),
+            "<window><mledit><property name=\"text\"><button />\n</property></mledit><label "
+            "/>\n</window>");
+  str_reset(&s);
+}
+
 TEST(Utils, xml_file_expand_read) {
   str_t s;
   str_init(&s, 0);
 
   ASSERT_EQ(xml_file_expand_read("./tests/testdata/main.xml", &s), RET_OK);
+  str_replace(&s, "\r\n", "\n");
   ASSERT_EQ(string(s.str), "<window><button />\n<label />\n</window>\n");
 
   ASSERT_EQ(xml_file_expand_read("./tests/testdata/button.xml", &s), RET_OK);
+  str_replace(&s, "\r\n", "\n");
   ASSERT_EQ(string(s.str), "<button />\n");
 
   str_reset(&s);
@@ -243,13 +416,37 @@ TEST(Utils, str_append) {
   ASSERT_EQ(string(str), string("12345"));
 }
 
+TEST(Utils, tk_strcpy) {
+  char str[TK_NAME_LEN + 1];
+
+  tk_strcpy(str, "abc");
+  ASSERT_STREQ(str, "abc");
+
+  tk_strcpy(str, "abc123");
+  ASSERT_STREQ(str, "abc123");
+
+  tk_strcpy(str, str);
+  ASSERT_STREQ(str, "abc123");
+}
+
 TEST(Utils, tk_str_copy) {
+  char* prev = NULL;
   char* p = NULL;
   p = tk_str_copy(p, "abc");
   ASSERT_STREQ(p, "abc");
 
   p = tk_str_copy(p, "abc123");
   ASSERT_STREQ(p, "abc123");
+
+  prev = p;
+  p = tk_str_copy(p, p);
+  ASSERT_STREQ(p, "abc123");
+  ASSERT_EQ(p, prev);
+
+  prev = p;
+  p = tk_str_copy(p, p + 3);
+  ASSERT_STREQ(p, "123");
+  ASSERT_EQ(p, prev);
 
   TKMEM_FREE(p);
 }
@@ -290,6 +487,34 @@ TEST(Utils, tk_str_start_with) {
   ASSERT_EQ(tk_str_start_with("abc123", "b"), FALSE);
 }
 
+TEST(Utils, tk_str_end_with) {
+  ASSERT_EQ(tk_str_end_with("abc123", "3"), TRUE);
+  ASSERT_EQ(tk_str_end_with("abc123", "23"), TRUE);
+  ASSERT_EQ(tk_str_end_with("abc123", "123"), TRUE);
+  ASSERT_EQ(tk_str_end_with("abc123", ""), TRUE);
+  ASSERT_EQ(tk_str_end_with("abc123", "abc123"), TRUE);
+  ASSERT_EQ(tk_str_end_with("abc123", "a"), FALSE);
+  ASSERT_EQ(tk_str_end_with("abc123", "aabc123"), FALSE);
+}
+
+TEST(Utils, tk_str_case_start_with) {
+  ASSERT_EQ(tk_str_case_start_with("abc123", "A"), TRUE);
+  ASSERT_EQ(tk_str_case_start_with("abc123", "aB"), TRUE);
+  ASSERT_EQ(tk_str_case_start_with("abc123", "abC"), TRUE);
+  ASSERT_EQ(tk_str_case_start_with("abc123", ""), TRUE);
+  ASSERT_EQ(tk_str_case_start_with("abc123", "b"), FALSE);
+}
+
+TEST(Utils, tk_str_case_end_with) {
+  ASSERT_EQ(tk_str_case_end_with("abc123abc", "AbC"), TRUE);
+  ASSERT_EQ(tk_str_case_end_with("abc123abc", "C"), TRUE);
+  ASSERT_EQ(tk_str_case_end_with("abc123abc", "bC"), TRUE);
+  ASSERT_EQ(tk_str_case_end_with("abc123", ""), TRUE);
+  ASSERT_EQ(tk_str_case_end_with("abc123A", "abc123A"), TRUE);
+  ASSERT_EQ(tk_str_case_end_with("abc123A", "a"), TRUE);
+  ASSERT_EQ(tk_str_case_end_with("abc123", "aabc123"), FALSE);
+}
+
 TEST(Utils, ieq) {
   ASSERT_EQ(strcasecmp("Trigger", "trigger"), 0);
   ASSERT_EQ(tk_str_ieq("Trigger", "trigger"), TRUE);
@@ -305,4 +530,2450 @@ TEST(Utils, tk_under_score_to_camel) {
   ASSERT_EQ(string(tk_under_score_to_camel("test_obj_get", name, sizeof(name) - 1)),
             string("testObjGet"));
   ASSERT_EQ(string(tk_under_score_to_camel("test_obj_get", name, 7)), string("testObj"));
+}
+
+TEST(Utils, strcmp) {
+  ASSERT_EQ(tk_str_cmp("abc", "abc") == 0, true);
+  ASSERT_NE(tk_str_cmp("abc", "Abc") == 0, true);
+  ASSERT_EQ(tk_str_icmp("abc", "abc") == 0, true);
+  ASSERT_EQ(tk_str_icmp("abc", "Abc") == 0, true);
+}
+
+TEST(Utils, tk_normalize_key_name) {
+  char fix_name[TK_NAME_LEN + 1];
+
+  tk_normalize_key_name("a", fix_name);
+  ASSERT_STREQ(fix_name, "a");
+
+  tk_normalize_key_name("A", fix_name);
+  ASSERT_STREQ(fix_name, "A");
+
+  tk_normalize_key_name("left", fix_name);
+  ASSERT_STREQ(fix_name, "LEFT");
+
+  tk_normalize_key_name("LEFT", fix_name);
+  ASSERT_STREQ(fix_name, "LEFT");
+}
+
+TEST(Utils, tk_str_toupper) {
+  char str[TK_NAME_LEN + 1];
+
+  tk_strcpy(str, "left");
+  tk_str_toupper(str);
+  ASSERT_STREQ(str, "LEFT");
+
+  tk_strcpy(str, "Left");
+  tk_str_toupper(str);
+  ASSERT_STREQ(str, "LEFT");
+}
+
+TEST(Utils, tk_str_tolower) {
+  char str[TK_NAME_LEN + 1];
+
+  tk_strcpy(str, "left");
+  tk_str_tolower(str);
+  ASSERT_STREQ(str, "left");
+
+  tk_strcpy(str, "Left");
+  tk_str_tolower(str);
+  ASSERT_STREQ(str, "left");
+}
+
+TEST(Utils, tk_wstr_count_c) {
+  ASSERT_EQ(tk_wstr_count_c(L"", 'a'), 0u);
+  ASSERT_EQ(tk_wstr_count_c(L"a", 'a'), 1u);
+  ASSERT_EQ(tk_wstr_count_c(L"abcaba", 'a'), 3u);
+}
+
+TEST(Utils, tk_count_char) {
+  ASSERT_EQ(tk_count_char("", 'a'), 0u);
+  ASSERT_EQ(tk_count_char("a", 'a'), 1u);
+  ASSERT_EQ(tk_count_char("abcaba", 'a'), 3u);
+}
+
+TEST(Utils, tk_count_lines) {
+  ASSERT_EQ(tk_count_lines(NULL), 0u);
+  ASSERT_EQ(tk_count_lines(""), 0u);
+  ASSERT_EQ(tk_count_lines("a"), 1u);
+  ASSERT_EQ(tk_count_lines("a\n"), 2u);
+  ASSERT_EQ(tk_count_lines("a\nb"), 2u);
+  ASSERT_EQ(tk_count_lines("a\r\nb"), 2u);
+  ASSERT_EQ(tk_count_lines("a\rb"), 2u);
+  ASSERT_EQ(tk_count_lines("\n"), 2u);
+  ASSERT_EQ(tk_count_lines("\r\n"), 2u);
+  ASSERT_EQ(tk_count_lines("\r"), 2u);
+  ASSERT_EQ(tk_count_lines("a\n\nb"), 3u);
+  ASSERT_EQ(tk_count_lines("\r\n\n"), 3u);
+}
+
+TEST(Utils, tk_wstr_count_lines) {
+  ASSERT_EQ(tk_wstr_count_lines(NULL), 0u);
+  ASSERT_EQ(tk_wstr_count_lines(L""), 0u);
+  ASSERT_EQ(tk_wstr_count_lines(L"a"), 1u);
+  ASSERT_EQ(tk_wstr_count_lines(L"a\n"), 2u);
+  ASSERT_EQ(tk_wstr_count_lines(L"a\nb"), 2u);
+  ASSERT_EQ(tk_wstr_count_lines(L"a\r\nb"), 2u);
+  ASSERT_EQ(tk_wstr_count_lines(L"a\rb"), 2u);
+  ASSERT_EQ(tk_wstr_count_lines(L"\n"), 2u);
+  ASSERT_EQ(tk_wstr_count_lines(L"\r\n"), 2u);
+  ASSERT_EQ(tk_wstr_count_lines(L"\r"), 2u);
+  ASSERT_EQ(tk_wstr_count_lines(L"a\n\nb"), 3u);
+  ASSERT_EQ(tk_wstr_count_lines(L"\r\n\n"), 3u);
+}
+
+TEST(Utils, tk_wstr_select_word) {
+  int32_t left = 0;
+  int32_t right = 0;
+  wchar_t wstr[] = L"test TEST hello,你好123abc";
+  uint32_t len = wcslen(wstr);
+
+  ASSERT_EQ(tk_wstr_select_word(wstr, len, 1, &left, &right), RET_OK);
+  ASSERT_EQ(left, 0);
+  ASSERT_EQ(right, 4);
+
+  ASSERT_EQ(tk_wstr_select_word(wstr, len, 17, &left, &right), RET_OK);
+  ASSERT_EQ(left, 16);
+  ASSERT_EQ(right, 18);
+
+  ASSERT_EQ(tk_wstr_select_word(wstr, len, 19, &left, &right), RET_OK);
+  ASSERT_EQ(left, 18);
+  ASSERT_EQ(right, 21);
+
+  ASSERT_EQ(tk_wstr_select_word(wstr, len, 5, &left, &right), RET_OK);
+  ASSERT_EQ(left, 5);
+  ASSERT_EQ(right, 9);
+
+  ASSERT_EQ(tk_wstr_select_word(wstr, len, 15, &left, &right), RET_OK);
+  ASSERT_EQ(left, 10);
+  ASSERT_EQ(right, 15);
+
+  ASSERT_EQ(tk_wstr_select_word(wstr, len, 16, &left, &right), RET_OK);
+  ASSERT_EQ(left, 16);
+  ASSERT_EQ(right, 18);
+}
+
+TEST(Utils, tk_watoi_n) {
+  ASSERT_EQ(tk_watoi_n(L"1234", 1), 1);
+  ASSERT_EQ(tk_watoi_n(L"1234", 2), 12);
+  ASSERT_EQ(tk_watoi_n(L"1234", 3), 123);
+  ASSERT_EQ(tk_watoi_n(L"1234", 4), 1234);
+}
+
+TEST(Utils, image_region_parse) {
+  rect_t r;
+  ASSERT_EQ(image_region_parse(100, 100, "xywh(1,2,3,4)", &r), RET_OK);
+  ASSERT_EQ(r.x, 1);
+  ASSERT_EQ(r.y, 2);
+  ASSERT_EQ(r.w, 3);
+  ASSERT_EQ(r.h, 4);
+
+  ASSERT_EQ(image_region_parse(200, 200, "xywh(0,0,106,72)", &r), RET_OK);
+  ASSERT_EQ(r.x, 0);
+  ASSERT_EQ(r.y, 0);
+  ASSERT_EQ(r.w, 106);
+  ASSERT_EQ(r.h, 72);
+
+  ASSERT_EQ(image_region_parse(100, 100, "grid(4,4,0,0)", &r), RET_OK);
+  ASSERT_EQ(r.x, 0);
+  ASSERT_EQ(r.y, 0);
+  ASSERT_EQ(r.w, 25);
+  ASSERT_EQ(r.h, 25);
+
+  ASSERT_EQ(image_region_parse(100, 100, "grid(4,4,1,0)", &r), RET_OK);
+  ASSERT_EQ(r.x, 0);
+  ASSERT_EQ(r.y, 25);
+  ASSERT_EQ(r.w, 25);
+  ASSERT_EQ(r.h, 25);
+
+  ASSERT_EQ(image_region_parse(100, 100, "grid(4,4,1,1)", &r), RET_OK);
+  ASSERT_EQ(r.x, 25);
+  ASSERT_EQ(r.y, 25);
+  ASSERT_EQ(r.w, 25);
+  ASSERT_EQ(r.h, 25);
+
+  ASSERT_EQ(image_region_parse(100, 100, "grid(4,4,3,3)", &r), RET_OK);
+  ASSERT_EQ(r.x, 75);
+  ASSERT_EQ(r.y, 75);
+  ASSERT_EQ(r.w, 25);
+  ASSERT_EQ(r.h, 25);
+}
+
+TEST(Utils, strrstr) {
+  ASSERT_STREQ(tk_strrstr("abc", "abc"), "abc");
+  ASSERT_STREQ(tk_strrstr("1abc", "abc"), "abc");
+  ASSERT_STREQ(tk_strrstr("1abc2", "abc"), "abc2");
+  ASSERT_STREQ(tk_strrstr("abc abc", "abc"), "abc");
+  ASSERT_STREQ(tk_strrstr("abc abc123", "abc"), "abc123");
+  ASSERT_STREQ(tk_strrstr("abc abc123aaabc", "abc"), "abc");
+
+  ASSERT_EQ(tk_strrstr("bc", "abc") == NULL, true);
+  ASSERT_EQ(tk_strrstr("bc", "123") == NULL, true);
+}
+
+TEST(Utils, str_find) {
+  tk_str_find_option_t opt = {};
+
+  ASSERT_STREQ(tk_str_find("1abc abc2", "abc", NULL), "abc abc2");
+  ASSERT_STREQ(tk_str_find("1abc abc2", "abc", &opt), "abc abc2");
+
+  opt.reverse = TRUE;
+  ASSERT_STREQ(tk_str_find("1abc abc2", "abc", &opt), "abc2");
+  ASSERT_TRUE(NULL == tk_str_find("abc", "1abc abc2", &opt));
+  memset(&opt, 0, sizeof(opt));
+
+  opt.case_insensitive = TRUE;
+  ASSERT_STREQ(tk_str_find("1abc abc2", "AbC", &opt), "abc abc2");
+  ASSERT_TRUE(NULL == tk_str_find("AbC", "1abc abc2", &opt));
+  memset(&opt, 0, sizeof(opt));
+
+  opt.reverse = TRUE;
+  opt.case_insensitive = TRUE;
+  ASSERT_STREQ(tk_str_find("1abc abc2", "AbC", &opt), "abc2");
+  memset(&opt, 0, sizeof(opt));
+}
+
+TEST(Utils, totitle) {
+  char str[] = "it is nice!";
+  ASSERT_STREQ(tk_str_totitle(str), "It Is Nice!");
+}
+
+TEST(Utils, isspace) {
+  uint32_t i = 0;
+  const char* str = "（１）这；这个。（２）他（她，它）”，在“，它）";
+  size_t n = strlen(str);
+
+  for (i = 0; i < n; i++) {
+    tk_isspace(str[i]);
+    tk_isdigit(str[i]);
+    tk_isalpha(str[i]);
+    tk_isprint(str[i]);
+    tk_isxdigit(str[i]);
+  }
+
+  bool_t is_s = tk_isspace(' ');
+  ASSERT_EQ(is_s, TRUE);
+  is_s = tk_isspace('\t');
+  ASSERT_EQ(is_s, TRUE);
+  is_s = tk_isspace('\r');
+  ASSERT_EQ(is_s, TRUE);
+  is_s = tk_isspace('\n');
+  ASSERT_EQ(is_s, TRUE);
+  is_s = tk_isdigit('1');
+  ASSERT_EQ(is_s, TRUE);
+  is_s = tk_isdigit('a');
+  ASSERT_EQ(is_s, FALSE);
+  is_s = tk_isxdigit('a');
+  ASSERT_EQ(is_s, TRUE);
+  is_s = tk_isprint('a');
+  ASSERT_EQ(is_s, TRUE);
+  is_s = tk_isalpha('a');
+  ASSERT_EQ(is_s, TRUE);
+}
+
+TEST(Utils, is_in_array) {
+  const char* arr1[] = {"abc"};
+  const char* arr2[] = {"abc", "xyz"};
+  const char* arr3[] = {"abc", "xyz", "123"};
+  ASSERT_EQ(tk_str_is_in_array("abc", arr1, ARRAY_SIZE(arr1)), TRUE);
+  ASSERT_EQ(tk_str_is_in_array("abc", arr2, ARRAY_SIZE(arr2)), TRUE);
+  ASSERT_EQ(tk_str_is_in_array("abc", arr3, ARRAY_SIZE(arr3)), TRUE);
+
+  ASSERT_EQ(tk_str_is_in_array("xyz", arr1, ARRAY_SIZE(arr1)), FALSE);
+  ASSERT_EQ(tk_str_is_in_array("xyz", arr2, ARRAY_SIZE(arr2)), TRUE);
+  ASSERT_EQ(tk_str_is_in_array("xyz", arr3, ARRAY_SIZE(arr3)), TRUE);
+
+  ASSERT_EQ(tk_str_is_in_array("123", arr1, ARRAY_SIZE(arr1)), FALSE);
+  ASSERT_EQ(tk_str_is_in_array("123", arr2, ARRAY_SIZE(arr2)), FALSE);
+  ASSERT_EQ(tk_str_is_in_array("123", arr3, ARRAY_SIZE(arr3)), TRUE);
+}
+
+TEST(Utils, int_is_in_array) {
+  int32_t arr1[] = {123};
+  int32_t arr2[] = {123, 200};
+  int32_t arr3[] = {100, 210, 123};
+
+  ASSERT_EQ(tk_int_is_in_array(123, arr1, ARRAY_SIZE(arr1)), TRUE);
+  ASSERT_EQ(tk_int_is_in_array(123, arr2, ARRAY_SIZE(arr2)), TRUE);
+  ASSERT_EQ(tk_int_is_in_array(123, arr3, ARRAY_SIZE(arr3)), TRUE);
+  ASSERT_EQ(tk_int_is_in_array(23, arr3, ARRAY_SIZE(arr1)), FALSE);
+  ASSERT_EQ(tk_int_is_in_array(23, arr3, ARRAY_SIZE(arr3)), FALSE);
+}
+
+TEST(Utils, memcpy_by_align_4) {
+#define path_max_len 64
+  uint8_t path[path_max_len * 2] = {0};
+  uint8_t path1[path_max_len * 2] = {0};
+
+  for (uint8_t i = 0; i < path_max_len * 2; i++) {
+    path1[i] = i;
+  }
+
+  ASSERT_TRUE(tk_memcpy_by_align_4(NULL, path1, 8) == NULL);
+  ASSERT_TRUE(tk_memcpy_by_align_4(path, NULL, 8) == NULL);
+  ASSERT_TRUE(tk_memcpy_by_align_4(path, path1, path_max_len) == path);
+
+  for (uint8_t i = 0; i < path_max_len; i++) {
+    ASSERT_EQ(path[i], path1[i]);
+  }
+
+  memset(path, 0x0, sizeof(path));
+
+  ASSERT_TRUE(tk_memcpy_by_align_4(path, path1, path_max_len * 2) == path);
+
+  for (uint8_t i = 0; i < path_max_len * 2; i++) {
+    ASSERT_EQ(path[i], path1[i]);
+  }
+
+  /* 1~63 字节：逐长度覆盖展开拷贝分支（含 4 字节对齐断言） */
+  for (uint32_t len = 1; len < path_max_len; len++) {
+    memset(path, 0x0, sizeof(path));
+
+    ASSERT_TRUE(tk_memcpy_by_align_4(path, path1, len) == path);
+
+    for (uint32_t i = 0; i < len; i++) {
+      ASSERT_EQ(path[i], path1[i]);
+    }
+    ASSERT_EQ(path[len], 0x00); /* 不能写越界 */
+  }
+}
+
+TEST(Utils, tk_memcpy) {
+#define path_max_len 64
+  uint8_t path[path_max_len * 2 + 1] = {0};
+  uint8_t path1[path_max_len * 2 + 1] = {0};
+
+  ASSERT_TRUE(tk_memcpy(path, path1, 0) == path);
+  ASSERT_TRUE(tk_memcpy(path, NULL, path_max_len) == NULL);
+  ASSERT_TRUE(tk_memcpy(NULL, path1, path_max_len) == NULL);
+
+  for (uint8_t i = 0; i < path_max_len * 2; i++) {
+    path1[i] = i;
+  }
+
+  ASSERT_TRUE(tk_memcpy(path, path1, path_max_len) == path);
+
+  for (uint8_t i = 0; i < path_max_len; i++) {
+    ASSERT_EQ(path[i], path1[i]);
+  }
+
+  memset(path, 0x0, sizeof(path));
+
+  ASSERT_TRUE(tk_memcpy(path, path1, path_max_len * 2) == path);
+
+  for (uint8_t i = 0; i < path_max_len * 2; i++) {
+    ASSERT_EQ(path[i], path1[i]);
+  }
+
+  memset(path, 0x0, sizeof(path));
+
+  ASSERT_TRUE(tk_memcpy(path + 1, path1 + 1, path_max_len * 2) == path + 1);
+
+  for (uint8_t i = 1; i < path_max_len * 2; i++) {
+    ASSERT_EQ(path[i], path1[i]);
+  }
+
+  memset(path, 0x0, sizeof(path));
+
+  ASSERT_TRUE(tk_memcpy(path, path1 + 1, path_max_len * 2) == path);
+
+  for (uint8_t i = 0; i < path_max_len * 2; i++) {
+    ASSERT_EQ(path[i], path1[i + 1]);
+  }
+
+  /* 两指针都 4 字节对齐：走展开拷贝分支 */
+  memset(path, 0x0, sizeof(path));
+
+  ASSERT_TRUE(tk_memcpy(path, path1, 8) == path);
+
+  for (uint8_t i = 0; i < 8; i++) {
+    ASSERT_EQ(path[i], path1[i]);
+  }
+  ASSERT_EQ(path[8], 0x00); /* 不能写越界 */
+
+  /* 偏移都是 1：补 3 字节对齐后，剩余 5 字节仍走展开拷贝 */
+  memset(path, 0x0, sizeof(path));
+
+  ASSERT_TRUE(tk_memcpy(path + 1, path1 + 1, 8) == path + 1);
+
+  for (uint8_t i = 1; i < 9; i++) {
+    ASSERT_EQ(path[i], path1[i]);
+  }
+  ASSERT_EQ(path[9], 0x00); /* 不能写越界 */
+
+  /* 偏移不同（0/1）：直接由 memcpy 处理 */
+  memset(path, 0x0, sizeof(path));
+
+  ASSERT_TRUE(tk_memcpy(path, path1 + 1, 8) == path);
+
+  for (uint8_t i = 0; i < 8; i++) {
+    ASSERT_EQ(path[i], path1[i + 1]);
+  }
+
+  /* 同偏移、长度不超过补齐量：必须由前缀循环完成整段拷贝 */
+  for (uint32_t off = 1; off <= 3; off++) {
+    for (uint32_t len = 1; len <= 4; len++) {
+      memset(path, 0x0, sizeof(path));
+
+      ASSERT_TRUE(tk_memcpy(path + off, path1 + off, len) == path + off);
+
+      for (uint32_t i = 0; i < len; i++) {
+        ASSERT_EQ(path[off + i], path1[off + i]);
+      }
+      ASSERT_EQ(path[off + len], 0x00); /* 不能写越界 */
+    }
+  }
+}
+
+TEST(Utils, tk_wild_card_match) {
+  ASSERT_EQ(tk_wild_card_match("", ""), TRUE);
+  ASSERT_EQ(tk_wild_card_match("*", ""), TRUE);
+  ASSERT_EQ(tk_wild_card_match("*", "a"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("*", "ab"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("*c", "abc"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("?bc", "abc"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("abc", "abc"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a?c", "a?c"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a?c", "abc"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a*c", "a123c"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a*c*", "a123c"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("*a*c*", "a123c"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a*", "a123c"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a*", "a"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a*", "ab"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a*", "abc"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a?", "ab"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("a?", "abc"), FALSE);
+  ASSERT_EQ(tk_wild_card_match("awflow_*", "awflow_123"), TRUE);
+  ASSERT_EQ(tk_wild_card_match("awflow_*", "awflow_abc"), TRUE);
+}
+
+TEST(Utils, tk_eval_ratio_or_px) {
+  ASSERT_EQ(tk_eval_ratio_or_px("0", 100), 0);
+  ASSERT_EQ(tk_eval_ratio_or_px("1px", 100), 1);
+  ASSERT_EQ(tk_eval_ratio_or_px("10px", 100), 10);
+  ASSERT_EQ(tk_eval_ratio_or_px("0.5", 100), 50);
+  ASSERT_EQ(tk_eval_ratio_or_px("1", 100), 100);
+  ASSERT_EQ(tk_eval_ratio_or_px("100%", 100), 100);
+  ASSERT_EQ(tk_eval_ratio_or_px("10%", 100), 10);
+  ASSERT_EQ(tk_eval_ratio_or_px("0.1%", 100), 10);
+}
+
+TEST(Utils, TK_STR_IS_EMPTY) {
+  const char* str = NULL;
+  ASSERT_EQ(TK_STR_IS_EMPTY(str), true);
+  ASSERT_EQ(TK_STR_IS_EMPTY(""), true);
+  ASSERT_EQ(TK_STR_IS_EMPTY("a"), false);
+
+  ASSERT_EQ(TK_STR_IS_NOT_EMPTY(str), false);
+  ASSERT_EQ(TK_STR_IS_NOT_EMPTY(""), false);
+  ASSERT_EQ(TK_STR_IS_NOT_EMPTY("a"), true);
+}
+
+TEST(Utils, tk_strndup) {
+  char* s = tk_strndup("hello", 1);
+  ASSERT_STREQ(s, "h");
+  TKMEM_FREE(s);
+
+  s = tk_strndup("hello", 10);
+  ASSERT_STREQ(s, "hello");
+  TKMEM_FREE(s);
+}
+
+TEST(Utils, tk_memdup) {
+  char* s = (char*)tk_memdup("hello", 1);
+  ASSERT_STREQ(s, "h");
+  TKMEM_FREE(s);
+
+  s = (char*)tk_memdup("hello", 5);
+  ASSERT_STREQ(s, "hello");
+  TKMEM_FREE(s);
+
+  s = (char*)tk_memdup("hello", 10);
+  ASSERT_STREQ(s, "hello");
+  TKMEM_FREE(s);
+}
+
+TEST(Utils, str_eq) {
+  ASSERT_EQ(tk_str_eq(NULL, NULL), TRUE);
+  ASSERT_EQ(tk_str_eq("a", NULL), FALSE);
+  ASSERT_EQ(tk_str_eq("a", "a"), TRUE);
+  ASSERT_EQ(tk_str_eq("a", "A"), FALSE);
+  ASSERT_EQ(tk_str_eq("aaa", "aAa"), FALSE);
+}
+
+TEST(Utils, str_ieq) {
+  ASSERT_EQ(tk_str_ieq(NULL, NULL), TRUE);
+  ASSERT_EQ(tk_str_ieq("a", NULL), FALSE);
+  ASSERT_EQ(tk_str_ieq("a", "a"), TRUE);
+  ASSERT_EQ(tk_str_ieq("a", "A"), TRUE);
+  ASSERT_EQ(tk_str_ieq("aaa", "Aaa"), TRUE);
+}
+
+TEST(Utils, str_ieq_with_len) {
+  /* NULL 指针测试 */
+  ASSERT_EQ(tk_str_ieq_with_len(NULL, NULL, 0), FALSE);
+  ASSERT_EQ(tk_str_ieq_with_len("a", NULL, 1), FALSE);
+  ASSERT_EQ(tk_str_ieq_with_len(NULL, "a", 1), FALSE);
+
+  /* 相同字符串（相同大小写） */
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "abc", 3), TRUE);
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "abc", 2), TRUE);
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "abc", 1), TRUE);
+
+  /* 相同字符串（不同大小写） */
+  ASSERT_EQ(tk_str_ieq_with_len("ABC", "abc", 3), TRUE);
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "ABC", 3), TRUE);
+  ASSERT_EQ(tk_str_ieq_with_len("AbC", "aBc", 3), TRUE);
+  ASSERT_EQ(tk_str_ieq_with_len("Trigger", "trigger", 7), TRUE);
+
+  /* 不同字符串 */
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "def", 3), FALSE);
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "abd", 3), FALSE);
+
+  /* 长度限制测试 */
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "abC", 2), TRUE);  /* 前2个字符相同（忽略大小写） */
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "abD", 2), TRUE);  /* 前2个字符相同 */
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "abD", 3), FALSE); /* 第3个字符不同 */
+  ASSERT_EQ(tk_str_ieq_with_len("abc", "ABCx", 3), TRUE); /* 前3个字符相同（忽略大小写） */
+
+  /* 空字符串测试 */
+  ASSERT_EQ(tk_str_ieq_with_len("", "", 0), TRUE);
+  ASSERT_EQ(tk_str_ieq_with_len("a", "", 0), TRUE); /* 长度为0时总是相等 */
+}
+
+TEST(Utils, wstr_eq) {
+  ASSERT_EQ(tk_wstr_eq(NULL, NULL), TRUE);
+  ASSERT_EQ(tk_wstr_eq(L"a", NULL), FALSE);
+  ASSERT_EQ(tk_wstr_eq(L"a", L"a"), TRUE);
+  ASSERT_EQ(tk_wstr_eq(L"a", L"A"), FALSE);
+  ASSERT_EQ(tk_wstr_eq(L"aaa", L"aAa"), FALSE);
+}
+
+TEST(Utils, wstr_ieq) {
+  ASSERT_EQ(tk_wstr_ieq(NULL, NULL), TRUE);
+  ASSERT_EQ(tk_wstr_ieq(L"a", NULL), FALSE);
+  ASSERT_EQ(tk_wstr_ieq(L"a", L"a"), TRUE);
+  ASSERT_EQ(tk_wstr_ieq(L"a", L"A"), TRUE);
+  ASSERT_EQ(tk_wstr_ieq(L"aaa", L"AaA"), TRUE);
+}
+
+TEST(Utils, replace_char) {
+  char str[32];
+
+  tk_strcpy(str, "a\\b\\c");
+  ASSERT_STREQ(tk_replace_char(str, '\\', '/'), "a/b/c");
+
+  tk_strcpy(str, "a/b/c");
+  ASSERT_STREQ(tk_replace_char(str, '\\', '/'), "a/b/c");
+}
+
+#include "tkc/thread.h"
+
+TEST(Utils, ui_thread) {
+  tk_set_ui_thread(tk_thread_self());
+  ASSERT_EQ(tk_is_ui_thread(), TRUE);
+}
+
+TEST(Utils, wcsncmp) {
+  ASSERT_EQ(wcsncmp(L"ABC", L"A", 1), 0);
+  ASSERT_EQ(wcsncmp(L"ABC", L"AB", 1), 0);
+  ASSERT_EQ(wcsncmp(L"ABC", L"ABC", 2), 0);
+  ASSERT_EQ(wcsncmp(L"ABC", L"ABC", 3), 0);
+  ASSERT_EQ(wcsncmp(L"ABCD", L"ABCD", 4), 0);
+  ASSERT_EQ(wcsncmp(L"ABCD1234", L"ABCD1234", 7), 0);
+  ASSERT_EQ(wcsncmp(L"ABCD1234", L"ABCD1234", 8), 0);
+}
+
+TEST(Utils, file_read_as_unix_text) {
+  uint32_t size = 0;
+  char* data = file_read_as_unix_text("tests/testdata/test.txt", &size);
+
+#define EXPECT_STR \
+  "\
+abc\n\
+123\n\
+hello\n\
+"
+  ASSERT_STREQ(data, EXPECT_STR);
+
+  TKMEM_FREE(data);
+}
+
+TEST(Utils, ret_code) {
+  ASSERT_STREQ(ret_code_to_name(RET_OK), "RET_OK");
+  ASSERT_STREQ(ret_code_to_name(RET_IO), "RET_IO");
+  ASSERT_STREQ(ret_code_to_name(RET_FOUND), "RET_FOUND");
+  ASSERT_STREQ(ret_code_to_name(RET_NOT_MODIFIED), "RET_NOT_MODIFIED");
+
+  ASSERT_EQ(ret_code_from_name("RET_OK"), RET_OK);
+  ASSERT_EQ(ret_code_from_name("RET_NOT_IMPL"), RET_NOT_IMPL);
+  ASSERT_EQ(ret_code_from_name("RET_EOS"), RET_EOS);
+  ASSERT_EQ(ret_code_from_name("RET_NO_PERMISSION"), RET_NO_PERMISSION);
+}
+
+TEST(Utils, bits_stream) {
+  uint8_t buff[32];
+  uint32_t i = 0;
+  uint32_t n = sizeof(buff) * 8;
+  bool_t v = FALSE;
+
+  for (i = 0; i < n; ++i) {
+    ASSERT_EQ(bits_stream_set(buff, sizeof(buff), i, TRUE), RET_OK);
+    ASSERT_EQ(bits_stream_get(buff, sizeof(buff), i, &v), RET_OK);
+    ASSERT_EQ(v, TRUE);
+  }
+
+  for (i = 0; i < n; ++i) {
+    ASSERT_EQ(bits_stream_set(buff, sizeof(buff), i, FALSE), RET_OK);
+    ASSERT_EQ(bits_stream_get(buff, sizeof(buff), i, &v), RET_OK);
+    ASSERT_EQ(v, FALSE);
+  }
+
+  ASSERT_NE(bits_stream_set(buff, sizeof(buff), 10000, TRUE), RET_OK);
+  ASSERT_NE(bits_stream_get(buff, sizeof(buff), 10000, &v), RET_OK);
+
+  /*最后一个合法位和第一个非法位*/
+  ASSERT_EQ(bits_stream_set(buff, sizeof(buff), n - 1, TRUE), RET_OK);
+  ASSERT_EQ(buff[sizeof(buff) - 1], 0x80);
+  ASSERT_NE(bits_stream_set(buff, sizeof(buff), n, TRUE), RET_OK);
+  ASSERT_NE(bits_stream_get(buff, sizeof(buff), n, &v), RET_OK);
+
+  /*size为0时任何位都越界；空指针返回错误*/
+  ASSERT_NE(bits_stream_get(buff, 0, 0, &v), RET_OK);
+  ASSERT_NE(bits_stream_set(buff, 0, 0, TRUE), RET_OK);
+  ASSERT_NE(bits_stream_set(NULL, sizeof(buff), 0, TRUE), RET_OK);
+  ASSERT_NE(bits_stream_get(NULL, sizeof(buff), 0, &v), RET_OK);
+  ASSERT_NE(bits_stream_get(buff, sizeof(buff), 0, NULL), RET_OK);
+
+  {
+    /*size*8超过32位可表示范围时，容量判定必须用64位算，否则回绕会误判越界*/
+    uint8_t buff[2] = {0, 0};
+    bool_t v = FALSE;
+    /*0x20000000 * 8 == 2^32，32位下回绕成0*/
+    const uint32_t size_wrap_to_zero = 0x20000000u;
+    /*0x20000001 * 8 == 2^32 + 8，32位下回绕成8*/
+    const uint32_t size_wrap_to_8 = 0x20000001u;
+
+    ASSERT_EQ(bits_stream_set(buff, size_wrap_to_zero, 0, TRUE), RET_OK);
+    ASSERT_EQ(buff[0], 0x01);
+    ASSERT_EQ(bits_stream_get(buff, size_wrap_to_zero, 0, &v), RET_OK);
+    ASSERT_EQ(v, TRUE);
+
+    ASSERT_EQ(bits_stream_set(buff, size_wrap_to_8, 9, TRUE), RET_OK);
+    ASSERT_EQ(buff[1], 0x02);
+    ASSERT_EQ(bits_stream_get(buff, size_wrap_to_8, 9, &v), RET_OK);
+    ASSERT_EQ(v, TRUE);
+  }
+}
+
+TEST(Utils, argv) {
+  const wchar_t* wargv[2] = {L"abc", L"123"};
+  char** argv = tk_to_utf8_argv(2, (wchar_t**)wargv);
+  ASSERT_STREQ(argv[0], "abc");
+  ASSERT_STREQ(argv[1], "123");
+  tk_free_utf8_argv(2, argv);
+}
+
+TEST(Utils, sscanf_simple_d) {
+  int d = 0;
+  int d1 = 0;
+  tk_sscanf_simple("123", "%d", &d);
+  ASSERT_EQ(d, 123);
+
+  tk_sscanf_simple("-123", "%d", &d);
+  ASSERT_EQ(d, -123);
+
+  tk_sscanf_simple("aaa123", "aaa%d", &d);
+  ASSERT_EQ(d, 123);
+
+  tk_sscanf_simple("aaa-123bbb", "aaa%dbbb", &d);
+  ASSERT_EQ(d, -123);
+
+  tk_sscanf_simple("aaa123b100", "aaa%db%d", &d, &d1);
+  ASSERT_EQ(d, 123);
+  ASSERT_EQ(d1, 100);
+}
+
+TEST(Utils, sscanf_simple_u) {
+  uint32_t u = 0;
+  uint32_t u1 = 0;
+  tk_sscanf_simple("123", "%u", &u);
+  ASSERT_EQ(u, 123);
+
+  tk_sscanf_simple("-123", "%u", &u);
+  ASSERT_EQ(u, -123);
+
+  tk_sscanf_simple("aaa123", "aaa%u", &u);
+  ASSERT_EQ(u, 123);
+
+  tk_sscanf_simple("aaa-123bbb", "aaa%ubbb", &u);
+  ASSERT_EQ(u, -123);
+
+  tk_sscanf_simple("aaa123b100", "aaa%ub%u", &u, &u1);
+  ASSERT_EQ(u, 123);
+  ASSERT_EQ(u1, 100);
+}
+
+TEST(Utils, sscanf_simple_f) {
+  float f = 0;
+  float f1 = 0;
+  tk_sscanf_simple("123", "%f", &f);
+  ASSERT_EQ(f, 123);
+
+  tk_sscanf_simple("-123", "%f", &f);
+  ASSERT_EQ(f, -123);
+
+  tk_sscanf_simple("aaa123", "aaa%f", &f);
+  ASSERT_EQ(f, 123);
+
+  tk_sscanf_simple("aaa-123bbb", "aaa%fbbb", &f);
+  ASSERT_EQ(f, -123);
+  tk_sscanf_simple("aaa123", "aaa%f", &f);
+  ASSERT_EQ(f, 123);
+
+  tk_sscanf_simple("aaa1.23", "aaa%f", &f);
+  ASSERT_EQ(tk_fequal(f, 1.23), TRUE);
+
+  tk_sscanf_simple("aaa-12.3bbb", "aaa%fbbb", &f);
+  ASSERT_EQ(tk_fequal(f, -12.3), TRUE);
+
+  tk_sscanf_simple("aaa-123bbb", "aaa%fbbb", &f);
+  ASSERT_EQ(f, -123);
+
+  tk_sscanf_simple("aaa123b100", "aaa%fb%f", &f, &f1);
+  ASSERT_EQ(f, 123);
+  ASSERT_EQ(f1, 100);
+}
+
+TEST(Utils, sscanf_simple_x) {
+  int x = 0;
+  int x1 = 0;
+  tk_sscanf_simple("123", "%x", &x);
+  ASSERT_EQ(x, 0x123);
+
+  tk_sscanf_simple("-123", "%x", &x);
+  ASSERT_EQ(x, -0x123);
+
+  tk_sscanf_simple("aaa123", "aaa%x", &x);
+  ASSERT_EQ(x, 0x123);
+
+  tk_sscanf_simple("aaa-123:bbb", "aaa%x:bbb", &x);
+  ASSERT_EQ(x, -0x123);
+
+  tk_sscanf_simple("aaa123:100", "aaa%x:%x", &x, &x1);
+  ASSERT_EQ(x, 0x123);
+  ASSERT_EQ(x1, 0x100);
+
+  tk_sscanf_simple("aaaabc:def", "aaa%x:%x", &x, &x1);
+  ASSERT_EQ(x, 0xabc);
+  ASSERT_EQ(x1, 0xdef);
+}
+
+TEST(Utils, sscanf_simple_p) {
+  int* p = NULL;
+  int* p1 = NULL;
+  tk_sscanf_simple("0x123", "%p", &p);
+  ASSERT_EQ(tk_pointer_to_int(p), 0x123);
+
+  tk_sscanf_simple("aaa0x123:0x100", "aaa%p:%p", &p, &p1);
+  ASSERT_EQ(tk_pointer_to_int(p), 0x123);
+  ASSERT_EQ(tk_pointer_to_int(p1), 0x100);
+
+  tk_sscanf_simple("aaa0x123abc:0x100def", "aaa%p:%p", &p, &p1);
+  ASSERT_EQ(tk_pointer_to_int(p), 0x123abc);
+  ASSERT_EQ(tk_pointer_to_int(p1), 0x100def);
+}
+
+TEST(Utils, sscanf_simple_ld) {
+  long d = 0;
+  long d1 = 0;
+  tk_sscanf_simple("123", "%ld", &d);
+  ASSERT_EQ(d, 123);
+
+  tk_sscanf_simple("-123", "%ld", &d);
+  ASSERT_EQ(d, -123);
+
+  tk_sscanf_simple("aaa123", "aaa%ld", &d);
+  ASSERT_EQ(d, 123);
+
+  tk_sscanf_simple("aaa-123bbb", "aaa%ldbbb", &d);
+  ASSERT_EQ(d, -123);
+
+  tk_sscanf_simple("aaa123b100", "aaa%ldb%ld", &d, &d1);
+  ASSERT_EQ(d, 123);
+  ASSERT_EQ(d1, 100);
+}
+
+TEST(Utils, sscanf_simple_lu) {
+  unsigned long d = 0;
+  unsigned long d1 = 0;
+  tk_sscanf_simple("123", "%lu", &d);
+  ASSERT_EQ(d, 123u);
+
+  tk_sscanf_simple("-123", "%lu", &d);
+  ASSERT_EQ(d, -123);
+
+  tk_sscanf_simple("aaa123", "aaa%lu", &d);
+  ASSERT_EQ(d, 123u);
+
+  tk_sscanf_simple("aaa-123bbb", "aaa%lubbb", &d);
+  ASSERT_EQ(d, -123);
+
+  tk_sscanf_simple("aaa123b100", "aaa%lub%lu", &d, &d1);
+  ASSERT_EQ(d, 123u);
+  ASSERT_EQ(d1, 100);
+}
+
+TEST(Utils, sscanf_simple_lf) {
+  double f = 0;
+  double f1 = 0;
+  tk_sscanf_simple("123", "%lf", &f);
+  ASSERT_EQ(f, 123);
+
+  tk_sscanf_simple("12e3", "%lf", &f);
+  ASSERT_EQ(f, 12000);
+
+  tk_sscanf_simple("12E3", "%lf", &f);
+  ASSERT_EQ(f, 12000);
+
+  tk_sscanf_simple("12E-3", "%lf", &f);
+  ASSERT_EQ(f, 0.012);
+
+  tk_sscanf_simple("-123", "%lf", &f);
+  ASSERT_EQ(f, -123);
+
+  tk_sscanf_simple("aaa123", "aaa%lf", &f);
+  ASSERT_EQ(f, 123);
+
+  tk_sscanf_simple("aaa-123bbb", "aaa%lfbbb", &f);
+  ASSERT_EQ(f, -123);
+  tk_sscanf_simple("aaa123", "aaa%lf", &f);
+  ASSERT_EQ(f, 123);
+
+  tk_sscanf_simple("aaa1.23", "aaa%lf", &f);
+  ASSERT_EQ(tk_fequal(f, 1.23), TRUE);
+
+  tk_sscanf_simple("aaa-12.3bbb", "aaa%lfbbb", &f);
+  ASSERT_EQ(tk_fequal(f, -12.3), TRUE);
+
+  tk_sscanf_simple("aaa-123bbb", "aaa%lfbbb", &f);
+  ASSERT_EQ(f, -123);
+
+  tk_sscanf_simple("aaa123b100", "aaa%lfb%lf", &f, &f1);
+  ASSERT_EQ(f, 123);
+  ASSERT_EQ(f1, 100);
+}
+
+TEST(Utils, sscanf_simple_nx) {
+  int x = 0;
+  int x1 = 0;
+  tk_sscanf_simple("123", "%2x", &x);
+  ASSERT_EQ(x, 0x12);
+
+  tk_sscanf_simple("aaa123", "aaa%3x", &x);
+  ASSERT_EQ(x, 0x123);
+
+  tk_sscanf_simple("aaa1234", "aaa%02x%02x", &x, &x1);
+  ASSERT_EQ(x, 0x12);
+  ASSERT_EQ(x1, 0x34);
+
+  tk_sscanf_simple("aaaabcd", "aaa%02x%02x", &x, &x1);
+  ASSERT_EQ(x, 0xab);
+  ASSERT_EQ(x1, 0xcd);
+}
+
+TEST(Utils, sscanf_simple_nd) {
+  int d = 0;
+  int d1 = 0;
+  tk_sscanf_simple("123", "%2d", &d);
+  ASSERT_EQ(d, 12);
+
+  tk_sscanf_simple("aaa123", "aaa%3d", &d);
+  ASSERT_EQ(d, 123);
+
+  tk_sscanf_simple("aaa1234", "aaa%02d%02d", &d, &d1);
+  ASSERT_EQ(d, 12);
+  ASSERT_EQ(d1, 34);
+}
+
+TEST(Utils, sscanf_simple_nu) {
+  int u = 0;
+  int u1 = 0;
+  tk_sscanf_simple("123", "%2u", &u);
+  ASSERT_EQ(u, 12);
+
+  tk_sscanf_simple("aaa123", "aaa%3u", &u);
+  ASSERT_EQ(u, 123);
+
+  tk_sscanf_simple("aaa1234", "aaa%02u%02u", &u, &u1);
+  ASSERT_EQ(u, 12);
+  ASSERT_EQ(u1, 34);
+}
+
+TEST(Utils, sscanf_simple_ns) {
+  char str[256] = {0};
+  tk_sscanf_simple("123abc", "123%3s", &str);
+  ASSERT_STREQ(str, "abc");
+
+  tk_sscanf_simple("123abcd", "123%3s", &str);
+  ASSERT_STREQ(str, "abc");
+
+  ASSERT_EQ(tk_sscanf_simple("123abcd", "123%30s", &str), 1);
+  ASSERT_STREQ(str, "abcd");
+}
+
+TEST(Utils, sscanf_simple1) {
+  uint32_t y = 0;
+  uint32_t m = 0;
+  uint32_t d = 0;
+  int n = tk_sscanf_simple("#2023-10-1", "#%u-%u-%u", &y, &m, &d);
+  ASSERT_EQ(n, 3);
+  ASSERT_EQ(y, 2023);
+  ASSERT_EQ(m, 10);
+  ASSERT_EQ(d, 1);
+}
+
+TEST(Utils, sscanf_simple2) {
+  uint32_t y = 0;
+  uint32_t m = 0;
+  uint32_t d = 0;
+  uint32_t h = 0;
+  uint32_t minute = 0;
+  double s = 0;
+
+  int n = tk_sscanf("#2022-10-1-12:10:1.23", "#%u-%u-%u-%u:%u:%lf", &y, &m, &d, &h, &minute, &s);
+  ASSERT_EQ(n, 6);
+  ASSERT_EQ(y, 2022);
+  ASSERT_EQ(m, 10);
+  ASSERT_EQ(d, 1);
+  ASSERT_EQ(h, 12);
+  ASSERT_EQ(minute, 10);
+  ASSERT_EQ(s, 1.23);
+
+  ASSERT_EQ(tk_isdigit('-'), FALSE);
+  ASSERT_EQ(tk_isdigit('+'), FALSE);
+}
+
+TEST(Utils, levelize1) {
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", -1), 0);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 0), 0);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 10), 0);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 20), 0);
+
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 21), 1);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 30), 1);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 40), 1);
+
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 41), 2);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 50), 2);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 60), 2);
+
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 61), 3);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 70), 3);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 80), 3);
+
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 81), 4);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 90), 4);
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 100), 4);
+
+  ASSERT_EQ(tk_levelize("0-20;21-40;41-60;61-80;81-100", 1000), 4);
+}
+
+TEST(Utils, levelize2) {
+  ASSERT_EQ(tk_levelize("0-20", -1), 0);
+  ASSERT_EQ(tk_levelize("0-20", 0), 0);
+  ASSERT_EQ(tk_levelize("0-20", 10), 0);
+  ASSERT_EQ(tk_levelize("0-20", 100), 0);
+}
+
+TEST(Utils, levelize3) {
+  ASSERT_EQ(tk_levelize("0-20;21-40", -1), 0);
+  ASSERT_EQ(tk_levelize("0-20;21-40", 30), 1);
+  ASSERT_EQ(tk_levelize("0-20;21-40", 100), 1);
+}
+
+TEST(Utils, tk_date_time_format) {
+  str_t str;
+  char buff[128];
+
+  str_attach(&str, buff, sizeof(buff));
+  ASSERT_EQ(tk_date_time_format(0, "", &str), RET_OK);
+  ASSERT_STREQ(str.str, "");
+
+  ASSERT_EQ(tk_date_time_format(0, "Y", &str), RET_OK);
+  ASSERT_STREQ(str.str, "1970");
+
+  ASSERT_EQ(tk_date_time_format(0, "Y-M-D", &str), RET_OK);
+  ASSERT_STREQ(str.str, "1970-1-1");
+
+  ASSERT_EQ(tk_date_time_format(0, "Y-M-D h:m:s", &str), RET_OK);
+  ASSERT_STREQ(str.str, "1970-1-1 0:0:0");
+
+  ASSERT_EQ(tk_date_time_format(0, "YY", &str), RET_OK);
+  ASSERT_STREQ(str.str, "70");
+
+  ASSERT_EQ(tk_date_time_format(0, "YY-MM-DD", &str), RET_OK);
+  ASSERT_STREQ(str.str, "70-01-01");
+
+  ASSERT_EQ(tk_date_time_format(0, "YY-MM-DD hh:mm:ss", &str), RET_OK);
+  ASSERT_STREQ(str.str, "70-01-01 00:00:00");
+
+  ASSERT_EQ(tk_date_time_format(3765, "YY-MM-DD hh:mm:ss", &str), RET_OK);
+  ASSERT_STREQ(str.str, "70-01-01 01:02:45");
+}
+
+TEST(Utils, upper) {
+  ASSERT_EQ(tk_isupper('A'), TRUE);
+  ASSERT_EQ(tk_isupper('a'), FALSE);
+  ASSERT_EQ(tk_isupper('1'), FALSE);
+  ASSERT_EQ(tk_isupper('Z'), TRUE);
+  ASSERT_EQ(tk_isupper('z'), FALSE);
+  ASSERT_EQ(tk_isupper(','), FALSE);
+  ASSERT_EQ(tk_isupper(' '), FALSE);
+}
+
+TEST(Utils, lower) {
+  ASSERT_EQ(tk_islower('A'), FALSE);
+  ASSERT_EQ(tk_islower('a'), TRUE);
+  ASSERT_EQ(tk_islower('1'), FALSE);
+  ASSERT_EQ(tk_islower('Z'), FALSE);
+  ASSERT_EQ(tk_islower('z'), TRUE);
+  ASSERT_EQ(tk_islower(','), FALSE);
+  ASSERT_EQ(tk_islower(' '), FALSE);
+}
+
+TEST(Utils, alpha) {
+  ASSERT_EQ(tk_isalpha('A'), TRUE);
+  ASSERT_EQ(tk_isalpha('a'), TRUE);
+  ASSERT_EQ(tk_isalpha('1'), FALSE);
+  ASSERT_EQ(tk_isalpha('Z'), TRUE);
+  ASSERT_EQ(tk_isalpha('z'), TRUE);
+  ASSERT_EQ(tk_isalpha(','), FALSE);
+  ASSERT_EQ(tk_isalpha(' '), FALSE);
+}
+
+TEST(Utils, bits_data_byte_data) {
+  uint16_t data = 0;
+  uint8_t output[16];
+  uint8_t bytes[16] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
+  uint8_t* bits = (uint8_t*)&data;
+
+  memset(output, 0, sizeof(output));
+  ASSERT_EQ(tk_bits_data_from_bytes_data(bits, sizeof(data), bytes, 2), RET_OK);
+  ASSERT_EQ(data, 0x02);
+  ASSERT_EQ(tk_bits_data_to_bytes_data(bits, sizeof(data), output, 2), RET_OK);
+  ASSERT_EQ(memcmp(output, bytes, 2), 0);
+
+  ASSERT_EQ(tk_bits_data_from_bytes_data(bits, sizeof(data), bytes, 8), RET_OK);
+  ASSERT_EQ(data, 0x0aa);
+  ASSERT_EQ(tk_bits_data_to_bytes_data(bits, sizeof(data), output, 8), RET_OK);
+  ASSERT_EQ(memcmp(output, bytes, 8), 0);
+
+  ASSERT_EQ(tk_bits_data_from_bytes_data(bits, sizeof(data), bytes, sizeof(bytes)), RET_OK);
+  ASSERT_EQ(data, 0xaaaa);
+  ASSERT_EQ(tk_bits_data_to_bytes_data(bits, sizeof(data), output, 16), RET_OK);
+  ASSERT_EQ(memcmp(output, bytes, 16), 0);
+
+  /*容量不足时返回错误，且不写入任何数据*/
+  data = 0;
+  ASSERT_NE(tk_bits_data_from_bytes_data(bits, sizeof(data), bytes, sizeof(bytes) + 1), RET_OK);
+  ASSERT_EQ(data, 0);
+  ASSERT_NE(tk_bits_data_to_bytes_data(bits, sizeof(data), output, sizeof(bytes) + 1), RET_OK);
+  ASSERT_EQ(memcmp(output, bytes, sizeof(bytes)), 0);
+
+  /*空指针*/
+  ASSERT_NE(tk_bits_data_from_bytes_data(NULL, sizeof(data), bytes, 1), RET_OK);
+  ASSERT_NE(tk_bits_data_from_bytes_data(bits, sizeof(data), NULL, 1), RET_OK);
+  ASSERT_NE(tk_bits_data_to_bytes_data(NULL, sizeof(data), output, 1), RET_OK);
+  ASSERT_NE(tk_bits_data_to_bytes_data(bits, sizeof(data), NULL, 1), RET_OK);
+
+  {
+    /*bits_size*8超过32位可表示范围时，容量判定必须用64位算*/
+    uint8_t bits[1] = {0};
+    uint8_t bytes[1] = {1};
+    uint8_t output[1] = {0};
+    const uint32_t large = 0x20000000u; /*large * 8 == 2^32*/
+
+    ASSERT_EQ(tk_bits_data_from_bytes_data(bits, large, bytes, 1), RET_OK);
+    ASSERT_EQ(bits[0], 0x01);
+
+    ASSERT_EQ(tk_bits_data_to_bytes_data(bits, large, output, 1), RET_OK);
+    ASSERT_EQ(output[0], 1);
+  }
+}
+
+TEST(Utils, buffer_value_bad_params) {
+  value_t v;
+  uint8_t buffer[] = {0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa};
+  uint8_t snapshot[sizeof(buffer)];
+
+  value_set_int(&v, 1);
+  memcpy(snapshot, buffer, sizeof(buffer));
+
+  /*offset为负数：offset + type_size在32位下回绕成0，曾绕过检查导致越界读写*/
+  ASSERT_NE(tk_buffer_set_value(buffer, sizeof(buffer), VALUE_TYPE_INT32, -1, -1, &v), RET_OK);
+  ASSERT_EQ(memcmp(buffer, snapshot, sizeof(buffer)), 0);
+  ASSERT_NE(tk_buffer_set_value(buffer, sizeof(buffer), VALUE_TYPE_UINT8, -1, 0, &v), RET_OK);
+  ASSERT_EQ(memcmp(buffer, snapshot, sizeof(buffer)), 0);
+  ASSERT_NE(tk_buffer_get_value(buffer, sizeof(buffer), VALUE_TYPE_INT32, -1, -1, &v), RET_OK);
+  ASSERT_NE(tk_buffer_get_value(buffer, sizeof(buffer), VALUE_TYPE_UINT8, -1, 0, &v), RET_OK);
+
+  /*offset越界(跨出缓冲区)*/
+  ASSERT_NE(tk_buffer_set_value(buffer, sizeof(buffer), VALUE_TYPE_INT32, 2, -1, &v), RET_OK);
+  ASSERT_NE(tk_buffer_get_value(buffer, sizeof(buffer), VALUE_TYPE_INT32, 2, -1, &v), RET_OK);
+
+  /*bit_offset越界*/
+  ASSERT_NE(tk_buffer_set_value(buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, 8, &v), RET_OK);
+  ASSERT_NE(tk_buffer_get_value(buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, 8, &v), RET_OK);
+
+  /*value为空*/
+  ASSERT_NE(tk_buffer_set_value(buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, -1, NULL), RET_OK);
+  ASSERT_NE(tk_buffer_get_value(buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, -1, NULL), RET_OK);
+
+  /*buffer为空*/
+  ASSERT_NE(tk_buffer_set_value(NULL, sizeof(buffer), VALUE_TYPE_UINT8, 0, -1, &v), RET_OK);
+  ASSERT_NE(tk_buffer_get_value(NULL, sizeof(buffer), VALUE_TYPE_UINT8, 0, -1, &v), RET_OK);
+}
+
+TEST(Utils, buffer_get_value_int8) {
+  value_t v;
+  uint8_t buffer[] = {0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa};
+  value_set_int(&v, 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, 0, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 1, 0, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0xaa);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0xaa);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT8, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT8, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_uint8(&v), 0xaa);
+}
+
+TEST(Utils, buffer_set_value_int8) {
+  value_t v;
+  uint8_t buffer[] = {0, 0, 0, 0, 0, 0, 0, 0};
+  value_set_int(&v, 0);
+
+  value_set_int(&v, 1);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, 0, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 1);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0b11);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 1, 0, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 1);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0b11);
+
+  value_set_int(&v, 0xaa);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0xaa);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT8, 1, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0xaa);
+
+  value_set_int(&v, 0);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT8, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0);
+
+  value_set_int(&v, 1);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT8, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0b10);
+}
+
+TEST(Utils, buffer_get_value_int16) {
+  value_t v;
+  uint16_t buffer[] = {0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa};
+  value_set_int(&v, 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 0, 0, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 1, 0, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0xaa);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0xaa);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT16, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT16, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_uint16(&v), 0xaa);
+}
+
+TEST(Utils, buffer_set_value_int16) {
+  value_t v;
+  uint16_t buffer[] = {0, 0, 0, 0, 0, 0, 0, 0};
+  value_set_int(&v, 0);
+
+  value_set_int(&v, 1);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 0, 0, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 1);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0b11);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 1, 0, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 1);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0b11);
+
+  value_set_int(&v, 0xaa);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0xaa);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT16, 1, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0xaa);
+
+  value_set_int(&v, 0);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT16, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0);
+
+  value_set_int(&v, 1);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT16, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0b10);
+}
+
+TEST(Utils, buffer_get_value_int32) {
+  value_t v;
+  uint32_t buffer[] = {0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa};
+  value_set_int(&v, 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 0, 0, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 1, 0, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0xaa);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0xaa);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT32, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT32, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_uint32(&v), 0xaa);
+}
+
+TEST(Utils, buffer_set_value_int32) {
+  value_t v;
+  uint32_t buffer[] = {0, 0, 0, 0, 0, 0, 0, 0};
+  value_set_int(&v, 0);
+
+  value_set_int(&v, 1);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 0, 0, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 1);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0b11);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 1, 0, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 1);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0b11);
+
+  value_set_int(&v, 0xaa);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0xaa);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT32, 1, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0xaa);
+
+  value_set_int(&v, 0);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT32, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0);
+
+  value_set_int(&v, 1);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT32, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0b10);
+}
+
+TEST(Utils, buffer_get_value_int64) {
+  value_t v;
+  uint64_t buffer[] = {0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa};
+  value_set_int(&v, 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 0, 0, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 1, 0, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0xaa);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 0xaa);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT64, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), 1);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT64, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_uint64(&v), 0xaa);
+}
+
+TEST(Utils, buffer_set_value_int64) {
+  value_t v;
+  uint64_t buffer[] = {0, 0, 0, 0, 0, 0, 0, 0};
+  value_set_int(&v, 0);
+
+  value_set_int(&v, 1);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 0, 0, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 1);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0b11);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 1, 0, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 1);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 1, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0b11);
+
+  value_set_int(&v, 0xaa);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0xaa);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_UINT64, 1, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0xaa);
+
+  value_set_int(&v, 0);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT64, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0);
+
+  value_set_int(&v, 1);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_INT64, 0, 1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0b10);
+}
+
+TEST(Utils, buffer_get_value_float) {
+  value_t v;
+  float buffer[] = {0, 1, 2, 3, 4, 5, 6};
+  value_set_int(&v, 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_FLOAT32, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_float(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_FLOAT32, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), buffer[4]);
+}
+
+TEST(Utils, buffer_set_value_float) {
+  value_t v;
+  float buffer[] = {0, 0, 0, 0, 0, 0, 0, 0};
+  value_set_int(&v, 0);
+
+  value_set_int(&v, 0xaa);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_FLOAT32, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0xaa);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_FLOAT32, 1, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0xaa);
+}
+
+TEST(Utils, buffer_get_value_double) {
+  value_t v;
+  double buffer[] = {0, 1, 2, 3, 4, 5, 6};
+  value_set_int(&v, 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_DOUBLE, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_double(&v), 0);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_DOUBLE, 4, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_int(&v), buffer[4]);
+}
+
+TEST(Utils, buffer_get_value_double_unaligned) {
+  value_t v;
+  double buffer[] = {0, 1, 2, 3, 4, 5, 6};
+
+  value_set_double(&v, 123);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer + 1, sizeof(buffer), VALUE_TYPE_DOUBLE, 1, -1, &v),
+            RET_OK);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer + 1, sizeof(buffer), VALUE_TYPE_DOUBLE, 1, -1, &v),
+            RET_OK);
+  ASSERT_EQ(value_double(&v), 123);
+}
+
+TEST(Utils, buffer_get_value_str) {
+  value_t v;
+  char buffer[256];
+  memcpy(buffer, "abc", 4);
+  memcpy(buffer + 4, "123", 4);
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_STRING, 0, -1, &v),
+            RET_OK);
+  ASSERT_STREQ(value_str(&v), "abc");
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_STRING, 4, -1, &v),
+            RET_OK);
+  ASSERT_STREQ(value_str(&v), "123");
+}
+
+TEST(Utils, buffer_get_value_bin) {
+  value_t v;
+  char buffer[256];
+  memcpy(buffer, "abc", 4);
+  memcpy(buffer + 4, "123", 4);
+  binary_data_t* b = NULL;
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_BINARY, 0, -1, &v),
+            RET_OK);
+
+  b = value_binary_data(&v);
+  ASSERT_STREQ((char*)(b->data), "abc");
+  ASSERT_EQ(b->size, sizeof(buffer));
+
+  ASSERT_EQ(tk_buffer_get_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_BINARY, 4, -1, &v),
+            RET_OK);
+
+  b = value_binary_data(&v);
+  ASSERT_STREQ((char*)(b->data), "123");
+  ASSERT_EQ(b->size, sizeof(buffer) - 4);
+}
+
+TEST(Utils, buffer_set_value_double) {
+  value_t v;
+  double buffer[] = {0, 0, 0, 0, 0, 0, 0, 0};
+  value_set_int(&v, 0);
+
+  value_set_int(&v, 0xaa);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_DOUBLE, 0, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[0], 0xaa);
+
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_DOUBLE, 1, -1, &v),
+            RET_OK);
+  ASSERT_EQ(buffer[1], 0xaa);
+}
+
+TEST(Utils, buffer_set_value_str) {
+  value_t v;
+  char buffer[256];
+
+  memset(buffer, 0x00, sizeof(buffer));
+
+  value_set_str(&v, "abc");
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_STRING, 0, -1, &v),
+            RET_OK);
+  ASSERT_STREQ(buffer, "abc");
+
+  value_set_str(&v, "123");
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_STRING, 3, -1, &v),
+            RET_OK);
+  ASSERT_STREQ(buffer, "abc123");
+}
+
+TEST(Utils, buffer_set_value_bin) {
+  value_t v;
+  char buffer[256];
+
+  memset(buffer, 0x00, sizeof(buffer));
+
+  value_set_binary_data(&v, (void*)"abc", 3);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_BINARY, 0, -1, &v),
+            RET_OK);
+  ASSERT_STREQ(buffer, "abc");
+
+  value_set_binary_data(&v, (void*)"123", 3);
+  ASSERT_EQ(tk_buffer_set_value((uint8_t*)buffer, sizeof(buffer), VALUE_TYPE_BINARY, 3, -1, &v),
+            RET_OK);
+  ASSERT_STREQ(buffer, "abc123");
+}
+
+TEST(Utils, tk_basic_type_from_name) {
+  ASSERT_EQ(tk_basic_type_from_name("int8"), VALUE_TYPE_INT8);
+  ASSERT_EQ(tk_basic_type_from_name("uint8"), VALUE_TYPE_UINT8);
+  ASSERT_EQ(tk_basic_type_from_name("BYTE"), VALUE_TYPE_UINT8);
+  ASSERT_EQ(tk_basic_type_from_name("int16"), VALUE_TYPE_INT16);
+  ASSERT_EQ(tk_basic_type_from_name("uint16"), VALUE_TYPE_UINT16);
+  ASSERT_EQ(tk_basic_type_from_name("WORD"), VALUE_TYPE_UINT16);
+  ASSERT_EQ(tk_basic_type_from_name("int32"), VALUE_TYPE_INT32);
+  ASSERT_EQ(tk_basic_type_from_name("uint32"), VALUE_TYPE_UINT32);
+  ASSERT_EQ(tk_basic_type_from_name("dWORD"), VALUE_TYPE_UINT32);
+  ASSERT_EQ(tk_basic_type_from_name("int64"), VALUE_TYPE_INT64);
+  ASSERT_EQ(tk_basic_type_from_name("uint64"), VALUE_TYPE_UINT64);
+  ASSERT_EQ(tk_basic_type_from_name("LWORD"), VALUE_TYPE_UINT64);
+  ASSERT_EQ(tk_basic_type_from_name("float"), VALUE_TYPE_FLOAT32);
+  ASSERT_EQ(tk_basic_type_from_name("double"), VALUE_TYPE_DOUBLE);
+  ASSERT_EQ(tk_basic_type_from_name("bool"), VALUE_TYPE_BOOL);
+
+  ASSERT_EQ(tk_basic_type_from_name("int8_t"), VALUE_TYPE_INT8);
+  ASSERT_EQ(tk_basic_type_from_name("uint8_t"), VALUE_TYPE_UINT8);
+  ASSERT_EQ(tk_basic_type_from_name("int16_t"), VALUE_TYPE_INT16);
+  ASSERT_EQ(tk_basic_type_from_name("uint16_t"), VALUE_TYPE_UINT16);
+  ASSERT_EQ(tk_basic_type_from_name("int32_t"), VALUE_TYPE_INT32);
+  ASSERT_EQ(tk_basic_type_from_name("uint32_t"), VALUE_TYPE_UINT32);
+  ASSERT_EQ(tk_basic_type_from_name("int64_t"), VALUE_TYPE_INT64);
+  ASSERT_EQ(tk_basic_type_from_name("uint64_t"), VALUE_TYPE_UINT64);
+  ASSERT_EQ(tk_basic_type_from_name("float_t"), VALUE_TYPE_FLOAT32);
+  ASSERT_EQ(tk_basic_type_from_name("double_t"), VALUE_TYPE_DOUBLE);
+  ASSERT_EQ(tk_basic_type_from_name("bool_t"), VALUE_TYPE_BOOL);
+  ASSERT_EQ(tk_basic_type_from_name("bin"), VALUE_TYPE_BINARY);
+  ASSERT_EQ(tk_basic_type_from_name("str"), VALUE_TYPE_STRING);
+  ASSERT_EQ(tk_basic_type_from_name("unknown"), VALUE_TYPE_INVALID);
+}
+
+TEST(Utils, tk_distance) {
+  ASSERT_EQ(tk_distance(0, 0, 0, 0), 0);
+  ASSERT_EQ(tk_distance(0, 0, 1, 0), 1);
+  ASSERT_EQ(tk_distance(0, 0, 0, 1), 1);
+  ASSERT_EQ(tk_distance(0, 0, 1, 1), 1);
+  ASSERT_EQ(tk_distance(0, 0, 1, 2), 2);
+  ASSERT_EQ(tk_distance(0, 0, 2, 1), 2);
+  ASSERT_EQ(tk_distance(0, 0, 2, 2), 2);
+  ASSERT_EQ(tk_distance(0, 0, 3, 4), 5);
+  ASSERT_EQ(tk_distance(0, 0, 4, 3), 5);
+  ASSERT_EQ(tk_distance(0, 0, 4, 4), 5);
+  ASSERT_EQ(tk_distance(0, 0, 5, 5), 7);
+  ASSERT_EQ(tk_distance(0, 0, 6, 6), 8);
+  ASSERT_EQ(tk_distance(0, 0, 8, 8), 11);
+}
+
+TEST(Utils, tk_value_to_angle) {
+  int32_t v = TK_R2D(tk_value_to_angle(50, 0, 100, 0, 360, FALSE));
+  ASSERT_EQ(v, 180);
+
+  v = TK_R2D(tk_value_to_angle(0, 0, 100, 0, 360, FALSE));
+  ASSERT_EQ(v, 0);
+
+  v = TK_R2D(tk_value_to_angle(100, 0, 100, 0, 360, FALSE));
+  ASSERT_EQ(v, 360);
+
+  v = round(TK_R2D(tk_value_to_angle(50, 0, 100, 0, 360, TRUE)));
+  ASSERT_EQ(v, 180);
+
+  v = TK_R2D(tk_value_to_angle(0, 0, 100, 0, 360, TRUE));
+  ASSERT_EQ(v, 360);
+
+  v = TK_R2D(tk_value_to_angle(100, 0, 100, 0, 360, TRUE));
+  ASSERT_EQ(v, 0);
+}
+
+TEST(Utils, tk_angle) {
+  int32_t v = TK_R2D(tk_angle(0, 0, 100, 0));
+  ASSERT_EQ(v, 0);
+
+  v = TK_R2D(tk_angle(0, 0, 0, 90));
+  ASSERT_EQ(v, 270);
+
+  v = TK_R2D(tk_angle(0, 0, 0, -90));
+  ASSERT_EQ(v, 90);
+
+  v = TK_R2D(tk_angle(0, 0, -180, 0));
+  ASSERT_EQ(v, 180);
+
+  v = tk_roundi(TK_R2D(tk_angle(0, 0, 90, 90)));
+  ASSERT_EQ(v, 315);
+}
+
+TEST(Utils, skip_chars) {
+  ASSERT_STREQ(tk_skip_chars("abc123", "abc"), "123");
+  ASSERT_STREQ(tk_skip_chars("abc123", ""), "abc123");
+  ASSERT_STREQ(tk_skip_chars("abc123", "A"), "abc123");
+  ASSERT_STREQ(tk_skip_chars("abc123", "a"), "bc123");
+}
+
+TEST(Utils, skip_to_chars) {
+  ASSERT_STREQ(tk_skip_to_chars("abc123", "123"), "123");
+  ASSERT_STREQ(tk_skip_to_chars("abc123", "21"), "123");
+  ASSERT_STREQ(tk_skip_to_chars("abc123", ""), "");
+  ASSERT_STREQ(tk_skip_to_chars("abc123", "A"), "");
+  ASSERT_STREQ(tk_skip_to_chars("abc123", "a"), "abc123");
+}
+
+static int tk_compare_int32(const void* a, const void* b) {
+  return *(int*)a - *(int*)b;
+}
+
+typedef struct _person_t {
+  int age;
+  char name[32];
+} person_t;
+
+static int person_cmp_age(const void* a, const void* b) {
+  return ((person_t*)a)->age - ((person_t*)b)->age;
+}
+
+TEST(Utils, mergesort1) {
+  int32_t arr[] = {38, 27, 43, 3, 9, 82, 10};
+  tk_mergesort(arr, ARRAY_SIZE(arr), sizeof(arr[0]), tk_compare_int32);
+
+  ASSERT_EQ(arr[0], 3);
+  ASSERT_EQ(arr[1], 9);
+  ASSERT_EQ(arr[2], 10);
+  ASSERT_EQ(arr[3], 27);
+  ASSERT_EQ(arr[4], 38);
+  ASSERT_EQ(arr[5], 43);
+  ASSERT_EQ(arr[6], 82);
+}
+
+TEST(Utils, mergesort2) {
+  person_t arr[] = {{38, "a"}, {27, "b"}, {43, "c"}, {3, "d"}, {9, "e"}, {82, "f"}, {10, "g"}};
+  tk_mergesort(arr, ARRAY_SIZE(arr), sizeof(arr[0]), person_cmp_age);
+
+  ASSERT_EQ(arr[0].age, 3);
+  ASSERT_EQ(arr[1].age, 9);
+  ASSERT_EQ(arr[2].age, 10);
+  ASSERT_EQ(arr[3].age, 27);
+  ASSERT_EQ(arr[4].age, 38);
+  ASSERT_EQ(arr[5].age, 43);
+  ASSERT_EQ(arr[6].age, 82);
+}
+
+TEST(Utils, atob) {
+  ASSERT_EQ(tk_atob("FALSE"), FALSE);
+  ASSERT_EQ(tk_atob("False"), FALSE);
+  ASSERT_EQ(tk_atob("F"), FALSE);
+  ASSERT_EQ(tk_atob("f"), FALSE);
+
+  ASSERT_EQ(tk_atob("\"FALSE\""), TRUE);
+  ASSERT_EQ(tk_atob("'FALSE'"), TRUE);
+  ASSERT_EQ(tk_atob(" FALSE "), TRUE);
+
+  ASSERT_EQ(tk_atob("TRUE"), TRUE);
+  ASSERT_EQ(tk_atob("True"), TRUE);
+  ASSERT_EQ(tk_atob("T"), TRUE);
+  ASSERT_EQ(tk_atob("t"), TRUE);
+
+  ASSERT_EQ(tk_atob("\"TRUE\""), TRUE);
+  ASSERT_EQ(tk_atob("'TRUE'"), TRUE);
+  ASSERT_EQ(tk_atob(" TRUE "), TRUE);
+
+  ASSERT_EQ(tk_atob(NULL), FALSE);
+  ASSERT_EQ(tk_atob(""), FALSE);
+  ASSERT_EQ(tk_atob(" "), TRUE);
+
+  ASSERT_EQ(tk_atob("0"), FALSE);
+  ASSERT_EQ(tk_atob("00"), TRUE);
+  ASSERT_EQ(tk_atob("0AWTK"), TRUE);
+  ASSERT_EQ(tk_atob("1"), TRUE);
+  ASSERT_EQ(tk_atob("-1"), TRUE);
+  ASSERT_EQ(tk_atob("2"), TRUE);
+
+  ASSERT_EQ(tk_atob("abcd"), TRUE);
+}
+
+TEST(Utils, watob) {
+  ASSERT_EQ(tk_watob(L"FALSE"), FALSE);
+  ASSERT_EQ(tk_watob(L"False"), FALSE);
+  ASSERT_EQ(tk_watob(L"F"), FALSE);
+  ASSERT_EQ(tk_watob(L"f"), FALSE);
+
+  ASSERT_EQ(tk_watob(L"\"FALSE\""), TRUE);
+  ASSERT_EQ(tk_watob(L"'FALSE'"), TRUE);
+  ASSERT_EQ(tk_watob(L" FALSE "), TRUE);
+
+  ASSERT_EQ(tk_watob(L"TRUE"), TRUE);
+  ASSERT_EQ(tk_watob(L"True"), TRUE);
+  ASSERT_EQ(tk_watob(L"T"), TRUE);
+  ASSERT_EQ(tk_watob(L"t"), TRUE);
+
+  ASSERT_EQ(tk_watob(L"\"TRUE\""), TRUE);
+  ASSERT_EQ(tk_watob(L"'TRUE'"), TRUE);
+  ASSERT_EQ(tk_watob(L" TRUE "), TRUE);
+
+  ASSERT_EQ(tk_watob(NULL), FALSE);
+  ASSERT_EQ(tk_watob(L""), FALSE);
+  ASSERT_EQ(tk_watob(L" "), TRUE);
+
+  ASSERT_EQ(tk_watob(L"0"), FALSE);
+  ASSERT_EQ(tk_watob(L"00"), TRUE);
+  ASSERT_EQ(tk_watob(L"0AWTK"), TRUE);
+  ASSERT_EQ(tk_watob(L"1"), TRUE);
+  ASSERT_EQ(tk_watob(L"-1"), TRUE);
+  ASSERT_EQ(tk_watob(L"2"), TRUE);
+
+  ASSERT_EQ(tk_watob(L"abcd"), TRUE);
+}
+
+TEST(Utils, tk_strs_bsearch) {
+  const char* strs[] = {"abc1", "abc2", "abc3", "abc4", "abc5", "b", "c", "d"};
+  ASSERT_EQ(tk_strs_bsearch(strs, 0, "Abc1", TRUE), (char*)NULL);
+  ASSERT_EQ(tk_strs_bsearch(strs, 0, "Abc1", FALSE), (char*)NULL);
+
+  ASSERT_EQ(tk_strs_bsearch(strs, 1, "Abc1", TRUE), (char*)NULL);
+  ASSERT_STREQ(tk_strs_bsearch(strs, 1, "Abc1", FALSE), "abc1");
+
+  for (uint32_t i = 1; i < ARRAY_SIZE(strs); i++) {
+    for (uint32_t j = 0; j < ARRAY_SIZE(strs); j++) {
+      if (j >= i) {
+        ASSERT_EQ(tk_strs_bsearch(strs, i, strs[j], TRUE), (char*)NULL);
+      } else {
+        ASSERT_STREQ(tk_strs_bsearch(strs, i, strs[j], TRUE), strs[j]);
+      }
+    }
+  }
+}
+
+typedef struct _tk_bsearch_int_item_t {
+  int32_t key;
+  int32_t value;
+} tk_bsearch_int_item_t;
+
+static int tk_bsearch_int_item_cmp(const void* a, const void* b) {
+  const tk_bsearch_int_item_t* a1 = (const tk_bsearch_int_item_t*)a;
+  const tk_bsearch_int_item_t* b1 = (const tk_bsearch_int_item_t*)b;
+  return a1->key - b1->key;
+}
+
+TEST(Utils, tk_bsearch) {
+  tk_bsearch_int_item_t items[] = {{1, 10}, {3, 30}, {5, 50}, {7, 70}, {9, 90}};
+  tk_bsearch_int_item_t key = {5, 0};
+  tk_bsearch_int_item_t missing = {4, 0};
+  tk_bsearch_int_item_t* ret = NULL;
+  tk_bsearch_result_t result;
+
+  ret = (tk_bsearch_int_item_t*)tk_bsearch(&key, items, ARRAY_SIZE(items),
+                                           sizeof(tk_bsearch_int_item_t), tk_bsearch_int_item_cmp,
+                                           &result);
+  ASSERT_EQ(ret->value, 50);
+  ASSERT_EQ(result.index, 2);
+
+  ret = (tk_bsearch_int_item_t*)tk_bsearch(&missing, items, ARRAY_SIZE(items),
+                                           sizeof(tk_bsearch_int_item_t), tk_bsearch_int_item_cmp,
+                                           &result);
+  ASSERT_EQ(ret, (void*)NULL);
+  ASSERT_EQ(result.index, -1);
+}
+
+TEST(Utils, tk_str_indexable) {
+  ASSERT_EQ(tk_str_indexable("abc"), FALSE);
+  ASSERT_EQ(tk_str_indexable(""), FALSE);
+  ASSERT_EQ(tk_str_indexable("[]"), FALSE);
+  ASSERT_EQ(tk_str_indexable("[1]"), TRUE);
+  ASSERT_EQ(tk_str_indexable("[123]"), TRUE);
+  ASSERT_EQ(tk_str_indexable("[-123]"), TRUE);
+}
+
+TEST(Utils, tk_normalize_rad) {
+  double twopi = 2 * M_PI;
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(0), 0);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(1), 1);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(2), 2);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(3), 3);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(4), 4);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(5), 5);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(6), 6);
+
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(0 + twopi), 0);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(1 + twopi), 1);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(2 + twopi), 2);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(3 + twopi), 3);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(4 + twopi), 4);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(5 + twopi), 5);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(6 + twopi), 6);
+
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(0 - twopi), 0);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(1 - twopi), 1);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(2 - twopi), 2);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(3 - twopi), 3);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(4 - twopi), 4);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(5 - twopi), 5);
+  ASSERT_DOUBLE_EQ(tk_normalize_rad(6 - twopi), 6);
+}
+
+TEST(Utils, tk_compare_rad) {
+  double twopi = 2 * M_PI;
+  ASSERT_EQ(tk_rad_equal(0, 0, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(1, 1, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(2, 2, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(3, 3, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(4, 4, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(5, 5, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(6, 6, 0.0001), TRUE);
+
+  ASSERT_EQ(tk_rad_equal(0, 0 + twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(1, 1 + twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(2, 2 + twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(3, 3 + twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(4, 4 + twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(5, 5 + twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(6, 6 + twopi, 0.0001), TRUE);
+
+  ASSERT_EQ(tk_rad_equal(0, 0 - twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(1, 1 - twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(2, 2 - twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(3, 3 - twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(4, 4 - twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(5, 5 - twopi, 0.0001), TRUE);
+  ASSERT_EQ(tk_rad_equal(6, 6 - twopi, 0.0001), TRUE);
+
+  ASSERT_EQ(tk_rad_equal(0, 0 - twopi + 1, 0.0001), FALSE);
+  ASSERT_EQ(tk_rad_equal(1, 1 - twopi + 1, 0.0001), FALSE);
+  ASSERT_EQ(tk_rad_equal(2, 2 - twopi + 1, 0.0001), FALSE);
+  ASSERT_EQ(tk_rad_equal(3, 3 - twopi + 1, 0.0001), FALSE);
+  ASSERT_EQ(tk_rad_equal(4, 4 - twopi + 1, 0.0001), FALSE);
+  ASSERT_EQ(tk_rad_equal(5, 5 - twopi + 1, 0.0001), FALSE);
+  ASSERT_EQ(tk_rad_equal(6, 6 - twopi + 1, 0.0001), FALSE);
+}
+
+TEST(Utils, tk_swap) {
+  int a = 1;
+  int b = 2;
+  tk_swap(a, b, int);
+  ASSERT_EQ(a, 2);
+  ASSERT_EQ(b, 1);
+
+  tk_swap(a, b, int);
+  ASSERT_EQ(a, 1);
+  ASSERT_EQ(b, 2);
+}
+
+TEST(Utils, tk_isxxx) {
+  ASSERT_TRUE(tk_isspace(' '));
+  ASSERT_TRUE(!tk_isspace(-1));
+  ASSERT_TRUE(!tk_isspace(160));
+
+  ASSERT_TRUE(tk_isdigit('0'));
+  ASSERT_TRUE(!tk_isdigit(-1));
+  ASSERT_TRUE(!tk_isdigit(160));
+
+  ASSERT_TRUE(tk_isxdigit('a'));
+  ASSERT_TRUE(!tk_isxdigit(-1));
+  ASSERT_TRUE(!tk_isxdigit(160));
+
+  ASSERT_TRUE(tk_isprint('a'));
+  ASSERT_TRUE(!tk_isprint(-1));
+  ASSERT_TRUE(!tk_isprint(160));
+
+  ASSERT_TRUE(tk_isalpha('a'));
+  ASSERT_TRUE(!tk_isalpha(-1));
+  ASSERT_TRUE(!tk_isalpha(160));
+
+  ASSERT_TRUE(tk_islower('a'));
+  ASSERT_TRUE(!tk_islower(-1));
+  ASSERT_TRUE(!tk_islower(160));
+
+  ASSERT_TRUE(tk_isupper('A'));
+  ASSERT_TRUE(!tk_isupper(-1));
+  ASSERT_TRUE(!tk_isupper(160));
+
+  ASSERT_TRUE(tk_isalnum('a'));
+  ASSERT_TRUE(!tk_isalnum(-1));
+  ASSERT_TRUE(!tk_isalnum(160));
+}
+
+static ret_t return_ret_fail(void) {
+  return RET_FAIL;
+}
+
+static ret_t test_return_ret_if_fail(void) {
+  return_ret_if_fail(return_ret_fail());
+
+  return RET_OK;
+}
+
+TEST(Utils, return_ret_if_fail) {
+  test_return_ret_if_fail();
+}
+
+TEST(Utils, tk_str_trim_left) {
+  char str[1024] = {0};
+
+  strncpy(str, "abc", sizeof(str));
+  ASSERT_EQ(tk_str_trim_left(str, " "), RET_OK);
+  ASSERT_STREQ(str, "abc");
+
+  strncpy(str, " abc", sizeof(str));
+  ASSERT_EQ(tk_str_trim_left(str, " "), RET_OK);
+  ASSERT_STREQ(str, "abc");
+
+  strncpy(str, "abc ", sizeof(str));
+  ASSERT_EQ(tk_str_trim_left(str, " "), RET_OK);
+  ASSERT_STREQ(str, "abc ");
+
+  strncpy(str, " abc ", sizeof(str));
+  ASSERT_EQ(tk_str_trim_left(str, " "), RET_OK);
+  ASSERT_STREQ(str, "abc ");
+
+  strncpy(str, "::;; abc", sizeof(str));
+  ASSERT_EQ(tk_str_trim_left(str, ":; "), RET_OK);
+  ASSERT_STREQ(str, "abc");
+
+  strncpy(str, "::;; abc", sizeof(str));
+  ASSERT_EQ(tk_str_trim_left(str, ":; "), RET_OK);
+  ASSERT_STREQ(str, "abc");
+
+  strncpy(str, "::;; ", sizeof(str));
+  ASSERT_EQ(tk_str_trim_left(str, ":; "), RET_OK);
+  ASSERT_STREQ(str, "");
+}
+
+TEST(Utils, tk_str_trim_right) {
+  char str[1024] = {0};
+
+  strncpy(str, "abc", sizeof(str));
+  ASSERT_EQ(tk_str_trim_right(str, " "), RET_OK);
+  ASSERT_STREQ(str, "abc");
+
+  strncpy(str, " abc", sizeof(str));
+  ASSERT_EQ(tk_str_trim_right(str, " "), RET_OK);
+  ASSERT_STREQ(str, " abc");
+
+  strncpy(str, " 123abc", sizeof(str));
+  ASSERT_EQ(tk_str_trim_right(str, " "), RET_OK);
+  ASSERT_STREQ(str, " 123abc");
+
+  strncpy(str, " abc ", sizeof(str));
+  ASSERT_EQ(tk_str_trim_right(str, " "), RET_OK);
+  ASSERT_STREQ(str, " abc");
+
+  strncpy(str, "::;; abc", sizeof(str));
+  ASSERT_EQ(tk_str_trim_right(str, ":; "), RET_OK);
+  ASSERT_STREQ(str, "::;; abc");
+
+  strncpy(str, "abc ::;; ", sizeof(str));
+  ASSERT_EQ(tk_str_trim_right(str, ":; "), RET_OK);
+  ASSERT_STREQ(str, "abc");
+
+  strncpy(str, "::;; ", sizeof(str));
+  ASSERT_EQ(tk_str_trim_right(str, ":; "), RET_OK);
+  ASSERT_STREQ(str, "");
+}
+
+TEST(Utils, tk_str_remove_str_right) {
+  char str[1024] = {0};
+
+  strncpy(str, "abc,abc,abc", sizeof(str));
+  ASSERT_EQ(tk_str_remove_str_right(str, "abc"), RET_OK);
+  ASSERT_STREQ(str, "abc,abc,");
+
+  strncpy(str, "abc,abc,abc", sizeof(str));
+  ASSERT_EQ(tk_str_remove_str_right(str, ",abc"), RET_OK);
+  ASSERT_STREQ(str, "abc,abc");
+
+  strncpy(str, "abc,abc,abc", sizeof(str));
+  ASSERT_EQ(tk_str_remove_str_right(str, "abc,abc,abc"), RET_OK);
+  ASSERT_STREQ(str, "");
+
+  strncpy(str, "abc,abc,abc", sizeof(str));
+  ASSERT_EQ(tk_str_remove_str_right(str, "acc"), RET_OK);
+  ASSERT_STREQ(str, "abc,abc,abc");
+
+  strncpy(str, "abc,abc,abc", sizeof(str));
+  ASSERT_EQ(tk_str_remove_str_right(str, "ac"), RET_OK);
+  ASSERT_STREQ(str, "abc,abc,abc");
+
+  strncpy(str, "abc,abc,abc", sizeof(str));
+  ASSERT_EQ(tk_str_remove_str_right(str, ""), RET_OK);
+  ASSERT_STREQ(str, "abc,abc,abc");
+}
+
+TEST(Utils, str_is_digit) {
+  ASSERT_EQ(tk_str_is_digit(NULL), FALSE);
+  ASSERT_EQ(tk_str_is_digit(""), FALSE);
+  ASSERT_EQ(tk_str_is_digit("+"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("-"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("++1"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("1--"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("+3-"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("0."), FALSE);
+  ASSERT_EQ(tk_str_is_digit("0..0"), FALSE);
+  ASSERT_EQ(tk_str_is_digit(".0"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("-.0"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("-.+"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("0.0.1"), FALSE);
+
+  ASSERT_EQ(tk_str_is_digit("123"), TRUE);
+  ASSERT_EQ(tk_str_is_digit("+123"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("-123"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("0.618"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("-1.414"), FALSE);
+  ASSERT_EQ(tk_str_is_digit("+360.0"), FALSE);
+}
+
+TEST(Utils, str_is_number) {
+  ASSERT_EQ(tk_str_is_number(NULL), FALSE);
+  ASSERT_EQ(tk_str_is_number(""), FALSE);
+  ASSERT_EQ(tk_str_is_number("+"), FALSE);
+  ASSERT_EQ(tk_str_is_number("-"), FALSE);
+  ASSERT_EQ(tk_str_is_number("++1"), FALSE);
+  ASSERT_EQ(tk_str_is_number("1--"), FALSE);
+  ASSERT_EQ(tk_str_is_number("+3-"), FALSE);
+  ASSERT_EQ(tk_str_is_number("0."), FALSE);
+  ASSERT_EQ(tk_str_is_number("0..0"), FALSE);
+  ASSERT_EQ(tk_str_is_number(".0"), FALSE);
+  ASSERT_EQ(tk_str_is_number("-.0"), FALSE);
+  ASSERT_EQ(tk_str_is_number("-.+"), FALSE);
+  ASSERT_EQ(tk_str_is_number("0.0.1"), FALSE);
+
+  ASSERT_EQ(tk_str_is_number("123"), TRUE);
+  ASSERT_EQ(tk_str_is_number("+123"), TRUE);
+  ASSERT_EQ(tk_str_is_number("-123"), TRUE);
+  ASSERT_EQ(tk_str_is_number("0.618"), TRUE);
+  ASSERT_EQ(tk_str_is_number("-1.414"), TRUE);
+  ASSERT_EQ(tk_str_is_number("+360.0"), TRUE);
+}
+
+TEST(Utils, str_is_int) {
+  ASSERT_EQ(tk_str_is_int(NULL), FALSE);
+  ASSERT_EQ(tk_str_is_int(""), FALSE);
+  ASSERT_EQ(tk_str_is_int("+"), FALSE);
+  ASSERT_EQ(tk_str_is_int("-"), FALSE);
+  ASSERT_EQ(tk_str_is_int("++1"), FALSE);
+  ASSERT_EQ(tk_str_is_int("1--"), FALSE);
+  ASSERT_EQ(tk_str_is_int("+3-"), FALSE);
+  ASSERT_EQ(tk_str_is_int("0."), FALSE);
+  ASSERT_EQ(tk_str_is_int("0..0"), FALSE);
+  ASSERT_EQ(tk_str_is_int(".0"), FALSE);
+  ASSERT_EQ(tk_str_is_int("-.0"), FALSE);
+  ASSERT_EQ(tk_str_is_int("-.+"), FALSE);
+  ASSERT_EQ(tk_str_is_int("0.0.1"), FALSE);
+
+  ASSERT_EQ(tk_str_is_int("123"), TRUE);
+  ASSERT_EQ(tk_str_is_int("+123"), TRUE);
+  ASSERT_EQ(tk_str_is_int("-123"), TRUE);
+  ASSERT_EQ(tk_str_is_int("0.618"), FALSE);
+  ASSERT_EQ(tk_str_is_int("-1.414"), FALSE);
+  ASSERT_EQ(tk_str_is_int("+360.0"), FALSE);
+}
+
+TEST(Utils, str_is_float) {
+  ASSERT_EQ(tk_str_is_float(NULL), FALSE);
+  ASSERT_EQ(tk_str_is_float(""), FALSE);
+  ASSERT_EQ(tk_str_is_float("+"), FALSE);
+  ASSERT_EQ(tk_str_is_float("-"), FALSE);
+  ASSERT_EQ(tk_str_is_float("++1"), FALSE);
+  ASSERT_EQ(tk_str_is_float("1--"), FALSE);
+  ASSERT_EQ(tk_str_is_float("+3-"), FALSE);
+  ASSERT_EQ(tk_str_is_float("0."), FALSE);
+  ASSERT_EQ(tk_str_is_float("0..0"), FALSE);
+  ASSERT_EQ(tk_str_is_float(".0"), FALSE);
+  ASSERT_EQ(tk_str_is_float("-.0"), FALSE);
+  ASSERT_EQ(tk_str_is_float("-.+"), FALSE);
+  ASSERT_EQ(tk_str_is_float("0.0.1"), FALSE);
+
+  ASSERT_EQ(tk_str_is_float("123"), FALSE);
+  ASSERT_EQ(tk_str_is_float("+123"), FALSE);
+  ASSERT_EQ(tk_str_is_float("-123"), FALSE);
+  ASSERT_EQ(tk_str_is_float("0.618"), TRUE);
+  ASSERT_EQ(tk_str_is_float("-1.414"), TRUE);
+  ASSERT_EQ(tk_str_is_float("+360.0"), TRUE);
+}
+
+TEST(Utils, bit) {
+  uint32_t num = 0b10101010;
+
+  ASSERT_EQ(0b10100010, TK_TOGGLE_BIT(num, 3));
+  ASSERT_EQ(0b10100110, TK_TOGGLE_BIT(num, 2));
+
+  ASSERT_EQ(0b10100010, TK_SET_OR_CLEAR_BIT(num, 2, 0));
+  ASSERT_EQ(0b10101010, TK_SET_OR_CLEAR_BIT(num, 3, 1));
+
+  ASSERT_EQ(0b10111010, TK_SET_BIT(num, 4));
+  ASSERT_EQ(0b10011010, TK_CLEAR_BIT(num, 5));
+
+  ASSERT_EQ(0, TK_TEST_BIT(num, 6));
+  ASSERT_EQ(1, TK_TEST_BIT(num, 7));
+}
+
+TEST(Utils, tk_days_in_month) {
+  ASSERT_EQ(tk_days_in_month(2024, 1), 31);
+  ASSERT_EQ(tk_days_in_month(2024, 2), 29);
+  ASSERT_EQ(tk_days_in_month(2023, 2), 28);
+  ASSERT_EQ(tk_days_in_month(2024, 3), 31);
+  ASSERT_EQ(tk_days_in_month(2024, 4), 30);
+  ASSERT_EQ(tk_days_in_month(2024, 5), 31);
+  ASSERT_EQ(tk_days_in_month(2024, 6), 30);
+  ASSERT_EQ(tk_days_in_month(2024, 7), 31);
+  ASSERT_EQ(tk_days_in_month(2024, 8), 31);
+  ASSERT_EQ(tk_days_in_month(2024, 9), 30);
+  ASSERT_EQ(tk_days_in_month(2024, 10), 31);
+  ASSERT_EQ(tk_days_in_month(2024, 11), 30);
+  ASSERT_EQ(tk_days_in_month(2024, 12), 31);
+}
+
+typedef struct _dispatch_log_test_ctx_t {
+  str_t messages;
+  uint32_t count;
+  bool_t nested;
+} dispatch_log_test_ctx_t;
+
+static ret_t dispatch_log_test_on_log(void* ctx, event_t* e) {
+  log_message_event_t* log_evt = log_message_event_cast(e);
+  dispatch_log_test_ctx_t* actx = (dispatch_log_test_ctx_t*)ctx;
+  return_value_if_fail(log_evt != NULL && actx != NULL, RET_BAD_PARAMS);
+
+  str_append_more(&actx->messages, log_evt->message, ";", NULL);
+  actx->count++;
+
+  if (actx->nested) {
+    actx->nested = FALSE;
+    emitter_dispatch_log((emitter_t*)e->target, log_evt->level, "nested %d", 1);
+  }
+
+  return RET_OK;
+}
+
+static ret_t test_str_append_vformat_simple(str_t* str, const char* format, ...) {
+  va_list ap;
+  ret_t ret = RET_OK;
+
+  va_start(ap, format);
+  ret = str_append_vformat_simple(str, format, ap);
+  va_end(ap);
+
+  return ret;
+}
+
+TEST(Utils, str_append_vformat_simple) {
+  str_t s;
+
+  str_init(&s, 0);
+  ASSERT_EQ(test_str_append_vformat_simple(&s, "hello %s %d", "world", 42), RET_OK);
+  ASSERT_STREQ(s.str, "hello world 42");
+  str_reset(&s);
+}
+
+TEST(Utils, emitter_dispatch_log_basic) {
+  emitter_t emitter;
+  dispatch_log_test_ctx_t ctx = {};
+
+  emitter_init(&emitter);
+  str_init(&ctx.messages, 0);
+  emitter_on(&emitter, EVT_LOG_MESSAGE, dispatch_log_test_on_log, &ctx);
+
+  ASSERT_EQ(emitter_dispatch_log(&emitter, LOG_LEVEL_INFO, "value=%d", 100), RET_OK);
+  ASSERT_EQ(ctx.count, 1u);
+  ASSERT_STREQ(ctx.messages.str, "value=100;");
+
+  str_reset(&ctx.messages);
+  emitter_deinit(&emitter);
+}
+
+TEST(Utils, emitter_dispatch_log_no_listener) {
+  emitter_t emitter;
+
+  emitter_init(&emitter);
+  ASSERT_EQ(emitter_dispatch_log(&emitter, LOG_LEVEL_INFO, "skip me %d", 1), RET_OK);
+  emitter_deinit(&emitter);
+}
+
+TEST(Utils, emitter_dispatch_log_disabled) {
+  emitter_t emitter;
+  dispatch_log_test_ctx_t ctx = {};
+
+  emitter_init(&emitter);
+  str_init(&ctx.messages, 0);
+  emitter_on(&emitter, EVT_LOG_MESSAGE, dispatch_log_test_on_log, &ctx);
+  emitter_disable(&emitter);
+
+  ASSERT_EQ(emitter_dispatch_log(&emitter, LOG_LEVEL_INFO, "disabled %d", 1), RET_OK);
+  ASSERT_EQ(ctx.count, 0u);
+
+  str_reset(&ctx.messages);
+  emitter_deinit(&emitter);
+}
+
+TEST(Utils, emitter_dispatch_log_nested) {
+  emitter_t emitter;
+  dispatch_log_test_ctx_t ctx = {};
+
+  emitter_init(&emitter);
+  str_init(&ctx.messages, 0);
+  ctx.nested = TRUE;
+  emitter_on(&emitter, EVT_LOG_MESSAGE, dispatch_log_test_on_log, &ctx);
+
+  ASSERT_EQ(emitter_dispatch_log(&emitter, LOG_LEVEL_INFO, "outer %d", 1), RET_OK);
+  ASSERT_EQ(ctx.count, 2u);
+  ASSERT_STREQ(ctx.messages.str, "outer 1;nested 1;");
+
+  str_reset(&ctx.messages);
+  emitter_deinit(&emitter);
+}
+
+TEST(Utils, emitter_dispatch_log_format_fail) {
+  emitter_t emitter;
+  dispatch_log_test_ctx_t ctx = {};
+
+  emitter_init(&emitter);
+  str_init(&ctx.messages, 0);
+  emitter_on(&emitter, EVT_LOG_MESSAGE, dispatch_log_test_on_log, &ctx);
+
+  ASSERT_NE(emitter_dispatch_log(&emitter, LOG_LEVEL_INFO, "%*s", INT_MIN, "x"), RET_OK);
+  ASSERT_EQ(ctx.count, 1u);
+  ASSERT_STREQ(ctx.messages.str, "Failed to format log!\n;");
+
+  str_reset(&ctx.messages);
+  emitter_deinit(&emitter);
+}
+
+TEST(Utils, tk_is_valid_name) {
+  ASSERT_EQ(tk_is_valid_name("abc"), TRUE);
+  ASSERT_EQ(tk_is_valid_name("abc_123"), TRUE);
+  ASSERT_EQ(tk_is_valid_name("_a"), TRUE);
+  ASSERT_EQ(tk_is_valid_name("Abc_0"), TRUE);
+  ASSERT_EQ(tk_is_valid_name(""), TRUE);
+  ASSERT_EQ(tk_is_valid_name("abc-def"), FALSE);
+  ASSERT_EQ(tk_is_valid_name("a.b"), FALSE);
+  ASSERT_EQ(tk_is_valid_name("a b"), FALSE);
+}
+
+TEST(Utils, tk_strlen_strnlen) {
+  ASSERT_EQ(tk_strlen(NULL), 0u);
+  ASSERT_EQ(tk_strlen(""), 0u);
+  ASSERT_EQ(tk_strlen("abc"), 3u);
+  ASSERT_EQ(tk_strnlen("hello", 3), 3u);
+  ASSERT_EQ(tk_strnlen("hello", 10), 5u);
+  ASSERT_EQ(tk_strnlen("", 5), 0u);
+}
+
+TEST(Utils, strcmp_null) {
+  ASSERT_EQ(tk_strcmp(NULL, "a"), -1);
+  ASSERT_EQ(tk_strcmp("a", NULL), 1);
+  ASSERT_EQ(tk_strncmp(NULL, "a", 1), -1);
+  ASSERT_EQ(tk_strncmp("a", NULL, 1), 1);
+  ASSERT_EQ(tk_stricmp(NULL, "a"), -1);
+  ASSERT_EQ(tk_stricmp("a", NULL), 1);
+  ASSERT_EQ(tk_strnicmp(NULL, "a", 1), -1);
+  ASSERT_EQ(tk_strnicmp("a", NULL, 1), 1);
+}
+
+TEST(Utils, tk_wstrcmp) {
+  ASSERT_EQ(tk_wstrcmp(L"abc", L"abc"), 0);
+  ASSERT_LT(tk_wstrcmp(L"abc", L"abd"), 0);
+  ASSERT_EQ(tk_wstrcmp(NULL, L"a"), -1);
+  ASSERT_EQ(tk_wstrcmp(L"a", NULL), 1);
+  ASSERT_EQ(tk_wstricmp(L"abc", L"ABC"), 0);
+  ASSERT_LT(tk_wstricmp(L"abc", L"XYZ"), 0);
+}
+
+static int qsort_str_cmp(const void* a, const void* b) {
+  return tk_strcmp((const char*)a, (const char*)b);
+}
+
+TEST(Utils, tk_qsort) {
+  const char* s3 = "cherry";
+  const char* s1 = "apple";
+  const char* s2 = "banana";
+  void* arr[] = {(void*)s3, (void*)s1, (void*)s2};
+
+  ASSERT_EQ(tk_qsort(arr, 3, qsort_str_cmp), RET_OK);
+  ASSERT_STREQ((const char*)arr[0], "apple");
+  ASSERT_STREQ((const char*)arr[1], "banana");
+  ASSERT_STREQ((const char*)arr[2], "cherry");
+
+  ASSERT_EQ(tk_qsort(arr, 1, qsort_str_cmp), RET_OK);
+  ASSERT_STREQ((const char*)arr[0], "apple");
+}
+
+TEST(Utils, pointer_helpers) {
+  char buffer[8];
+
+  ASSERT_LT(pointer_compare(buffer, buffer + 4), 0);
+  ASSERT_GT(pointer_compare(buffer + 4, buffer), 0);
+  ASSERT_EQ(compare_always_equal(buffer, buffer + 4), 0);
+  ASSERT_EQ(dummy_destroy(buffer), RET_OK);
+
+  int* p = (int*)TKMEM_ALLOC(sizeof(int));
+  *p = 42;
+  ASSERT_EQ(default_destroy(p), RET_OK);
+}
+
+TEST(Utils, tk_pointer_roundtrip) {
+  ASSERT_EQ(tk_pointer_to_int(tk_pointer_from_int(42)), 42);
+  ASSERT_EQ(tk_pointer_to_int(tk_pointer_from_int(-1)), -1);
+  ASSERT_EQ(tk_pointer_to_long(tk_pointer_from_long(12345)), 12345ULL);
+}
+
+TEST(Utils, tk_bits_to_bytes) {
+  ASSERT_EQ(tk_bits_to_bytes(0), 0u);
+  ASSERT_EQ(tk_bits_to_bytes(1), 1u);
+  ASSERT_EQ(tk_bits_to_bytes(8), 1u);
+  ASSERT_EQ(tk_bits_to_bytes(9), 2u);
+  ASSERT_EQ(tk_bits_to_bytes(16), 2u);
+
+  /*bits接近UINT32_MAX时，bits + 7会溢出32位*/
+  ASSERT_EQ(tk_bits_to_bytes(0xFFFFFFF8u), 0x1FFFFFFFu);
+  ASSERT_EQ(tk_bits_to_bytes(0xFFFFFFF9u), 0x20000000u);
+  ASSERT_EQ(tk_bits_to_bytes(0xFFFFFFFFu), 0x20000000u);
+}
+
+TEST(Utils, tk_pixel_copy) {
+  uint16_t src16[] = {0x1111, 0x2222, 0x3333, 0x4444};
+  uint16_t dst16[4] = {0};
+  uint32_t src32[] = {0x11111111, 0x22222222};
+  uint32_t dst32[2] = {0};
+
+  tk_pixel_copy(dst16, src16, 4, 2);
+  ASSERT_EQ(memcmp(dst16, src16, sizeof(src16)), 0);
+
+  tk_pixel_copy(dst32, src32, 2, 4);
+  ASSERT_EQ(memcmp(dst32, src32, sizeof(src32)), 0);
+}
+
+TEST(Utils, tk_ftoa) {
+  char buf[64];
+
+  memset(buf, 0, sizeof(buf));
+  tk_ftoa(buf, sizeof(buf), 3.14);
+  ASSERT_NEAR(atof(buf), 3.14, 0.001);
+
+  memset(buf, 0, sizeof(buf));
+  tk_ftoa(buf, sizeof(buf), -0.5);
+  ASSERT_NEAR(atof(buf), -0.5, 0.001);
+}
+
+TEST(Utils, tk_ret_to_str_from_str) {
+  char buf[TK_NUM_MAX_LEN + 1];
+  bool_t valid = FALSE;
+
+  ASSERT_STREQ(tk_ret_to_str(RET_OK, buf), "OK");
+  ASSERT_STREQ(tk_ret_to_str(RET_FAIL, buf), "FAIL");
+  ASSERT_STREQ(tk_ret_to_str(RET_BAD_PARAMS, buf), "BAD_PARAMS");
+
+  ASSERT_EQ(tk_ret_from_str("OK", &valid), RET_OK);
+  ASSERT_EQ(valid, TRUE);
+  ASSERT_EQ(tk_ret_from_str("FAIL", &valid), RET_FAIL);
+  ASSERT_EQ(valid, TRUE);
+  ASSERT_EQ(tk_ret_from_str("NOT_FOUND", &valid), RET_NOT_FOUND);
+  ASSERT_EQ(valid, TRUE);
+
+  ASSERT_EQ(tk_ret_from_str("999", &valid), (ret_t)999);
+  ASSERT_EQ(valid, FALSE);
+}
+
+TEST(Utils, tk_strtoi_clamp) {
+  const char* end = NULL;
+
+  ASSERT_EQ(tk_strtoi("2147483647", &end, 10), INT32_MAX);
+  ASSERT_EQ(tk_strtoi("2147483648", &end, 10), INT32_MAX);
+  ASSERT_EQ(tk_strtoi("-2147483648", &end, 10), INT32_MIN);
+  ASSERT_EQ(tk_strtoi("-2147483649", &end, 10), INT32_MIN);
+}
+
+TEST(Utils, utf8_wstr_dup) {
+  wchar_t* w = tk_wstr_dup_utf8("hello");
+  char* u = tk_utf8_dup_wstr(w);
+
+  ASSERT_NE(w, (wchar_t*)NULL);
+  ASSERT_NE(u, (char*)NULL);
+  ASSERT_EQ(wcscmp(w, L"hello"), 0);
+  ASSERT_STREQ(u, "hello");
+
+  TKMEM_FREE(w);
+  TKMEM_FREE(u);
+}
+
+TEST(Utils, tk_snprintf) {
+  char buf[32];
+
+  ASSERT_EQ(tk_snprintf(buf, sizeof(buf), "n=%d s=%s", 42, "awtk"), 11);
+  ASSERT_STREQ(buf, "n=42 s=awtk");
 }

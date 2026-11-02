@@ -2,13 +2,12 @@
 #define TK_FILE_H
 
 #include "tkc/mem.h"
-#include "misc/new.hpp"
 
 #ifdef ___BUILD_MODEL___
 #include <stdio.h>
 #else
 #include "tkc/utils.h"
-#include "base/rom_fs.h"
+#include "tkc/rom_fs.h"
 #define fopen rom_fopen
 #define fread rom_fread
 #define fwrite rom_fwrite

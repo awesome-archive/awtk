@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   font.h
  * Author: AWTK Develop Team
  * Brief:  font interface
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,6 +20,7 @@
  */
 
 #include "tkc/mem.h"
+#include "base/bidi.h"
 #include "tkc/utils.h"
 #include "font_loader/font_loader_bitmap.h"
 
@@ -29,26 +30,15 @@ typedef struct _font_bitmap_t {
   uint32_t buff_size;
 } font_bitmap_t;
 
-static font_bitmap_index_t* find_glyph(font_bitmap_index_t* elms, uint32_t nr, wchar_t c) {
-  int low = 0;
-  int mid = 0;
-  int result = 0;
-  int high = nr - 1;
+static int font_bitmap_bsearch_cmp(const void* key, const void* iter) {
+  wchar_t c = *(const wchar_t*)(key);
+  const font_bitmap_index_t* index = (const font_bitmap_index_t*)(iter);
+  return c - index->c;
+}
 
-  while (low <= high) {
-    mid = low + ((high - low) >> 1);
-    result = elms[mid].c - c;
-
-    if (result == 0) {
-      return elms + mid;
-    } else if (result < 0) {
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-
-  return NULL;
+inline static font_bitmap_index_t* find_glyph(font_bitmap_index_t* elms, uint32_t nr, wchar_t c) {
+  return (font_bitmap_index_t*)tk_bsearch(&c, elms, nr, sizeof(font_bitmap_index_t),
+                                          font_bitmap_bsearch_cmp, NULL);
 }
 
 static ret_t font_bitmap_get_glyph(font_t* f, wchar_t c, font_size_t font_size, glyph_t* g) {
@@ -61,16 +51,56 @@ static ret_t font_bitmap_get_glyph(font_t* f, wchar_t c, font_size_t font_size, 
 
   p = (font->buff + index->offset);
   memcpy(g, p, sizeof(glyph_t));
-  g->data = font->buff + index->offset + sizeof(glyph_t) - sizeof(g->data);
+  g->bidi_type = FONT_BIDI_TYPE_LTR;
+  g->next_glyph = NULL;
+  if (c == ' ') {
+    g->data = NULL;
+  } else {
+    g->data =
+        font->buff + index->offset + sizeof(glyph_t) - sizeof(g->data) - sizeof(g->next_glyph);
+  }
 
   return RET_OK;
 }
 
-static bool_t font_bitmap_match(font_t* f, const char* name, font_size_t font_size) {
+static glyphs_t* font_bitmap_create_glyphs(font_t* f, const wchar_t* str, uint32_t len,
+                                           font_size_t font_size, font_raster_params_t* params) {
+  bidi_t b;
+  uint32_t i = 0;
+  glyphs_t* glyphs = NULL;
+  font_vmetrics_t vmetrics;
   font_bitmap_t* font = (font_bitmap_t*)f;
   font_bitmap_header_t* header = (font_bitmap_header_t*)(font->buff);
+  memset(&vmetrics, 0x0, sizeof(font_vmetrics_t));
+  vmetrics.ascent = header->ascent;
+  vmetrics.descent = header->descent;
+  vmetrics.line_gap = header->line_gap;
+  bidi_init(&b, FALSE, FALSE, params->bidi_type);
+  if (bidi_log2vis(&b, str, len) == RET_OK) {
+    glyphs = glyphs_create(b.vis_str, b.vis_str_size, len, FALSE, font_size, &vmetrics);
+    goto_error_if_fail(glyphs != NULL);
+    glyphs->font = f;
+    for (i = 0; i < b.vis_str_size; i++) {
+      wchar_t c = b.vis_str[i];
+      if (font_bitmap_get_glyph(f, c, font_size, &glyphs->glyphs[i]) != RET_OK &&
+          glyphs->glyphs[i].data == NULL) {
+        glyphs->glyphs[i].chr = (uint16_t)c;
+        glyphs->glyphs[i].w = 0;
+        glyphs->glyphs[i].h = 0;
+      }
+      glyphs->glyphs[i].str_count = 1;
+      glyphs->glyphs[i].glyph_count = 1;
+    }
+  }
+error:
+  bidi_deinit(&b);
+  return glyphs;
+}
+
+static bool_t font_bitmap_match(font_t* f, const char* name, font_size_t font_size) {
+  font_bitmap_t* font = (font_bitmap_t*)f;
   if (name == NULL || strcmp(name, font->base.name) == 0) {
-    return (int32_t)(header->font_size) == (int32_t)font_size;
+    return TRUE;
   }
 
   return FALSE;
@@ -81,11 +111,20 @@ static ret_t font_bitmap_destroy(font_t* f) {
   return RET_OK;
 }
 
-static int32_t font_bitmap_get_baseline(font_t* f, font_size_t font_size) {
+static font_vmetrics_t font_bitmap_get_vmetrics(font_t* f, font_size_t font_size) {
+  font_vmetrics_t vmetrics;
   font_bitmap_t* font = (font_bitmap_t*)f;
   font_bitmap_header_t* header = (font_bitmap_header_t*)(font->buff);
 
-  return header->baseline;
+  vmetrics.ascent = header->ascent;
+  vmetrics.descent = header->descent;
+  vmetrics.line_gap = header->line_gap;
+
+  vmetrics.units_per_em = 0;
+  vmetrics.font_ascender = header->ascent;
+  vmetrics.font_descender = header->descent;
+
+  return vmetrics;
 }
 
 font_t* font_bitmap_init(font_bitmap_t* f, const char* name, const uint8_t* buff,
@@ -95,11 +134,12 @@ font_t* font_bitmap_init(font_bitmap_t* f, const char* name, const uint8_t* buff
   f->buff = buff;
   f->buff_size = buff_size;
   f->base.match = font_bitmap_match;
-  f->base.get_baseline = font_bitmap_get_baseline;
+  f->base.get_vmetrics = font_bitmap_get_vmetrics;
   f->base.get_glyph = font_bitmap_get_glyph;
+  f->base.create_glyphs = font_bitmap_create_glyphs;
   f->base.destroy = font_bitmap_destroy;
-
-  tk_strncpy(f->base.name, name, TK_NAME_LEN);
+  f->base.desc = "bitmap font";
+  tk_strncpy(f->base.name, name, MAX_PATH);
 
   return &(f->base);
 }
@@ -123,7 +163,7 @@ static font_t* font_bitmap_load(font_loader_t* loader, const char* name, const u
 
 font_loader_t* font_loader_bitmap(void) {
   static font_loader_t loader;
-  loader.type = ASSET_TYPE_FONT_TTF;
+  loader.type = ASSET_TYPE_FONT_BMP;
   loader.load = font_bitmap_load;
 
   return &loader;

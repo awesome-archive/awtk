@@ -2,11 +2,9 @@
 ### 概述
 ![image](images/combo_box_item_t_0.png)
 
- ComboBox Item控件。
+ComboBox Item控件。
 
- 本类仅供combo\_box控件内部使用。
-
-
+本类仅供combo\_box控件内部使用。
 ----------------------------------
 ### 函数
 <p id="combo_box_item_t_methods">
@@ -15,6 +13,7 @@
 | -------- | ------------ | 
 | <a href="#combo_box_item_t_combo_box_item_cast">combo\_box\_item\_cast</a> | 转换combo_box_item对象(供脚本语言使用)。 |
 | <a href="#combo_box_item_t_combo_box_item_create">combo\_box\_item\_create</a> | 创建combo_box_item对象 |
+| <a href="#combo_box_item_t_combo_box_item_get_widget_vtable">combo\_box\_item\_get\_widget\_vtable</a> | 获取 combo_box_item 虚表。 |
 | <a href="#combo_box_item_t_combo_box_item_set_checked">combo\_box\_item\_set\_checked</a> | 设置控件是否被选中。 |
 | <a href="#combo_box_item_t_combo_box_item_set_value">combo\_box\_item\_set\_value</a> | 设置控件的值。 |
 ### 属性
@@ -29,16 +28,15 @@
 
 | 事件名称 | 类型  | 说明 | 
 | -------- | ----- | ------- | 
-| EVT\_VALUE\_WILL\_CHANGE | event\_t | 值(勾选状态)即将改变事件。 |
-| EVT\_VALUE\_CHANGED | event\_t | 值(勾选状态)改变事件。 |
+| EVT\_CLICK | pointer\_event\_t | 点击事件。 |
+| EVT\_VALUE\_WILL\_CHANGE | value\_change\_event\_t | 值(勾选状态)即将改变事件。 |
+| EVT\_VALUE\_CHANGED | value\_change\_event\_t | 值(勾选状态)改变事件。 |
 #### combo\_box\_item\_cast 函数
 -----------------------
 
 * 函数功能：
 
-> <p id="combo_box_item_t_combo_box_item_cast"> 转换combo_box_item对象(供脚本语言使用)。
-
-
+> <p id="combo_box_item_t_combo_box_item_cast">转换combo_box_item对象(供脚本语言使用)。
 
 * 函数原型：
 
@@ -57,9 +55,7 @@ widget_t* combo_box_item_cast (widget_t* widget);
 
 * 函数功能：
 
-> <p id="combo_box_item_t_combo_box_item_create"> 创建combo_box_item对象
-
-
+> <p id="combo_box_item_t_combo_box_item_create">创建combo_box_item对象
 
 * 函数原型：
 
@@ -77,14 +73,30 @@ widget_t* combo_box_item_create (widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t 
 | y | xy\_t | y坐标 |
 | w | wh\_t | 宽度 |
 | h | wh\_t | 高度 |
+#### combo\_box\_item\_get\_widget\_vtable 函数
+-----------------------
+
+* 函数功能：
+
+> <p id="combo_box_item_t_combo_box_item_get_widget_vtable">获取 combo_box_item 虚表。
+
+* 函数原型：
+
+```
+const widget_vtable_t* combo_box_item_get_widget_vtable ();
+```
+
+* 参数说明：
+
+| 参数 | 类型 | 说明 |
+| -------- | ----- | --------- |
+| 返回值 | const widget\_vtable\_t* | 成功返回 combo\_box\_item 虚表。 |
 #### combo\_box\_item\_set\_checked 函数
 -----------------------
 
 * 函数功能：
 
-> <p id="combo_box_item_t_combo_box_item_set_checked"> 设置控件是否被选中。
-
-
+> <p id="combo_box_item_t_combo_box_item_set_checked">设置控件是否被选中。
 
 * 函数原型：
 
@@ -104,9 +116,7 @@ ret_t combo_box_item_set_checked (widget_t* widget, bool_t checked);
 
 * 函数功能：
 
-> <p id="combo_box_item_t_combo_box_item_set_value"> 设置控件的值。
-
-
+> <p id="combo_box_item_t_combo_box_item_set_value">设置控件的值。
 
 * 函数原型：
 
@@ -123,8 +133,7 @@ ret_t combo_box_item_set_value (widget_t* widget, int32_t value);
 | value | int32\_t | 值 |
 #### checked 属性
 -----------------------
-> <p id="combo_box_item_t_checked"> 是否被选中。
-
+> <p id="combo_box_item_t_checked">是否被选中。
 
 * 类型：bool\_t
 
@@ -140,8 +149,7 @@ ret_t combo_box_item_set_value (widget_t* widget, int32_t value);
 | 可通过widget\_set\_prop修改 | 是 |
 #### value 属性
 -----------------------
-> <p id="combo_box_item_t_value"> 值。
-
+> <p id="combo_box_item_t_value">值。
 
 * 类型：int32\_t
 

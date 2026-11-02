@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  sdl2 implemented lcd interface/
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,7 +22,40 @@
 #include "tkc/mem.h"
 #include "lcd/lcd_sdl2.h"
 #include "blend/image_g2d.h"
+#include "base/system_info.h"
 #include "lcd/lcd_mem_special.h"
+#include "base/lcd_orientation_helper.h"
+
+#ifdef AWTK_SDL3
+static bool awtk_sdl_render_copy(SDL_Renderer* renderer, SDL_Texture* texture,
+                                 const SDL_Rect* srcrect, const SDL_Rect* dstrect) {
+  SDL_FRect srcf, dstf;
+  const SDL_FRect* ps = NULL;
+  const SDL_FRect* pd = NULL;
+  if (srcrect != NULL) {
+    srcf.x = (float)srcrect->x;
+    srcf.y = (float)srcrect->y;
+    srcf.w = (float)srcrect->w;
+    srcf.h = (float)srcrect->h;
+    ps = &srcf;
+  }
+  if (dstrect != NULL) {
+    dstf.x = (float)dstrect->x;
+    dstf.y = (float)dstrect->y;
+    dstf.w = (float)dstrect->w;
+    dstf.h = (float)dstrect->h;
+    pd = &dstf;
+  }
+  return SDL_RenderTexture(renderer, texture, ps, pd);
+}
+
+static void awtk_sdl_get_render_output_size(SDL_Renderer* render, int* w, int* h) {
+  SDL_GetRenderOutputSize(render, w, h);
+}
+#else
+#define awtk_sdl_render_copy SDL_RenderCopy
+#define awtk_sdl_get_render_output_size SDL_GetRendererOutputSize
+#endif /*AWTK_SDL3*/
 
 typedef struct _special_info_t {
   SDL_Renderer* render;
@@ -53,7 +86,6 @@ static ret_t special_info_create_texture(special_info_t* info, wh_t w, wh_t h) {
   info->texture = SDL_CreateTexture(info->render, SDL_PIXELFORMAT_RGB565, flags, w, h);
   log_debug("WITH_FB_BGR565\n");
 #endif
-
   return info->texture != NULL ? RET_OK : RET_FAIL;
 }
 
@@ -71,30 +103,66 @@ static ret_t lcd_sdl2_flush(lcd_t* lcd) {
   bitmap_t dst;
   int pitch = 0;
   void* addr = NULL;
-  rect_t* dr = &(lcd->dirty_rect);
-  rect_t* fps_r = &(lcd->fps_rect);
+  const dirty_rects_t* dirty_rects;
+  lcd_mem_t* lcd_mem = (lcd_mem_t*)lcd;
   lcd_mem_special_t* special = (lcd_mem_special_t*)lcd;
   special_info_t* info = (special_info_t*)(special->ctx);
+  uint8_t* offline_fb = lcd_mem_get_offline_fb(lcd_mem);
+  lcd_orientation_t o = system_info()->lcd_orientation;
 
   memset(&src, 0x00, sizeof(src));
   memset(&dst, 0x00, sizeof(dst));
 
-  if ((dr->w > 0 && dr->h > 0) || (fps_r->w > 0 && fps_r->h > 0)) {
-    SDL_Rect sr = {0, 0, lcd->w, lcd->h};
+  dirty_rects =
+      lcd_fb_dirty_rects_get_dirty_rects_by_fb(&(lcd_mem->fb_dirty_rects_list), offline_fb);
+  if (dirty_rects != NULL && dirty_rects->nr > 0) {
+    rect_t dr;
+    SDL_Rect sr;
+    dr.x = sr.x = 0;
+    dr.y = sr.y = 0;
+    dr.w = sr.w = lcd->w;
+    dr.h = sr.h = lcd->h;
+    if (o == LCD_ORIENTATION_90 || o == LCD_ORIENTATION_270) {
+      sr.w = lcd->h;
+      sr.h = lcd->w;
+    }
 
-    SDL_LockTexture(info->texture, NULL, (void**)&(addr), &pitch);
-    bitmap_init(&dst, lcd->w, lcd->h, special->format, addr);
-    bitmap_set_line_length(&dst, pitch);
-    bitmap_init(&src, lcd->w, lcd->h, special->format, special->lcd_mem->offline_fb);
-    image_copy(&dst, &src, dr, dr->x, dr->y);
-    SDL_UnlockTexture(info->texture);
-    log_debug("dirty_rect: %d %d %d %d\n", dr->x, dr->y, dr->w, dr->h);
+    if (SDL_LockTexture(info->texture, NULL, (void**)&(addr), &pitch) == 0) {
+      bitmap_init_ex(&dst, sr.w, sr.h, pitch, special->format, addr);
+#ifdef WITH_FAST_LCD_PORTRAIT
+      if (system_info()->flags & SYSTEM_INFO_FLAG_FAST_LCD_PORTRAIT) {
+        bitmap_init(&src, sr.w, sr.h, special->format, offline_fb);
+        if (o == LCD_ORIENTATION_90 || o == LCD_ORIENTATION_270) {
+          dr.w = lcd->h;
+          dr.h = lcd->w;
+        }
+        image_copy(&dst, &src, &dr, 0, 0);
+      } else
+#endif
+      {
+        bitmap_init(&src, lcd->w, lcd->h, special->format, offline_fb);
+        if (o == LCD_ORIENTATION_0) {
+          image_copy(&dst, &src, &dr, 0, 0);
+        } else {
+          image_rotate(&dst, &src, &dr, o);
+        }
+      }
 
-    SDL_RenderCopy(info->render, info->texture, &sr, &sr);
-  }
+      SDL_UnlockTexture(info->texture);
 
-  if (lcd->draw_mode != LCD_DRAW_OFFLINE) {
-    SDL_RenderPresent(info->render);
+      awtk_sdl_render_copy(info->render, info->texture, &sr, &sr);
+
+      if (src.buffer != NULL) {
+        graphic_buffer_destroy(src.buffer);
+      }
+      if (dst.buffer != NULL) {
+        graphic_buffer_destroy(dst.buffer);
+      }
+    }
+
+    if (lcd->draw_mode != LCD_DRAW_OFFLINE) {
+      SDL_RenderPresent(info->render);
+    }
   }
 
   return RET_OK;
@@ -121,13 +189,29 @@ static ret_t lcd_sdl2_destroy(lcd_t* lcd) {
   return RET_OK;
 }
 
+ret_t lcd_sdl2_texture_reset(lcd_t* lcd) {
+  int w = 0;
+  int h = 0;
+  lcd_mem_special_t* special = (lcd_mem_special_t*)lcd;
+  special_info_t* info = (special_info_t*)(special->ctx);
+  return_value_if_fail(info != NULL, RET_BAD_PARAMS);
+
+  awtk_sdl_get_render_output_size(info->render, &w, &h);
+
+  SDL_DestroyTexture(info->texture);
+  info->texture = NULL;
+  special_info_create_texture(info, w, h);
+
+  return RET_OK;
+}
+
 lcd_t* lcd_sdl2_init(SDL_Renderer* render) {
   int w = 0;
   int h = 0;
   special_info_t* info = NULL;
   return_value_if_fail(render != NULL, NULL);
 
-  SDL_GetRendererOutputSize(render, &w, &h);
+  awtk_sdl_get_render_output_size(render, &w, &h);
   info = special_info_create(render);
   return_value_if_fail(info != NULL, NULL);
 

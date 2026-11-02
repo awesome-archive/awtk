@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  canvas_widget
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,7 +24,7 @@
 
 TK_DECL_VTABLE(canvas_widget) = {.size = sizeof(canvas_widget_t),
                                  .type = WIDGET_TYPE_CANVAS_WIDGET,
-                                 .parent = TK_PARENT_VTABLE(widget),
+                                 .get_parent_vt = TK_GET_PARENT_VTABLE(widget),
                                  .create = canvas_widget_create};
 
 widget_t* canvas_widget_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {

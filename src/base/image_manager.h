@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  image manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -36,8 +36,11 @@ typedef struct _bitmap_header_t {
   uint16_t h;
   uint16_t flags;  /*bitmap_flag_t*/
   uint16_t format; /*bitmap_format_t*/
+  uint32_t orientation;
   uint8_t data[4];
 } bitmap_header_t;
+
+typedef ret_t (*image_manager_get_bitmap_t)(void* ctx, const char* name, bitmap_t* image);
 
 /**
  * @class image_manager_t
@@ -58,6 +61,15 @@ struct _image_manager_t {
    * 资源管理器。
    */
   assets_manager_t* assets_manager;
+
+  /*private*/
+  char* name;
+  int32_t refcount;
+  uint32_t mem_size_of_cached_images;
+  uint32_t max_mem_size_of_cached_images;
+
+  image_manager_get_bitmap_t fallback_get_bitmap;
+  void* fallback_get_bitmap_ctx;
 };
 
 /**
@@ -98,18 +110,63 @@ image_manager_t* image_manager_create(void);
 image_manager_t* image_manager_init(image_manager_t* imm);
 
 /**
+ * @method image_manager_set_max_mem_size_of_cached_images
+ * 设置图片缓存占用的最大内存。
+ * @param {image_manager_t*} imm 图片管理器对象。
+ * @param {uint32_t} max_mem_size 最大缓存内存(字节数)。 
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_manager_set_max_mem_size_of_cached_images(image_manager_t* imm, uint32_t max_mem_size);
+
+/**
  * @method image_manager_get_bitmap
  * 获取指定的图片。
  * 先从缓存查找，如果没找到，再加载并缓存。
  *
  * @annotation ["scriptable"]
  * @param {image_manager_t*} imm 图片管理器对象。
- * @param {char*} name 图片名称。
+ * @param {const char*} name 图片名称。
  * @param {bitmap_t*} image 用于返回图片。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t image_manager_get_bitmap(image_manager_t* imm, const char* name, bitmap_t* image);
+
+/**
+ * @method image_manager_set_fallback_get_bitmap
+ * 设置一个函数，该函数在找不到图片时加载后补图片。
+ *
+ * @param {image_manager_t*} imm image manager对象。
+ * @param {image_manager_get_bitmap_t} fallback_get_bitmap 回调函数。
+ * @param {void*} ctx 回调函数的上下文。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_manager_set_fallback_get_bitmap(image_manager_t* imm,
+                                            image_manager_get_bitmap_t fallback_get_bitmap,
+                                            void* ctx);
+
+/**
+ * @method image_manager_preload
+ * 预加载指定的图片。
+ * @annotation ["scriptable"]
+ * @param {image_manager_t*} imm 图片管理器对象。
+ * @param {const char*} name 图片名称。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_manager_preload(image_manager_t* imm, const char* name);
+
+/**
+ * @method image_manager_has_bitmap
+ * 图片是否在图片管理中。
+ * @param {image_manager_t*} imm 图片管理器对象。
+ * @param {bitmap_t*} image 图片。
+ *
+ * @return {bool_t} 返回TRUE表示存在，否则表示不存在。
+ */
+bool_t image_manager_has_bitmap(image_manager_t* imm, bitmap_t* image);
 
 /**
  * @method image_manager_unload_unused
@@ -122,6 +179,16 @@ ret_t image_manager_get_bitmap(image_manager_t* imm, const char* name, bitmap_t*
 ret_t image_manager_unload_unused(image_manager_t* imm, uint32_t time_delta_s);
 
 /**
+ * @method image_manager_unload_all
+ * 卸载全部图片。
+ *
+ * @param {image_manager_t*} imm 图片管理器对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_manager_unload_all(image_manager_t* imm);
+
+/**
  * @method image_manager_unload_bitmap
  * 从图片管理器中卸载指定的图片。
  * @param {image_manager_t*} imm 图片管理器对象。
@@ -130,6 +197,16 @@ ret_t image_manager_unload_unused(image_manager_t* imm, uint32_t time_delta_s);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t image_manager_unload_bitmap(image_manager_t* imm, bitmap_t* image);
+
+/**
+ * @method image_manager_unload_bitmap_by_name
+ * 从图片管理器中卸载指定的图片。
+ * @param {image_manager_t*} imm 图片管理器对象。
+ * @param {const char*} name 图片。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_manager_unload_bitmap_by_name(image_manager_t* imm, const char* name);
 
 /**
  * @method image_manager_update_specific
@@ -163,16 +240,26 @@ ret_t image_manager_set_assets_manager(image_manager_t* imm, assets_manager_t* a
 /**
  * @method image_manager_deinit
  * 析构图片管理器。
- * @param {image_manager_t*} imm 图片管理器对象。
+ * @param {image_manager_t*} im 图片管理器对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t image_manager_deinit(image_manager_t* im);
 
 /**
+ * @method image_manager_dump
+ * 输出图片管理器的信息。
+ * @param {image_manager_t*} im 图片管理器对象。
+ * @param {str_t*} result 用于返回图片管理器的信息。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_manager_dump(image_manager_t* im, str_t* result);
+
+/**
  * @method image_manager_destroy
  * 析构并释放图片管理器。
- * @param {image_manager_t*} imm 图片管理器对象。
+ * @param {image_manager_t*} im 图片管理器对象。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
@@ -181,6 +268,41 @@ ret_t image_manager_destroy(image_manager_t* im);
 /*public for test*/
 ret_t image_manager_add(image_manager_t* imm, const char* name, const bitmap_t* image);
 ret_t image_manager_lookup(image_manager_t* imm, const char* name, bitmap_t* image);
+
+/**
+ * @class image_managers_t
+ * @annotation ["fake"]
+ * 在某些情况下，需要多个资源管理器。比如在手表系统里，每个应用或表盘，可能放在独立的资源包中，
+ * 此时优先加载应用自己的资源，如果没有就加载系统的资源。
+ */
+
+/**
+ * @method image_managers_ref
+ * 获取指定小应用程序(applet)的图片管理器。
+ * @annotation ["constructor"]
+ * @param {const char*} name 小应用程序(applet)的名称。
+ *
+ * @return {image_manager_t*} 返回asset manager对象。
+ */
+image_manager_t* image_managers_ref(const char* name);
+
+/**
+ * @method image_managers_unload_all
+ * 卸载全部图片。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_managers_unload_all(void);
+
+/**
+ * @method image_managers_unref
+ * 释放指定小应用程序(applet)的图片管理器。
+ * @annotation ["deconstructor"]
+ * @param {image_manager_t*} imm 图片管理器对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t image_managers_unref(image_manager_t* imm);
 
 END_C_DECLS
 

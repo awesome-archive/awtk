@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  line_number
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,6 +23,7 @@
 #define TK_LINE_NUMBER_H
 
 #include "base/widget.h"
+#include "tkc/typed_array.h"
 
 BEGIN_C_DECLS
 
@@ -46,7 +47,7 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[mledit.xml](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/mledit.xml)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/ui/mledit.xml)
  *
  * 可用通过style来设置控件的显示风格，如字体的大小和颜色等等。如：
  *
@@ -60,7 +61,7 @@ BEGIN_C_DECLS
  *
  * > 更多用法请参考：
  * [theme default](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L556)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L556)
  *
  */
 typedef struct _line_number_t {
@@ -72,6 +73,11 @@ typedef struct _line_number_t {
   int32_t line_height;
   int32_t top_margin;
   int32_t bottom_margin;
+  uint32_t* lines_of_each_row;
+  uint32_t lines_of_each_row_len;
+
+  int32_t active_line;
+  typed_array_t* highlight_lines;
 } line_number_t;
 
 /**
@@ -133,6 +139,18 @@ ret_t line_number_set_line_height(widget_t* widget, int32_t line_height);
 ret_t line_number_set_yoffset(widget_t* widget, int32_t yoffset);
 
 /**
+ * @method line_number_set_lines_of_each_row
+ * 设置每一个逻辑行(row)占几个物理行(line)。
+ * @param {widget_t*} widget 控件对象。
+ * @param {const uint32_t*}  lines_of_each_row 每一个逻辑行占几个物理行。
+ * @param {uint32_t}  len 数组大小(逻辑行数)。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t line_number_set_lines_of_each_row(widget_t* widget, const uint32_t* lines_of_each_row,
+                                        uint32_t len);
+
+/**
  * @method line_number_cast
  * 转换为line_number对象(供脚本语言使用)。
  * @annotation ["cast", "scriptable"]
@@ -142,8 +160,58 @@ ret_t line_number_set_yoffset(widget_t* widget, int32_t yoffset);
  */
 widget_t* line_number_cast(widget_t* widget);
 
+/**
+ * @method line_number_add_highlight_line
+ * 增加高亮行。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {int32_t} line 行号。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t line_number_add_highlight_line(widget_t* widget, int32_t line);
+
+/**
+ * @method line_number_set_active_line
+ * 设置active行。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {int32_t} line 行号。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t line_number_set_active_line(widget_t* widget, int32_t line);
+
+/**
+ * @method line_number_clear_highlight
+ * 清除高亮行。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t line_number_clear_highlight(widget_t* widget);
+
+/**
+ * @method line_number_is_highlight_line
+ * 判断指定行是否是高亮行。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {int32_t} line 行号。
+ *
+ * @return {bool_t} 返回TRUE表示是，否则不是。
+ */
+bool_t line_number_is_highlight_line(widget_t* widget, int32_t line);
+
 #define WIDGET_TYPE_LINE_NUMBER "line_number"
 #define LINE_NUMBER(widget) ((line_number_t*)(line_number_cast(WIDGET(widget))))
+
+#define LINE_NUMBER_STYLE_ACTIVE_LINE_BG_COLOR "active_line_bg_color"
+#define LINE_NUMBER_STYLE_HIGHLIGHT_LINE_BG_COLOR "highlight_line_bg_color"
+#define LINE_NUMBER_STYLE_HIGHLIGHT_LINE_SHAPE "highlight_line_shape"
+
+#define LINE_NUMBER_STYLE_HIGHLIGHT_LINE_SHAPE_CIRCLE "circle"
+#define LINE_NUMBER_STYLE_HIGHLIGHT_LINE_SHAPE_RECT "rect"
 
 /*public for subclass and runtime type check*/
 TK_EXTERN_VTABLE(line_number);

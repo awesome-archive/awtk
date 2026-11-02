@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  bsvg_dump
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2024  Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -35,8 +35,7 @@ static ret_t bsvg_dump(const char* input_file) {
   str_init(&str, 1000);
 
   bsvg_to_svg(bin, size, &str);
-  log_debug("<svg viewPoint=\"%d %d %d %d\" width=\"%d\" height=\"%d\">\n", header->viewport.x,
-            header->viewport.y, header->viewport.w, header->viewport.h, header->w, header->h);
+  log_debug("<svg width=\"%d\" height=\"%d\">\n", header->w, header->h);
   log_debug("%s", str.str);
   log_debug("</svg>\n");
 
@@ -47,7 +46,7 @@ static ret_t bsvg_dump(const char* input_file) {
 }
 
 int main(int argc, char* argv[]) {
-  TKMEM_INIT(4 * 1024 * 1024)
+  platform_prepare();
 
   if (argc < 2) {
     printf("Usage: %s bsvg_filename\n", argv[0]);

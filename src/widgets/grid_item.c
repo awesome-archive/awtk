@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  grid_item
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,7 +24,7 @@
 
 TK_DECL_VTABLE(grid_item) = {.size = sizeof(grid_item_t),
                              .type = WIDGET_TYPE_ROW,
-                             .parent = TK_PARENT_VTABLE(widget),
+                             .get_parent_vt = TK_GET_PARENT_VTABLE(widget),
                              .create = grid_item_create};
 
 widget_t* grid_item_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h) {

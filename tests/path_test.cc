@@ -1,4 +1,5 @@
 ﻿#include "tkc/path.h"
+#include "tkc/fs.h"
 #include "gtest/gtest.h"
 #include <string>
 
@@ -11,6 +12,56 @@ TEST(Path, basename) {
 
   ASSERT_EQ(path_basename("test.bin", result, sizeof(result)), RET_OK);
   ASSERT_EQ(string(result), string("test.bin"));
+
+  ASSERT_EQ(path_basename("test", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("test"));
+
+  ASSERT_EQ(path_basename("", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string(""));
+}
+
+TEST(Path, basename_ex) {
+  char result[MAX_PATH + 1];
+
+  ASSERT_EQ(path_basename_ex("/a\\b/c/test.bin", TRUE, result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("test"));
+
+  ASSERT_EQ(path_basename_ex("\\a\\b/c\\test.bin", TRUE, result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("test"));
+
+  ASSERT_EQ(path_basename_ex("/a/test.bin", TRUE, result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("test"));
+
+  ASSERT_EQ(path_basename_ex("test.bin", TRUE, result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("test"));
+
+  ASSERT_EQ(path_basename_ex("test", TRUE, result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("test"));
+
+  ASSERT_EQ(path_basename_ex("", TRUE, result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string(""));
+}
+
+TEST(Path, extname_is) {
+  ASSERT_EQ(path_extname_is("test.bin", ".bin"), TRUE);
+  ASSERT_EQ(path_extname_is("test.Bin", ".bin"), TRUE);
+  ASSERT_EQ(path_extname_is("test.jpg", ".JPG"), TRUE);
+  ASSERT_EQ(path_extname_is("test.jpg", ".JPG"), TRUE);
+  ASSERT_EQ(path_extname_is("test.jpg", NULL), FALSE);
+}
+
+TEST(Path, path_extname_is_one_of) {
+  ASSERT_EQ(path_extname_is_one_of("test.bin", ".bin,.jpg"), TRUE);
+  ASSERT_EQ(path_extname_is_one_of("test.jpg", ".bin,.jpg"), TRUE);
+  ASSERT_EQ(path_extname_is_one_of("test.jpg", ".bin"), FALSE);
+  ASSERT_EQ(path_extname_is_one_of("test.jpg", ".bin,.JPG"), TRUE);
+  ASSERT_EQ(path_extname_is_one_of("test.jpg", ".JPG,png"), TRUE);
+  ASSERT_EQ(path_extname_is_one_of("test.jpg", ".bin,.JPG,png,jpeg"), TRUE);
+  ASSERT_EQ(path_extname_is_one_of("test.jpg", NULL), FALSE);
+  ASSERT_EQ(path_extname_is_one_of("test.txt", ".bin,.JPG,png,jpeg"), FALSE);
+  ASSERT_EQ(path_extname_is_one_of("test.txt", ""), FALSE);
+  ASSERT_EQ(path_extname_is_one_of("test.txt", NULL), FALSE);
+  ASSERT_EQ(path_extname_is_one_of(NULL, NULL), FALSE);
 }
 
 TEST(Path, extname) {
@@ -28,15 +79,33 @@ TEST(Path, extname) {
 }
 
 TEST(Path, dirname) {
-  char result[MAX_PATH + 1];
+  char result[MAX_PATH + 1] = {0};
   ASSERT_EQ(path_dirname("/a/test.bin", result, sizeof(result)), RET_OK);
   ASSERT_EQ(string(result), string("/a/"));
 
+  memset(result, 0x0, sizeof(result));
   ASSERT_EQ(path_dirname("/a/b/test.bin", result, sizeof(result)), RET_OK);
   ASSERT_EQ(string(result), string("/a/b/"));
 
+  memset(result, 0x0, sizeof(result));
   ASSERT_EQ(path_dirname("test.bin", result, sizeof(result)), RET_FAIL);
   ASSERT_EQ(string(result), string(""));
+
+  memset(result, 0x0, sizeof(result));
+  ASSERT_EQ(path_dirname("e:\\a\\b/c/d", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("e:\\a\\b/c/"));
+
+  memset(result, 0x0, sizeof(result));
+  ASSERT_EQ(path_dirname("e:\\a\\b/c\\d", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("e:\\a\\b/c\\"));
+
+  memset(result, 0x0, sizeof(result));
+  ASSERT_EQ(path_dirname("e:/a/b\\c\\d", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("e:/a/b\\c\\"));
+
+  memset(result, 0x0, sizeof(result));
+  ASSERT_EQ(path_dirname("e:/a/b\\c/d", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), string("e:/a/b\\c/"));
 }
 
 TEST(Path, exe) {
@@ -66,6 +135,12 @@ TEST(Path, normalize) {
   ASSERT_EQ(path_normalize("/a/b", result, sizeof(result)), RET_OK);
   ASSERT_EQ(string(result), normalPath("/a/b"));
 
+  ASSERT_EQ(path_normalize("/a//b", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("/a/b"));
+
+  ASSERT_EQ(path_normalize("/a//./////././/b", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("/a/b"));
+
   ASSERT_EQ(path_normalize("/a/b.exe", result, sizeof(result)), RET_OK);
   ASSERT_EQ(string(result), normalPath("/a/b.exe"));
 
@@ -92,6 +167,34 @@ TEST(Path, normalize) {
 
   ASSERT_EQ(path_normalize("/a/b/../../c", result, sizeof(result)), RET_OK);
   ASSERT_EQ(string(result), normalPath("/c"));
+
+  ASSERT_EQ(path_normalize("/a/b/../", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("/a/"));
+
+  ASSERT_EQ(path_normalize("/a/b/..", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("/a/"));
+
+  ASSERT_EQ(path_normalize("/a/b/..\\", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("/a/"));
+
+  ASSERT_EQ(path_normalize("/a/b\\..", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("/a/"));
+
+  ASSERT_EQ(path_normalize("\\a\\b/../../c", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("/c"));
+
+  ASSERT_EQ(path_normalize("/a/.", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("/a"));
+
+  ASSERT_EQ(path_normalize("F:\\a\\.", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(string(result), normalPath("F:/a"));
+
+#ifdef WIN32
+  ASSERT_EQ(path_normalize("D:\\aaaa\\aaaaaaaaaaaaaaaaaaaaa\\.\\bin\\demo.exe/../../data/test.c",
+                           result, sizeof(result)),
+            RET_OK);
+  ASSERT_STREQ(result, "D:\\aaaa\\aaaaaaaaaaaaaaaaaaaaa\\data\\test.c");
+#endif
 }
 
 TEST(Path, build) {
@@ -113,4 +216,127 @@ TEST(Path, approot) {
   ASSERT_EQ(path_app_root(app_root), RET_OK);
   ASSERT_EQ(path_build(result, sizeof(result), app_root, "bin", NULL), RET_OK);
   ASSERT_EQ(path_exist(result), TRUE);
+}
+
+TEST(Path, approot_ex) {
+  char bin_root[MAX_PATH + 1];
+  memset(bin_root, 0x00, sizeof(bin_root));
+  ASSERT_EQ(path_app_root_ex(bin_root, "bin"), RET_OK);
+  log_debug("%s\n", bin_root);
+  ASSERT_EQ(path_exist(bin_root), TRUE);
+}
+
+static const char* normalize_path_str(char* str) {
+  char* p = str;
+  while (*p) {
+    if (*p == '\\') {
+      *p = '/';
+    }
+    p++;
+  }
+
+  return str;
+}
+
+TEST(Path, replace_basename) {
+  const char* filename = "a/b/test.txt";
+  char result[MAX_PATH + 1];
+  ASSERT_EQ(path_replace_basename(result, sizeof(result), filename, "abc.txt"), RET_OK);
+  ASSERT_STREQ(normalize_path_str(result), "a/b/abc.txt");
+}
+
+TEST(Path, replace_extname) {
+  const char* filename = "a/b/test.txt";
+  char result[MAX_PATH + 1];
+  ASSERT_EQ(path_replace_extname(result, sizeof(result), filename, "abc"), RET_OK);
+  ASSERT_STREQ(normalize_path_str(result), "a/b/test.abc");
+}
+
+TEST(Path, path_remove_last_slash) {
+  char result[MAX_PATH + 1];
+  strcpy(result, "./a/");
+  ASSERT_EQ(path_remove_last_slash(result), RET_OK);
+  ASSERT_STREQ(result, "./a");
+
+  strcpy(result, "./a\\");
+  ASSERT_EQ(path_remove_last_slash(result), RET_OK);
+  ASSERT_STREQ(result, "./a");
+
+  strcpy(result, "./");
+  ASSERT_EQ(path_remove_last_slash(result), RET_OK);
+  ASSERT_STREQ(result, ".");
+
+  strcpy(result, "/");
+  ASSERT_EQ(path_remove_last_slash(result), RET_OK);
+  ASSERT_STREQ(result, "/");
+
+  strcpy(result, "////");
+  ASSERT_EQ(path_remove_last_slash(result), RET_OK);
+  ASSERT_STREQ(result, "/");
+
+  strcpy(result, "/a/b//");
+  ASSERT_EQ(path_remove_last_slash(result), RET_OK);
+  ASSERT_STREQ(result, "/a/b");
+
+  ASSERT_NE(path_remove_last_slash(NULL), RET_OK);
+}
+
+TEST(Path, path_prepend_app_root) {
+  char result[MAX_PATH + 1] = {0};
+  ASSERT_EQ(path_prepend_app_root(result, "bin"), result);
+  ASSERT_EQ(path_exist(result), TRUE);
+  log_debug("%s\n", result);
+}
+
+TEST(Path, path_prepend_temp_path) {
+  char result[MAX_PATH + 1] = {0};
+  ASSERT_EQ(path_prepend_temp_path(result, "test.txt"), result);
+  ASSERT_NE(strstr(result, "test.txt"), (char*)NULL);
+  log_debug("%s\n", result);
+}
+
+TEST(Path, path_prepend_user_storage_path) {
+  char result[MAX_PATH + 1] = {0};
+  ASSERT_EQ(path_prepend_user_storage_path(result, "test.txt"), result);
+  ASSERT_NE(strstr(result, "test.txt"), (char*)NULL);
+  log_debug("%s\n", result);
+}
+
+TEST(Path, abs_normalize) {
+  char result[MAX_PATH + 1];
+  ASSERT_EQ(path_abs_normalize("abc", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(strstr(result, "abc") != NULL, TRUE);
+}
+
+TEST(Path, abs_normalize_with_root) {
+  char result[MAX_PATH + 1];
+  ASSERT_EQ(path_abs_normalize_with_root("/path", "abc", result), result);
+  ASSERT_EQ(strstr(result, "abc") != NULL, TRUE);
+}
+
+TEST(Path, expand_vars) {
+  char path[MAX_PATH + 1] = {0};
+  char result[MAX_PATH + 1] = {0};
+  ASSERT_EQ(path_expand_vars("abc", result, sizeof(result)), RET_OK);
+  ASSERT_EQ(strstr(result, "abc") != NULL, TRUE);
+
+  ASSERT_EQ(path_expand_vars("${app_dir}", result, sizeof(result)), RET_OK);
+  path_app_root(path);
+  ASSERT_STREQ(result, path);
+
+  ASSERT_EQ(path_expand_vars("${app_dir}/abc/test.txt", result, sizeof(result)), RET_OK);
+  path_app_root(path);
+  ASSERT_EQ(string(result), string(path) + "/abc/test.txt");
+
+  ASSERT_EQ(path_expand_vars("${temp_dir}", result, sizeof(result)), RET_OK);
+  fs_get_temp_path(os_fs(), path);
+  ASSERT_STREQ(result, path);
+
+  ASSERT_EQ(path_expand_vars("${user_dir}", result, sizeof(result)), RET_OK);
+  fs_get_user_storage_path(os_fs(), path);
+  ASSERT_STREQ(result, path);
+
+  ASSERT_EQ(path_expand_vars("${user_dir}/abc/test.txt", result, sizeof(result)), RET_OK);
+  fs_get_user_storage_path(os_fs(), path);
+  ASSERT_EQ(string(result), string(path) + "/abc/test.txt");
 }

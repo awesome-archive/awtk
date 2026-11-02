@@ -1,208 +1,381 @@
 import os
+import sys
+import glob
 import os.path
-import platform
 
-OS_NAME = platform.system()
-ARCH = platform.architecture();
-is32bit = (ARCH[0] == '32bit');
+sys.path.insert(0, os.path.join(os.path.abspath(os.path.dirname(__file__)), 'scripts'))
+import compile_config
+compile_helper = compile_config.get_curr_config_for_awtk()
 
-if is32bit:
-  TARGET_ARCH='x86'
+from awtk_config_common import OS_NAME, TARGET_ARCH, TOOLS_PREFIX, TK_SRC, TK_BIN_DIR, TK_LIB_DIR, TK_3RD_ROOT, TK_TOOLS_ROOT, OS_DEBUG, TK_DEMO_ROOT, GTEST_ROOT, TKC_STATIC_LIBS, TOOLS_NAME, NANOVG_BACKEND, NATIVE_WINDOW, TK_ROOT
+from awtk_config_common import joinPath, toWholeArchive, genIdlAndDefEx, setEnvSpawn, genDllLinkFlags, copySharedLib, cleanSharedLib, scons_db_check_and_remove, is_raspberrypi
+from awtk_config_common import OS_FLAGS, OS_LIBS, OS_LIBPATH, OS_CPPPATH, OS_LINKFLAGS, OS_SUBSYSTEM_CONSOLE, OS_SUBSYSTEM_WINDOWS, OS_PROJECTS, COMMON_CFLAGS
+
+BIDI_BACKEND = compile_helper.get_value('BIDI_BACKEND', 'sheenbidi')
+if isinstance(BIDI_BACKEND, str):
+  BIDI_BACKEND = BIDI_BACKEND.lower()
+if BIDI_BACKEND not in ('sheenbidi', 'fribidi'):
+  print('Invalid BIDI_BACKEND (must be sheenbidi or fribidi):', BIDI_BACKEND)
+  sys.exit(1)
+
+_sheen_algo = os.path.join(TK_ROOT, '3rd', 'SheenBidi-3.0.0', 'Source', 'API', 'SBAlgorithm.c')
+_fribidi_main = os.path.join(TK_ROOT, '3rd', 'fribidi', 'fribidi.c')
+if BIDI_BACKEND == 'fribidi' and not os.path.isfile(_fribidi_main):
+  print('BIDI_BACKEND=fribidi but bundled FriBidi sources are missing:', _fribidi_main)
+  sys.exit(1)
+if BIDI_BACKEND == 'sheenbidi' and not os.path.isfile(_sheen_algo):
+  print('BIDI_BACKEND=sheenbidi but SheenBidi sources are missing:', _sheen_algo)
+  sys.exit(1)
+
+WIN32_AWTK_RES = 'win32_res/awtk.res'
+if TARGET_ARCH == 'x86':
+    WIN32_AWTK_RES = 'win32_res/awtk_x86.res'
+
+WIN32_AWTK_RES = os.path.join(compile_config.get_curr_app_root(), WIN32_AWTK_RES)
+if not os.path.exists(WIN32_AWTK_RES):
+    if TARGET_ARCH == 'x86':
+        WIN32_AWTK_RES = os.path.join(TK_ROOT, 'win32_res/awtk_x86.res')
+    else:
+        WIN32_AWTK_RES = os.path.join(TK_ROOT, 'win32_res/awtk.res')
+
+WIN32_AWTK_RES = compile_helper.get_value('WIN32_RES', WIN32_AWTK_RES)
+if not os.path.isabs(WIN32_AWTK_RES) :
+    WIN32_AWTK_RES = os.path.join(compile_config.get_curr_app_root(), WIN32_AWTK_RES)
+
+AWTK_STATIC_LIBS = ['awtk_global', 'fscript_ext_widgets', 'extwidgets',
+                    'widgets', 'base', 'gpinyin', 'linebreak', 'svgtiny']
+if BIDI_BACKEND == 'fribidi':
+  AWTK_STATIC_LIBS.insert(6, 'fribidi')
 else:
-  TARGET_ARCH=''
+  AWTK_STATIC_LIBS.insert(6, 'sheenbidi')
 
-print('ARCH=' + str(ARCH) + ' TARGET_ARCH=' + TARGET_ARCH)
+if os.getenv('SDL_VIDEODRIVER') is None:
+    AWTK_STATIC_LIBS += ['nfd']
 
-def joinPath(root, subdir):
-  return os.path.normpath(os.path.join(root, subdir))
+AWTK_STATIC_LIBS = AWTK_STATIC_LIBS+TKC_STATIC_LIBS
 
-TK_ROOT=os.path.dirname(os.path.normpath(os.path.abspath(__file__)))
+# INPUT_ENGINE='null'
+# INPUT_ENGINE='spinyin'
+# INPUT_ENGINE='t9'
+# INPUT_ENGINE='t9ext'
+INPUT_ENGINE = 'pinyin'
 
-print('TK_ROOT: ' + TK_ROOT);
+INPUT_ENGINE = compile_helper.get_value('INPUT_ENGINE', INPUT_ENGINE)
 
-TK_SRC        = joinPath(TK_ROOT, 'src')
-TK_BIN_DIR    = joinPath(TK_ROOT, 'bin')
-TK_LIB_DIR    = joinPath(TK_ROOT, 'lib')
-TK_3RD_ROOT   = joinPath(TK_ROOT, '3rd')
-TK_TOOLS_ROOT = joinPath(TK_ROOT, 'tools')
-TK_DEMO_ROOT  = joinPath(TK_ROOT, 'demos')
-GTEST_ROOT    = joinPath(TK_ROOT, '3rd/gtest/googletest')
+VGCANVAS = 'NANOVG'
+VGCANVAS='NANOVG_PLUS'
+# VGCANVAS='CAIRO'
 
-#INPUT_ENGINE='null'
-INPUT_ENGINE='pinyin'
+VGCANVAS = compile_helper.get_value('VGCANVAS', VGCANVAS)
 
-VGCANVAS='NANOVG'
 if OS_NAME == 'Windows':
-  TK_ROOT=TK_ROOT.replace('\\', '\\\\');
+    TK_ROOT = TK_ROOT.replace('\\', '\\\\')
+NANOVG_BACKEND = 'GL3'
+
+# NANOVG_BACKEND='GLES2'
+# NANOVG_BACKEND='GLES3'
+# NANOVG_BACKEND='AGGE'
+# NANOVG_BACKEND='GL2'
+if is_raspberrypi():
   NANOVG_BACKEND='GLES2'
-else:
-  NANOVG_BACKEND='GL3'
 
-#VGCANVAS='CAIRO'
-#NANOVG_BACKEND='GLES2'
-#NANOVG_BACKEND='GLES3'
-#NANOVG_BACKEND='AGG'
-#NANOVG_BACKEND='AGGE'
-#NANOVG_BACKEND='BGFX'
+NANOVG_BACKEND = compile_helper.get_value('NANOVG_BACKEND', NANOVG_BACKEND)
+_vgcanvas_before_resolve = VGCANVAS
+VGCANVAS = compile_config.resolve_vgcanvas(VGCANVAS, NANOVG_BACKEND)
+if _vgcanvas_before_resolve != VGCANVAS:
+    print('NANOVG_BACKEND=AGGE requires VGCANVAS=NANOVG, auto set VGCANVAS=NANOVG')
+if compile_helper.get_value('VGCANVAS', None) != VGCANVAS:
+    compile_helper.set_value('VGCANVAS', VGCANVAS)
 
-FRAME_BUFFER_FORMAT=''
+FRAME_BUFFER_FORMAT = ''
 if VGCANVAS == 'CAIRO':
-  LCD='SDL_FB'
-  FRAME_BUFFER_FORMAT='bgr565'
-  #FRAME_BUFFER_FORMAT='bgra8888'
+    LCD = 'SDL_FB'
+    FRAME_BUFFER_FORMAT = compile_helper.get_value('LCD_COLOR_FORMAT', 'bgr565')
+    # FRAME_BUFFER_FORMAT='bgra8888'
 else:
-  if NANOVG_BACKEND == 'AGGE' or NANOVG_BACKEND == 'AGG':
-    LCD='SDL_FB'
-    FRAME_BUFFER_FORMAT='bgr565'
-    #FRAME_BUFFER_FORMAT='bgra8888'
-  else:  
-    LCD='SDL_GPU'
+    if NANOVG_BACKEND == 'AGGE':
+        LCD = 'SDL_FB'
+        FRAME_BUFFER_FORMAT = 'bgr565'
+        # FRAME_BUFFER_FORMAT='bgra8888'
+    else:
+        LCD = 'SDL_GPU'
+# LCD='SDL_FB_MONO'
 
-NANOVG_BACKEND_LIBS=[];
-NANOVG_BACKEND_PROJS=[];
+if NANOVG_BACKEND == 'AGGE' or NANOVG_BACKEND == 'AGGE' :
+    lcd_color_format = compile_helper.get_value('LCD_COLOR_FORMAT', '')
+    if lcd_color_format != '' :
+        if lcd_color_format== 'mono' :
+            LCD = 'SDL_FB_MONO'
+        else :
+            LCD = 'SDL_FB'
+            if lcd_color_format == 'bgr565' :
+                FRAME_BUFFER_FORMAT = lcd_color_format
+            else :
+                FRAME_BUFFER_FORMAT = 'bgra8888'
 
-NATIVE_WINDOW='sdl'
 
-COMMON_CCFLAGS=' -DTK_ROOT=\\\"'+TK_ROOT+'\\\" ' 
-COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_STB_FONT '
+NANOVG_BACKEND_LIBS = []
+NANOVG_BACKEND_PROJS = []
+NANOVG_BACKEND_CPPPATH = []
+
+NATIVE_WINDOW = 'sdl'
+
+COMMON_CCFLAGS = ' -DTK_ROOT=\"\\\"'+TK_ROOT+'\\\"\" '
+#COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITHOUT_WINDOW_ANIMATOR_CACHE=1 '
 #COMMON_CCFLAGS=COMMON_CCFLAGS+' -DENABLE_PERFORMANCE_PROFILE=1 '
-#COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_FT_FONT '
-COMMON_CCFLAGS=COMMON_CCFLAGS+' -DSTBTT_STATIC -DSTB_IMAGE_STATIC -DWITH_STB_IMAGE '
-COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_VGCANVAS -DWITH_UNICODE_BREAK -DWITH_DESKTOP_STYLE '
-COMMON_CCFLAGS=COMMON_CCFLAGS+' -DSDL2 -DHAS_STD_MALLOC -DWITH_SDL -DWITH_FS_RES -DHAS_STDIO '
+#COMMON_CCFLAGS=COMMON_CCFLAGS+' -DENABLE_MEM_LEAK_CHECK=1 '
+#COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_STATE_ACTIVATED=1 '
 
-#only for c compiler flags
-COMMON_CFLAGS=''
+OPENGL_ANTIALIAS = compile_helper.get_value('OPENGL_ANTIALIAS', 'HW');
+if OPENGL_ANTIALIAS == 'HW':
+    COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_ANTIALIAS '
+    COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_OPENGL_HW_ANTIALIAS '
+elif OPENGL_ANTIALIAS == 'SW':
+    COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_ANTIALIAS '
+
+if compile_helper.get_value('NATIVE_WINDOW_BORDERLESS', False) :
+    COMMON_CCFLAGS=COMMON_CCFLAGS+' -DNATIVE_WINDOW_BORDERLESS=1 '
+
+if compile_helper.get_value('NATIVE_WINDOW_NOT_RESIZABLE', False) :
+    COMMON_CCFLAGS=COMMON_CCFLAGS+' -DNATIVE_WINDOW_NOT_RESIZABLE=1 '
+
+FONT_LOADER = 'stb'
+#FONT_LOADER = 'freetype'
+#FONT_LOADER = 'bitmap'
+FONT_LOADER = compile_helper.get_value('FONT_LOADER', FONT_LOADER)
+if FONT_LOADER not in ('stb', 'freetype', 'bitmap'):
+  print('Invalid FONT_LOADER (must be stb, freetype or bitmap):', FONT_LOADER)
+  sys.exit(1)
+
+if FONT_LOADER == 'stb':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_STB_FONT '
+elif FONT_LOADER == 'freetype':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_FT_FONT '
+elif FONT_LOADER == 'bitmap':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_BITMAP_FONT '
+
+TEXT_SHAPING = 'no_text_shaping'
+#TEXT_SHAPING = 'harfbuzz'
+#TEXT_SHAPING = 'harfbuzz_data'
+TEXT_SHAPING = compile_helper.get_value('TEXT_SHAPING', TEXT_SHAPING)
+TEXT_SHAPING_PROJS = []
+
+if FONT_LOADER == 'bitmap':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NO_TEXT_SHAPING '
+else:
+    if TEXT_SHAPING == 'harfbuzz':
+        COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_HARFBUZZ_TEXT_SHAPING '
+        OS_LIBS += ['harfbuzz']
+        if TOOLS_NAME == 'mingw' or OS_NAME in ('Linux', 'Darwin'):
+            OS_LIBS += ['stdc++']
+        TEXT_SHAPING_PROJS = ['3rd/harfbuzz/SConscript']
+    elif TEXT_SHAPING == 'harfbuzz_data':
+        COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_HARFBUZZ_DATA_TEXT_SHAPING '
+    else:
+        COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NO_TEXT_SHAPING '
+
+WITH_FS_RES = compile_helper.get_value('WITH_FS_RES', True)
+if FONT_LOADER != 'bitmap' and WITH_FS_RES:
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_FS_RES '
+
+COMMON_CCFLAGS = COMMON_CCFLAGS+' -DWITH_MBEDTLS=1 '
+COMMON_CCFLAGS = COMMON_CCFLAGS+' -DENABLE_CURSOR=1 '
+COMMON_CCFLAGS = COMMON_CCFLAGS+' -DWITH_TEXT_BIDI=1 '
+if BIDI_BACKEND == 'fribidi':
+  COMMON_CCFLAGS = COMMON_CCFLAGS+' -DWITH_BIDI_FRIBIDI=1 '
+else:
+  COMMON_CCFLAGS = COMMON_CCFLAGS+' -DWITH_BIDI_SHEEN=1 '
+  COMMON_CCFLAGS = COMMON_CCFLAGS+' -DSB_CONFIG_EXPERIMENTAL_TEXT_API=1 '
+#COMMON_CCFLAGS=COMMON_CCFLAGS+' -DLOAD_ASSET_WITH_MMAP=1 '
+COMMON_CCFLAGS = COMMON_CCFLAGS+' -DWITH_DATA_READER_WRITER=1 '
+COMMON_CCFLAGS = COMMON_CCFLAGS+' -DWITH_EVENT_RECORDER_PLAYER=1 '
+COMMON_CCFLAGS = COMMON_CCFLAGS + \
+    ' -DWITH_ASSET_LOADER -DWITH_ASSET_LOADER_ZIP '
+COMMON_CCFLAGS = COMMON_CCFLAGS + \
+    ' -DSTBTT_STATIC -DSTB_IMAGE_STATIC -DWITH_STB_IMAGE '
+COMMON_CCFLAGS = COMMON_CCFLAGS + \
+    ' -DWITH_VGCANVAS -DWITH_UNICODE_BREAK -DWITH_DESKTOP_STYLE '
+COMMON_CCFLAGS = COMMON_CCFLAGS + \
+    ' -DWITH_SDL -DHAS_STDIO -DHAVE_STDIO_H -DHAS_GET_TIME_US64 '
+COMMON_CCFLAGS = COMMON_CCFLAGS+' -DHAS_STD_MALLOC -DTK_MAX_MEM_BLOCK_NR=3 '
+
+#COMMON_CCFLAGS=COMMON_CCFLAGS+' -DTK_MAX_MEM_BLOCK_NR=3 '
+#COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_FAST_LCD_PORTRAIT '
+
+COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_RES_TOOLS '
+
+COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_MAIN_LOOP_CONSOLE=1 '
+
+GRAPHIC_BUFFER = 'default'
+
+if INPUT_ENGINE == 't9':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_IME_T9 '
+elif INPUT_ENGINE == 't9ext':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_IME_T9EXT'
+elif INPUT_ENGINE == 'pinyin':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_IME_PINYIN '
+elif INPUT_ENGINE == 'spinyin':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_IME_SPINYIN '
+elif INPUT_ENGINE == 'null':
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_IME_NULL '
 
 if LCD == 'SDL_GPU':
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NANOVG_GPU -DWITH_VGCANVAS_LCD'
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_GPU -DWITH_VGCANVAS_LCD'
+elif LCD == 'SDL_FB_MONO':
+    NANOVG_BACKEND = 'AGGE'
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_LCD_MONO '
 else:
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_BITMAP_BGRA -DWITH_NANOVG_SOFT '
-  if FRAME_BUFFER_FORMAT=='bgra8888':
-    COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_FB_BGRA8888=1 ';
-  else:
-    COMMON_CCFLAGS=COMMON_CCFLAGS+' -DWITH_FB_BGR565=1';
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_BITMAP_BGRA -DWITH_NANOVG_SOFT '
+    if FRAME_BUFFER_FORMAT == 'bgra8888':
+        COMMON_CCFLAGS = COMMON_CCFLAGS+' -DWITH_FB_BGRA8888=1 '
+    else:
+        COMMON_CCFLAGS = COMMON_CCFLAGS+' -DWITH_FB_BGR565=1'
 
 if VGCANVAS == 'CAIRO':
-  NANOVG_BACKEND_LIBS=['cairo', 'pixman'];
-  NANOVG_BACKEND_PROJS=['3rd/cairo/SConscript', '3rd/pixman/SConscript'];
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_VGCANVAS_CAIRO -DHAVE_CONFIG_H -DCAIRO_WIN32_STATIC_BUILD '
-else:
-  if NANOVG_BACKEND == 'AGG':
-    NANOVG_BACKEND_LIBS=['nanovg-agg', 'nanovg', 'agg'];
-    NANOVG_BACKEND_PROJS=['3rd/agg/SConscript'];
-    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NANOVG_AGG '
-  elif NANOVG_BACKEND == 'AGGE':
-    NANOVG_BACKEND_LIBS=['nanovg-agge', 'nanovg', 'agge'];
-    NANOVG_BACKEND_PROJS=['3rd/agge/SConscript'];
-    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NANOVG_AGGE '
-  elif NANOVG_BACKEND == 'BGFX':
-    NANOVG_BACKEND_LIBS=['nanovg-bgfx','nanovg', 'bgfx'];
-    NANOVG_BACKEND_PROJS=['3rd/bgfx/SConscript'];
-    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NANOVG_BGFX '
-  elif NANOVG_BACKEND == 'GLES2':
-    NANOVG_BACKEND_LIBS=['nanovg'];
-    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NANOVG_GLES2 -DWITH_NANOVG_GL '
-  elif NANOVG_BACKEND == 'GLES3':
-    NANOVG_BACKEND_LIBS=['nanovg'];
-    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NANOVG_GLES3 -DWITH_NANOVG_GL '
-  else:
-    NANOVG_BACKEND_LIBS=['nanovg'];
-    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NANOVG_GL3 -DWITH_NANOVG_GL '
+    NANOVG_BACKEND_LIBS = ['cairo', 'pixman']
+    NANOVG_BACKEND_PROJS = ['3rd/cairo/SConscript', '3rd/pixman/SConscript']
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_VGCANVAS_CAIRO -DHAVE_CONFIG_H -DCAIRO_WIN32_STATIC_BUILD '
+    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_BITMAP_PREMULTI_ALPHA -DWITH_PIXMAN_G2D -DWITH_G2D -DWITHOUT_DEFAULT_G2D '
 
-OS_FLAGS=''
-OS_LIBS=[]
-OS_LIBPATH=[]
-OS_CPPPATH=[]
-OS_LINKFLAGS=''
-OS_SUBSYSTEM_CONSOLE=''
-OS_SUBSYSTEM_WINDOWS=''
-OS_PROJECTS=[]
+elif VGCANVAS == 'NANOVG_PLUS':
+    NANOVG_BACKEND_LIBS = ['nanovg_plus']
+    NANOVG_BACKEND_PROJS = ['3rd/nanovg_plus/SConscript']
+    NANOVG_BACKEND_CPPPATH = [joinPath(
+        TK_3RD_ROOT, 'nanovg_plus/gl'), joinPath(TK_3RD_ROOT, 'nanovg_plus/base')]
+    COMMON_CCFLAGS = COMMON_CCFLAGS + \
+        ' -DWITH_NANOVG_PLUS_GPU -DWITH_NANOVG_GPU -DWITH_GPU_GL '
+    if NANOVG_BACKEND == 'GLES2':
+        COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_GPU_GLES2 -DNVGP_GLES2 '
+    elif NANOVG_BACKEND == 'GLES3':
+        COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_GPU_GLES3 -DNVGP_GLES3 '
+    else:
+        COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_GPU_GL3 -DNVGP_GL3 '
+else:
+    NANOVG_BACKEND_PROJS = ['3rd/nanovg/SConscript']
+    NANOVG_BACKEND_CPPPATH = [
+        joinPath(TK_3RD_ROOT, 'nanovg'),
+        joinPath(TK_3RD_ROOT, 'nanovg/gl'),
+        joinPath(TK_3RD_ROOT, 'nanovg/base'),
+        joinPath(TK_3RD_ROOT, 'nanovg/agge')]
+    if NANOVG_BACKEND == 'AGGE':
+        NANOVG_BACKEND_LIBS = ['nanovg-agge', 'nanovg', 'agge']
+        NANOVG_BACKEND_PROJS += ['3rd/agge/SConscript']
+        COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_NANOVG_AGGE '
+    elif NANOVG_BACKEND == 'GLES2':
+        NANOVG_BACKEND_LIBS = ['nanovg']
+        COMMON_CCFLAGS = COMMON_CCFLAGS + \
+            ' -DWITH_NANOVG_GLES2 -DWITH_GPU_GLES2 -DWITH_NANOVG_GL -DWITH_NANOVG_GPU  '
+    elif NANOVG_BACKEND == 'GLES3':
+        NANOVG_BACKEND_LIBS = ['nanovg']
+        COMMON_CCFLAGS = COMMON_CCFLAGS + \
+            ' -DWITH_NANOVG_GLES3 -DWITH_NANOVG_GL -DWITH_NANOVG_GPU  '
+    elif NANOVG_BACKEND == 'GL2':
+        NANOVG_BACKEND_LIBS = ['nanovg']
+        COMMON_CCFLAGS = COMMON_CCFLAGS + \
+            ' -DWITH_NANOVG_GL2 -DWITH_NANOVG_GL -DWITH_NANOVG_GPU  '
+    else:
+        NANOVG_BACKEND_LIBS = ['nanovg']
+        COMMON_CCFLAGS = COMMON_CCFLAGS + \
+            ' -DWITH_NANOVG_GL3 -DWITH_NANOVG_GL -DWITH_NANOVG_GPU  '
+
+BUILD_DEBUG_FLAG = ''
+BUILD_DEBUG_LINKFLAGS = ''
+OS_PROJECTS = []
+OS_WHOLE_ARCHIVE = toWholeArchive(AWTK_STATIC_LIBS)
+AWTK_DLL_DEPS_LIBS = AWTK_STATIC_LIBS + \
+    NANOVG_BACKEND_LIBS + ['SDL2', 'glad'] + OS_LIBS
+
+
+if OS_DEBUG :
+    BUILD_DEBUG_FLAG = ' -g -O0 '
+else :
+    BUILD_DEBUG_FLAG = ' -Os '
 
 if OS_NAME == 'Darwin':
-  OS_FLAGS='-g -Wall'
-  OS_LIBS = ['stdc++', 'pthread', 'm', 'dl']
-  OS_LINKFLAGS='-framework Cocoa -framework QuartzCore -framework OpenGL -weak_framework Metal -weak_framework MetalKit'
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DWITH_WIDGET_POOL=1000 '
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -D__APPLE__ -DHAS_PTHREAD -DMACOS -DENABLE_MEM_LEAK_CHECK1 '
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -D__STDC_LIMIT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_CONSTANT_MACROS  -DBGFX_CONFIG_RENDERER_METAL=1 '
-
+    OS_WHOLE_ARCHIVE = ' -all_load '
 elif OS_NAME == 'Linux':
-  OS_FLAGS='-g -Wall'
-  OS_LIBS = ['GL', 'gtk-3','gdk-3','Xext', 'X11', 'sndio','stdc++', 'pthread', 'm', 'dl']
-  COMMON_CFLAGS=COMMON_CFLAGS+' -std=gnu99 '
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DLINUX -DHAS_PTHREAD'
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DSDL_REAL_API -DSDL_TIMER_UNIX -DSDL_VIDEO_DRIVER_X11 -DSDL_VIDEO_DRIVER_X11_SUPPORTS_GENERIC_EVENTS '
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DSDL_AUDIO_DRIVER_SNDIO -DSDL_VIDEO_OPENGL_GLX -DSDL_VIDEO_RENDER_OGL '
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DSDL_LOADSO_DLOPEN -DSDL_VIDEO_OPENGL_EGL -DSDL_VIDEO_OPENGL_ES2 '
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DSDL_REAL_API -DSDL_HAPTIC_DISABLED -DSDL_SENSOR_DISABLED -DSDL_JOYSTICK_DISABLED '
-  OS_PROJECTS=['3rd/SDL/SConscript']
-  if TARGET_ARCH == 'x86':
-    OS_FLAGS = OS_FLAGS + ' -DWITH_DOUBLE_FLOAT '
-  else:
-    OS_FLAGS = OS_FLAGS + ' -DWITH_64BIT_CPU '
-
+    OS_PROJECTS = ['3rd/SDL/SConscript']
 elif OS_NAME == 'Windows':
-  OS_LIBS=['gdi32', 'user32','winmm.lib','imm32.lib','version.lib','shell32.lib','ole32.lib','Oleaut32.lib','Advapi32.lib','DelayImp.lib','psapi.lib']
-  OS_FLAGS='-DWIN32 -D_WIN32 -DWINDOWS /EHsc -D_CONSOLE  /DEBUG /Od  /FS /Z7 '
-  #OS_FLAGS='-DWIN32 -D_WIN32 -DWINDOWS /EHsc -D_CONSOLE  /DEBUG /Od  /FS /Z7 -D_DEBUG /MDd '
-  COMMON_CCFLAGS = COMMON_CCFLAGS + ' -DSDL_REAL_API -DSDL_HAPTIC_DISABLED -DSDL_SENSOR_DISABLED -DSDL_JOYSTICK_DISABLED '
-  COMMON_CCFLAGS = COMMON_CCFLAGS + '-D__STDC_LIMIT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_CONSTANT_MACROS -D_HAS_EXCEPTIONS=0 -D_HAS_ITERATOR_DEBUGGING=0 -D_ITERATOR_DEBUG_LEVEL=0 -D_SCL_SECURE=0'
-  COMMON_CCFLAGS = COMMON_CCFLAGS + '-D_SECURE_SCL=0 -D_SCL_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_DEPRECATE '
-  OS_PROJECTS=['3rd/SDL/SConscript']
-  if TARGET_ARCH == 'x86':
-    OS_FLAGS += OS_FLAGS + ' /MD '
-    OS_LINKFLAGS='/MACHINE:X86 /DEBUG'
-    OS_SUBSYSTEM_CONSOLE='/SUBSYSTEM:CONSOLE,5.01  '
-    OS_SUBSYSTEM_WINDOWS='/SUBSYSTEM:WINDOWS,5.01  '
-    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -D_WIN32 '
-  else:
-    OS_FLAGS = OS_FLAGS + ' -DWITH_64BIT_CPU '
-    OS_LINKFLAGS='/MACHINE:X64 /DEBUG'
-    OS_SUBSYSTEM_CONSOLE='/SUBSYSTEM:CONSOLE  '
-    OS_SUBSYSTEM_WINDOWS='/SUBSYSTEM:WINDOWS  '
-    COMMON_CCFLAGS = COMMON_CCFLAGS + ' -D_WIN64 '
+    OS_PROJECTS = ['3rd/SDL/SConscript']
+    OS_LINKFLAGS += '\"' + WIN32_AWTK_RES + '\" '
 
-CFLAGS=COMMON_CFLAGS
-LINKFLAGS=OS_LINKFLAGS;
-LIBPATH=[TK_LIB_DIR] + OS_LIBPATH
-CCFLAGS=OS_FLAGS + COMMON_CCFLAGS 
-LIBS=['awtk', 'gpinyin', 'awtk', 'linebreak'] + NANOVG_BACKEND_LIBS + ['SDL2', 'glad'] + OS_LIBS
+    if TOOLS_NAME == 'mingw':
+        print('mingw')
+    else:
+        OS_WHOLE_ARCHIVE = ' /DEF:"dllexports/awtk.def" '
+        if OS_DEBUG :
+            BUILD_DEBUG_FLAG = '  /MDd -D_DEBUG -DDEBUG /DEBUG /Od '
+        else :
+            BUILD_DEBUG_FLAG = ' -DNDEBUG /MD /O2 /Oi  '
+        
+        if compile_helper.get_value('PDB', True) :
+            BUILD_DEBUG_LINKFLAGS = ' /DEBUG '
 
-CPPPATH=[TK_ROOT, 
-  TK_SRC, 
-  TK_3RD_ROOT, 
-  joinPath(TK_SRC, 'ext_widgets'), 
-  joinPath(TK_3RD_ROOT, 'pixman'), 
-  joinPath(TK_3RD_ROOT, 'pixman/pixman'), 
-  joinPath(TK_3RD_ROOT, 'cairo/cairo'), 
-  joinPath(TK_3RD_ROOT, 'bgfx/bgfx/include'), 
-  joinPath(TK_3RD_ROOT, 'bgfx/bx/include'), 
-  joinPath(TK_3RD_ROOT, 'bgfx/bimg/include'), 
-  joinPath(TK_3RD_ROOT, 'agge'), 
-  joinPath(TK_3RD_ROOT, 'agg/include'), 
-  joinPath(TK_3RD_ROOT, 'nanovg'), 
-  joinPath(TK_3RD_ROOT, 'nanovg/gl'), 
-  joinPath(TK_3RD_ROOT, 'nanovg/base'), 
-  joinPath(TK_3RD_ROOT, 'nanovg/agge'), 
-  joinPath(TK_3RD_ROOT, 'nanovg/bgfx'), 
-  joinPath(TK_3RD_ROOT, 'SDL/src'), 
-  joinPath(TK_3RD_ROOT, 'SDL/include'), 
-  joinPath(TK_3RD_ROOT, 'agge/src'), 
-  joinPath(TK_3RD_ROOT, 'agge/include'), 
-  joinPath(TK_3RD_ROOT, 'gpinyin/include'), 
-  joinPath(TK_3RD_ROOT, 'libunibreak'), 
-  TK_TOOLS_ROOT] + OS_CPPPATH
+
+CFLAGS = COMMON_CFLAGS
+LINKFLAGS = OS_LINKFLAGS
+LIBPATH = [TK_BIN_DIR, TK_LIB_DIR] + OS_LIBPATH
+CCFLAGS = OS_FLAGS + COMMON_CCFLAGS
+AWTK_CCFLAGS = OS_FLAGS + COMMON_CCFLAGS
+
+AWTK_STATIC_LIBS = AWTK_STATIC_LIBS + NANOVG_BACKEND_LIBS 
+STATIC_LIBS = AWTK_STATIC_LIBS + ['SDL2', 'glad'] + OS_LIBS
+SHARED_LIBS = ['awtk'] + OS_LIBS
+
+LIBS = STATIC_LIBS
+
+CPPPATH = [TK_ROOT,
+           TK_SRC,
+           TK_3RD_ROOT,
+           joinPath(TK_SRC, 'ext_widgets'),
+           joinPath(TK_SRC, 'custom_widgets'),
+           joinPath(TK_3RD_ROOT, 'fribidi') if BIDI_BACKEND == 'fribidi' else joinPath(TK_3RD_ROOT, 'SheenBidi-3.0.0/Headers'),
+           joinPath(TK_3RD_ROOT, 'mbedtls/include'),
+           joinPath(TK_3RD_ROOT, 'mbedtls/3rdparty/everest/include'),
+           joinPath(TK_3RD_ROOT, 'pixman'),
+           joinPath(TK_3RD_ROOT, 'cairo'),
+           joinPath(TK_3RD_ROOT, 'agge'),
+           joinPath(TK_3RD_ROOT, 'SDL/src'),
+           joinPath(TK_3RD_ROOT, 'SDL/include'),
+           joinPath(TK_3RD_ROOT, 'agge/src'),
+           joinPath(TK_3RD_ROOT, 'agge/include'),
+           joinPath(TK_3RD_ROOT, 'gpinyin/include'),
+           joinPath(TK_3RD_ROOT, 'libunibreak'),
+           joinPath(TK_3RD_ROOT, 'gtest/googletest'),
+           joinPath(TK_3RD_ROOT, 'gtest/googletest/include'),
+           TK_TOOLS_ROOT] + OS_CPPPATH + NANOVG_BACKEND_CPPPATH
+
+CUSTOM_WIDGETS_SRC=glob.glob('src/custom_widgets/*/src') + \
+  glob.glob('src/custom_widgets/*/src/*/src') + \
+  glob.glob('src/custom_widgets/*/src/*/include')
+
+for iter in CUSTOM_WIDGETS_SRC:
+  fullpath = os.path.join(TK_ROOT, str(iter));
+  CPPPATH.append(fullpath);
 
 os.environ['LCD'] = LCD
 os.environ['TK_ROOT'] = TK_ROOT
-os.environ['CCFLAGS'] = CCFLAGS;
-os.environ['VGCANVAS'] = VGCANVAS 
-os.environ['GTEST_ROOT'] = GTEST_ROOT;
-os.environ['TK_3RD_ROOT'] = TK_3RD_ROOT;
-os.environ['INPUT_ENGINE'] = INPUT_ENGINE;
-os.environ['NANOVG_BACKEND'] = NANOVG_BACKEND;
-os.environ['NATIVE_WINDOW'] = NATIVE_WINDOW;
-os.environ['FRAME_BUFFER_FORMAT'] = FRAME_BUFFER_FORMAT;
+os.environ['CCFLAGS'] = CCFLAGS + BUILD_DEBUG_FLAG
+os.environ['VGCANVAS'] = VGCANVAS
+os.environ['TOOLS_NAME'] = TOOLS_NAME
+os.environ['GTEST_ROOT'] = GTEST_ROOT
+os.environ['TK_3RD_ROOT'] = TK_3RD_ROOT
+os.environ['INPUT_ENGINE'] = INPUT_ENGINE
+os.environ['NANOVG_BACKEND'] = NANOVG_BACKEND
+os.environ['NATIVE_WINDOW'] = NATIVE_WINDOW
+os.environ['GRAPHIC_BUFFER'] = GRAPHIC_BUFFER
+os.environ['FRAME_BUFFER_FORMAT'] = FRAME_BUFFER_FORMAT
+os.environ['OS_WHOLE_ARCHIVE'] = OS_WHOLE_ARCHIVE
+os.environ['AWTK_DLL_DEPS_LIBS'] = ';'.join(AWTK_DLL_DEPS_LIBS)
+os.environ['STATIC_LIBS'] = ';'.join(STATIC_LIBS)
 
-TOOLS_PREFIX=''
+os.environ['WITH_AWTK_SO'] = 'true'
+os.environ['AWTK_CCFLAGS'] = AWTK_CCFLAGS + BUILD_DEBUG_FLAG
+os.environ['CROSS_COMPILE'] = str(not TOOLS_PREFIX == '')
+
+os.environ['SDL_UBUNTU_USE_IME'] = str(compile_helper.get_value('SDL_UBUNTU_USE_IME', False))
+# os.environ['SDL_UBUNTU_USE_IME'] = str(True)
+OS_LIBS = ['SDL2', 'glad'] + OS_LIBS
+
+def genIdlAndDef():
+    genIdlAndDefEx(True)

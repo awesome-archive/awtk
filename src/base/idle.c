@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  idle manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,14 +21,34 @@
 
 #include "tkc/mem.h"
 #include "base/idle.h"
-#include "base/idle_manager.h"
+#include "tkc/idle_manager.h"
 
 uint32_t idle_add(idle_func_t on_idle, void* ctx) {
   return idle_manager_add(idle_manager(), on_idle, ctx);
 }
 
+uint32_t idle_add_with_type(idle_func_t on_idle, void* ctx, uint32_t type) {
+  return idle_manager_add_with_type(idle_manager(), on_idle, ctx, type);
+}
+
+bool_t idle_exist(idle_func_t on_idle, void* ctx) {
+  return idle_manager_exist(idle_manager(), on_idle, ctx);
+}
+
 ret_t idle_remove(uint32_t idle_id) {
   return idle_manager_remove(idle_manager(), idle_id);
+}
+
+ret_t idle_remove_ex(tk_compare_t compare, void* ctx) {
+  return idle_manager_remove_ex(idle_manager(), compare, ctx);
+}
+
+ret_t idle_remove_all_by_ctx_and_type(uint32_t type, void* ctx) {
+  return idle_manager_remove_all_by_ctx_and_type(idle_manager(), type, ctx);
+}
+
+ret_t idle_remove_all_by_ctx(void* ctx) {
+  return idle_manager_remove_all_by_ctx(idle_manager(), ctx);
 }
 
 const idle_info_t* idle_find(uint32_t idle_id) {
@@ -45,13 +65,36 @@ uint32_t idle_count(void) {
 
 #include "base/main_loop.h"
 
-ret_t idle_queue(idle_func_t on_idle, void* ctx) {
+ret_t idle_queue_impl(idle_func_t on_idle, void* ctx, tk_destroy_t on_destroy, void* on_destroy_ctx,
+                      bool_t alarm) {
+#ifdef AWTK_WEB
+  idle_add(on_idle, ctx);
+
+  return RET_OK;
+#else
+  ret_t ret = RET_OK;
   event_queue_req_t r;
   r.add_idle.func = on_idle;
   r.add_idle.e.target = ctx;
   r.add_idle.e.type = REQ_ADD_IDLE;
+  r.add_idle.on_destroy = on_destroy;
+  r.add_idle.on_destroy_ctx = on_destroy_ctx;
 
-  return main_loop_queue_event(main_loop(), &r);
+  ret = main_loop_queue_event(main_loop(), &r);
+  if (alarm) {
+    ENSURE(ret == RET_OK);
+    return_value_if_fail(ret == RET_OK, ret);
+  }
+  return ret;
+#endif /*AWTK_WEB*/
+}
+
+ret_t idle_queue_ex(idle_func_t on_idle, void* ctx, tk_destroy_t on_destroy, void* on_destroy_ctx) {
+  return idle_queue_impl(on_idle, ctx, on_destroy, on_destroy_ctx, TRUE);
+}
+
+ret_t idle_queue(idle_func_t on_idle, void* ctx) {
+  return idle_queue_ex(on_idle, ctx, NULL, NULL);
 }
 
 ret_t idle_set_on_destroy(uint32_t idle_id, tk_destroy_t on_destroy, void* on_destroy_ctx) {

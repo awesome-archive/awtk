@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   self_layouter.c
  * Author: AWTK Develop Team
  * Brief:  self layouter
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,7 +19,10 @@
  *
  */
 
+#include "base/widget.h"
+#include "base/widget_vtable.h"
 #include "base/self_layouter.h"
+#include "base/main_loop.h"
 
 const char* self_layouter_to_string(self_layouter_t* layouter) {
   if (layouter == NULL) {
@@ -31,13 +34,36 @@ const char* self_layouter_to_string(self_layouter_t* layouter) {
   return layouter->vt->to_string(layouter);
 }
 
+bool_t self_layouter_is_laid_out(self_layouter_t* layouter) {
+  if (layouter != NULL) {
+    const main_loop_t* loop = main_loop();
+    if (loop != NULL && loop->step_count == layouter->count) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+inline static void self_layouter_count_sync(self_layouter_t* layouter) {
+  const main_loop_t* loop = main_loop();
+  if (loop != NULL) {
+    layouter->count = loop->step_count;
+  }
+}
+
 ret_t self_layouter_layout(self_layouter_t* layouter, widget_t* widget, rect_t* area) {
   if (layouter == NULL) {
+    if (widget->auto_adjust_size) {
+      widget_vtable_auto_adjust_size(widget);
+    }
+
     return RET_FAIL;
   }
 
   return_value_if_fail(widget != NULL && area != NULL, RET_FAIL);
   return_value_if_fail(layouter->vt != NULL && layouter->vt->layout != NULL, RET_FAIL);
+
+  self_layouter_count_sync(layouter);
 
   return layouter->vt->layout(layouter, widget, area);
 }
@@ -98,3 +124,20 @@ ret_t self_layouter_destroy(self_layouter_t* layouter) {
 
   return layouter->vt->destroy(layouter);
 }
+
+self_layouter_t* self_layouter_clone(self_layouter_t* layouter) {
+  if (layouter != NULL && layouter->vt != NULL && layouter->vt->clone != NULL) {
+    return layouter->vt->clone(layouter);
+  }
+
+  return NULL;
+}
+
+#ifdef WITHOUT_LAYOUTER
+ret_t self_layouter_reinit(self_layouter_t* layouter) {
+  return RET_FAIL;
+}
+self_layouter_t* self_layouter_create(const char* params) {
+  return NULL;
+}
+#endif /*WITHOUT_LAYOUTER*/

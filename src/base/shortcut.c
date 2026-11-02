@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   shortcut.c
  * Author: AWTK Develop Team
  * Brief:  shortcut
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,7 +19,8 @@
  *
  */
 
-#include <tkc/mem.h>
+#include "tkc/mem.h"
+#include "tkc/utils.h"
 #include "tkc/tokenizer.h"
 
 #include "base/enums.h"
@@ -39,7 +40,7 @@ shortcut_t* shortcut_init_with_str(shortcut_t* shortcut, const char* str) {
   tokenizer_t t;
   const char* k = NULL;
   return_value_if_fail(shortcut != NULL && str != NULL, NULL);
-  return_value_if_fail(tokenizer_init_ex(&t, str, strlen(str), " +", NULL) != NULL, NULL);
+  return_value_if_fail(tokenizer_init(&t, str, tk_strlen(str), " _+") != NULL, NULL);
 
   memset(shortcut, 0, sizeof(shortcut_t));
   while (tokenizer_has_more(&t)) {
@@ -100,49 +101,55 @@ bool_t shortcut_match(shortcut_t* filter, shortcut_t* event) {
     return FALSE;
   }
 
-  if (event->lctrl) {
-    if (!(filter->lctrl || filter->ctrl)) {
+  if (filter->cmd != event->cmd) {
+    return FALSE;
+  }
+
+  if (filter->menu != event->menu) {
+    return FALSE;
+  }
+
+  if (filter->ctrl) {
+    if (!event->lctrl && !event->rctrl) {
       return FALSE;
     }
-  }
-  if (event->rctrl) {
-    if (!(filter->rctrl || filter->ctrl)) {
+  } else {
+    if (filter->lctrl != event->lctrl) {
+      return FALSE;
+    }
+
+    if (filter->rctrl != event->rctrl) {
       return FALSE;
     }
   }
 
-  if (event->lalt) {
-    if (!(filter->lalt || filter->alt)) {
+  if (filter->alt) {
+    if (!event->lalt && !event->ralt) {
       return FALSE;
     }
-  }
-  if (event->ralt) {
-    if (!(filter->ralt || filter->alt)) {
+  } else {
+    if (filter->lalt != event->lalt) {
+      return FALSE;
+    }
+
+    if (filter->ralt != event->ralt) {
       return FALSE;
     }
   }
 
-  if (event->lshift) {
-    if (!(filter->lshift || filter->shift)) {
+  if (filter->shift) {
+    if (!event->lshift && !event->rshift) {
       return FALSE;
     }
-  }
-  if (event->rshift) {
-    if (!(filter->rshift || filter->shift)) {
+  } else {
+    if (filter->lshift != event->lshift) {
+      return FALSE;
+    }
+
+    if (filter->rshift != event->rshift) {
       return FALSE;
     }
   }
 
-  if (event->cmd) {
-    if (!filter->cmd) {
-      return FALSE;
-    }
-  }
-
-  if (event->menu) {
-    if (!filter->menu) {
-      return FALSE;
-    }
-  }
   return TRUE;
 }

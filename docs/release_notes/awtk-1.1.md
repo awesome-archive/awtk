@@ -8,7 +8,7 @@
 #### [AWTK](https://github.com/zlgopen/awtk)寓意有两个方面：
 
 * Toolkit AnyWhere。 
-* ZLG物联网操作系统AWorks内置GUI。
+* ZLG物联网操作系统AWorksOS内置GUI。
 
 #### [AWTK](https://github.com/zlgopen/awtk)源码仓库：
 
@@ -17,10 +17,6 @@
 
 
 #### 运行效果截图：
-
-![CleanAir-Demo](../images/cleanair_main.png)
-
-![Meter-Demo](../images/meter_main.png)
 
 ![Chart-Demo](../images/chart_main.png)
 
@@ -46,7 +42,7 @@
 
 [AWTK](https://github.com/zlgopen/awtk)是跨平台的，这有两个方面的意思：
 
-* AWTK本身是跨平台的。目前支持的平台有ZLG AWorks、Windows、Linux、MacOS、嵌入式Linux和嵌入式裸系统，可以轻松的移植到各种RTOS上。AWTK以后也可以运行在浏览器(即将公测)、各种小程序、Android和iOS等平台上运行。
+* AWTK本身是跨平台的。目前支持的平台有ZLG AWorksOS、Windows、Linux、MacOS、嵌入式Linux和嵌入式裸系统，可以轻松的移植到各种RTOS上。AWTK以后也可以运行在浏览器(即将公测)、各种小程序、Android和iOS等平台上运行。
 
 * AWTK同时还提供了一套跨平台的基础工具库。其中包括链表、数组、字符串(UTF8和widechar)，事件发射器、值、对象、文件系统、互斥锁和线程、表达式和字符串解析等等，让你用AWTK开发的应用程序可以真正跨平台运行。
 
@@ -56,7 +52,7 @@
 
 * 通过脏矩算法只更新变化的部分。
 * 支持3 FrameBuffer让界面以最高帧率运行(可选)。
-* UI描述文件和主题文件使用高效的二进制格式，解析在瞬间完成。
+* UI描述文件和窗体样式文件使用高效的二进制格式，解析在瞬间完成。
 * 支持各种GPU加速接口。如OpenGL、DirectX、Vulkan和Metal等。
 * 支持嵌入式平台的各种2D加速接口。目前STM32的DMA2D和NXP的PXP接口，厂家可以轻松扩展自己的加速接口。
 
@@ -83,7 +79,7 @@
 * 支持控件动画
 * 支持高清屏。
 * 支持界面描述文件。
-* 支持主题描述文件。
+* 支持窗体样式描述文件。
 * 支持控件布局策略。
 * 支持对话框高亮策略。
 * 丰富的辅助工具。

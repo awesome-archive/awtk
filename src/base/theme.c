@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  theme manager
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,129 +24,134 @@
 #include "base/theme.h"
 #include "tkc/buffer.h"
 
-color_t style_data_get_color(const uint8_t* s, const char* name, color_t defval) {
-  defval.color = style_data_get_int(s, name, defval.color);
+static theme_t* s_theme = NULL;
 
-  return defval;
-}
-
-uint32_t style_data_get_int(const uint8_t* s, const char* name, uint32_t defval) {
-  uint32_t i = 0;
-  uint32_t nr = 0;
-  const uint8_t* p = s;
-
-  if (s == NULL) {
-    return defval;
-  }
-
-  load_uint32(p, nr);
-  for (i = 0; i < nr; i++) {
-    const style_int_data_t* iter = (const style_int_data_t*)p;
-
-    if (tk_str_eq(iter->name, name)) {
-      defval = iter->value;
-      break;
-    } else {
-      p += sizeof(style_int_data_t);
-    }
-  }
-
-  return defval;
-}
-
-const char* style_data_get_str(const uint8_t* s, const char* name, const char* defval) {
-  uint32_t i = 0;
-  uint32_t nr = 0;
-  const uint8_t* p = s;
-
-  if (s == NULL) {
-    return defval;
-  }
-
-  /*skip int values*/
-  load_uint32(p, nr);
-  p += nr * sizeof(style_int_data_t);
-
-  load_uint32(p, nr);
-  for (i = 0; i < nr; i++) {
-    const style_str_data_t* iter = (const style_str_data_t*)p;
-    if (tk_str_eq(iter->name, name)) {
-      defval = iter->value;
-      break;
-    } else {
-      p += sizeof(style_str_data_t);
-    }
-  }
-
-  return defval;
-}
-
-const uint8_t* theme_find_style(theme_t* t, const char* widget_type, const char* name,
+const uint8_t* theme_find_style(theme_t* theme, const char* widget_type, const char* name,
                                 const char* widget_state) {
-  uint32_t i = 0;
-  const theme_item_t* iter = NULL;
-  const theme_header_t* header = (const theme_header_t*)(t->data);
-  return_value_if_fail(t != NULL && t->data != NULL, NULL);
-
-  if (name == NULL) {
-    name = TK_DEFAULT_STYLE;
+  return_value_if_fail(theme != NULL, NULL);
+  if (theme->find_style != NULL) {
+    return theme->find_style(theme, widget_type, name, widget_state);
+  } else {
+    return NULL;
   }
-
-  iter = (const theme_item_t*)(t->data + sizeof(theme_header_t));
-  for (i = 0; i < header->nr; i++) {
-    if (tk_str_eq(widget_type, iter->widget_type)) {
-      if (tk_str_eq(iter->state, widget_state) && tk_str_eq(iter->name, name)) {
-        return t->data + iter->offset;
-      }
-    }
-
-    iter++;
-  }
-
-  return NULL;
 }
 
-static theme_t* s_theme;
+ret_t theme_foreach(theme_t* theme, theme_on_data_t on_data, void* ctx) {
+  return_value_if_fail(theme != NULL && theme->foreach != NULL && on_data != NULL, RET_BAD_PARAMS);
+
+  return theme->foreach (theme, on_data, ctx);
+}
+
+const char* theme_get_style_type(theme_t* theme) {
+  return_value_if_fail(theme != NULL, NULL);
+  if (theme->get_style_type != NULL) {
+    return theme->get_style_type(theme);
+  }
+
+  return THEME_DEFAULT_STYLE_TYPE;
+}
+
+ret_t theme_set_theme_data(theme_t* theme, const uint8_t* data) {
+  return_value_if_fail(theme != NULL, RET_BAD_PARAMS);
+
+  if (theme->set_style_data != NULL) {
+    return theme->set_style_data(theme, data);
+  } else {
+    if (theme->data != NULL && theme->need_free_data) {
+      TKMEM_FREE(theme->data);
+    }
+
+    theme->data = data;
+    theme->need_free_data = FALSE;
+  }
+
+  return RET_FAIL;
+}
+
+ret_t theme_destroy(theme_t* theme) {
+  return_value_if_fail(theme != NULL, RET_BAD_PARAMS);
+
+  if (theme == s_theme) {
+    s_theme = NULL;
+  }
+
+  if (theme->need_free_data) {
+    TKMEM_FREE(theme->data);
+  }
+
+  if (theme->info != NULL) {
+    asset_info_unref(theme->info);
+    theme->info = NULL;
+  }
+
+  if (theme->theme_destroy != NULL) {
+    theme->theme_destroy(theme);
+  } else {
+    TKMEM_FREE(theme);
+  }
+
+  return RET_OK;
+}
+
+/*global*/
 
 theme_t* theme(void) {
   return s_theme;
 }
 
 ret_t theme_set(theme_t* theme) {
+  if (theme == s_theme) {
+    return RET_OK;
+  }
+
+  if (s_theme != NULL) {
+    theme_destroy(s_theme);
+  }
+
   s_theme = theme;
 
   return RET_OK;
 }
 
-theme_t* theme_create(const uint8_t* data) {
-  theme_t* theme = TKMEM_ZALLOC(theme_t);
-  return_value_if_fail(theme != NULL, NULL);
+#ifndef WITHOUT_XML_STYLE
+#include "theme_xml.h"
+#endif /*WITHOUT_XML_STYLE*/
 
-  return theme_init(theme, data);
+#include "theme_default.h"
+
+theme_t* theme_load_from_data(const char* name, const uint8_t* data, uint32_t size) {
+  theme_header_t* header = (theme_header_t*)data;
+  return_value_if_fail(name != NULL && data != NULL, NULL);
+
+  if (header->magic == THEME_MAGIC) {
+    return theme_default_create(data);
+#ifndef WITHOUT_XML_STYLE
+  } else if (*data == '<' || strstr(name, ".xml") != NULL) {
+    return theme_xml_create((char*)data);
+#endif /*WITHOUT_XML_STYLE*/
+  } else {
+    return NULL;
+  }
 }
 
-theme_t* theme_init(theme_t* theme, const uint8_t* data) {
+theme_t* theme_load_from_asset(asset_info_t* info) {
+  theme_t* theme = NULL;
+  const char* name = NULL;
+  return_value_if_fail(info != NULL, NULL);
+
+  name = asset_info_get_name(info);
+  theme = theme_load_from_data(name, info->data, info->size);
   return_value_if_fail(theme != NULL, NULL);
 
-  theme->data = data;
+  theme->info = info;
+  asset_info_ref(info);
 
   return theme;
 }
 
-ret_t theme_deinit(theme_t* theme) {
-  return_value_if_fail(theme != NULL, RET_BAD_PARAMS);
+#ifndef WITHOUT_XML_STYLE
+#include "theme_xml.inc"
+#endif /*WITHOUT_XML_STYLE*/
 
-  theme->data = NULL;
-
-  return RET_OK;
-}
-
-ret_t theme_destroy(theme_t* theme) {
-  return_value_if_fail(theme != NULL, RET_BAD_PARAMS);
-
-  theme_deinit(theme);
-
-  TKMEM_FREE(theme);
-
-  return RET_OK;
-}
+#include "theme_data.inc"
+#include "theme_default.inc"

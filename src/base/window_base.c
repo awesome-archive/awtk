@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   window_base.h
  * Author: AWTK Develop Team
  * Brief:  window_base
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,38 +23,125 @@
 #include "tkc/utils.h"
 #include "base/keys.h"
 #include "base/enums.h"
+#include "base/theme.h"
 #include "base/window_base.h"
 #include "base/native_window.h"
 #include "base/font_manager.h"
 #include "base/image_manager.h"
 #include "base/assets_manager.h"
+#include "base/locale_info.h"
 #include "base/window_manager.h"
+#include "base/widget_vtable.h"
 
 ret_t window_close(widget_t* widget);
 
 ret_t window_base_on_paint_self(widget_t* widget, canvas_t* c) {
+  paint_event_t e;
+  widget_dispatch(widget, paint_event_init(&e, EVT_PAINT, widget, c));
+
   return RET_OK;
 }
 
 ret_t window_base_on_paint_begin(widget_t* widget, canvas_t* c) {
-  (void)widget;
-  (void)c;
+  font_manager_t* fm = widget_get_font_manager(widget);
+  image_manager_t* imm = widget_get_image_manager(widget);
+  assets_manager_t* am = widget_get_assets_manager(widget);
+
+  canvas_set_font_manager(c, fm);
+  canvas_set_assets_manager(c, am);
+  image_manager_set_assets_manager(imm, am);
+
   return RET_OK;
 }
 
 ret_t window_base_on_paint_end(widget_t* widget, canvas_t* c) {
-  (void)widget;
-  (void)c;
   return RET_OK;
 }
 
-static ret_t window_base_load_theme_obj(widget_t* widget) {
+static ret_t window_base_unload_default_theme_obj_impl(widget_t* widget) {
   window_base_t* window_base = WINDOW_BASE(widget);
   assets_manager_t* am = widget_get_assets_manager(widget);
+  return_value_if_fail(window_base != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(am != NULL, RET_BAD_PARAMS);
 
+  if (window_base->default_res_theme != NULL) {
+    assets_manager_unref(am, window_base->default_res_theme);
+    window_base->default_res_theme = NULL;
+  }
+
+  if (window_base->default_theme_obj != NULL) {
+    theme_destroy(window_base->default_theme_obj);
+    window_base->default_theme_obj = NULL;
+  }
+
+  return RET_OK;
+}
+
+static ret_t window_base_unload_theme_obj_impl(widget_t* widget) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  assets_manager_t* am = widget_get_assets_manager(widget);
+  return_value_if_fail(window_base != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(am != NULL, RET_BAD_PARAMS);
+
+  if (window_base->res_theme != NULL) {
+    assets_manager_unref(am, window_base->res_theme);
+    window_base->res_theme = NULL;
+  }
+
+  if (window_base->theme_obj != NULL) {
+    theme_destroy(window_base->theme_obj);
+    window_base->theme_obj = NULL;
+  }
+
+  return RET_OK;
+}
+
+static ret_t window_base_unload_theme_obj(widget_t* widget) {
+  window_base_unload_theme_obj_impl(widget);
+  window_base_unload_default_theme_obj_impl(widget);
+  return RET_OK;
+}
+
+static ret_t window_base_load_default_theme_obj_impl(widget_t* widget, bool_t* update_style) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  assets_manager_t* am = widget_get_assets_manager(widget);
+  return_value_if_fail(window_base != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(am != NULL, RET_BAD_PARAMS);
+
+  if (window_base->default_theme_obj != NULL) {
+    return RET_OK;
+  }
+
+  window_base_unload_default_theme_obj_impl(widget);
+
+  window_base->default_res_theme = assets_manager_ref(am, ASSET_TYPE_STYLE, TK_DEFAULT_STYLE);
+
+  if (window_base->default_res_theme != NULL) {
+    asset_info_t* res = (asset_info_t*)window_base->default_res_theme;
+    window_base->default_theme_obj = theme_load_from_asset(res);
+  }
+
+  if (window_base->default_theme_obj != NULL) {
+    *update_style = TRUE;
+  }
+
+  return RET_OK;
+}
+
+static ret_t window_base_load_theme_obj_impl(widget_t* widget, bool_t* update_style) {
   const char* theme_name = widget->name;
+  window_base_t* window_base = WINDOW_BASE(widget);
+  assets_manager_t* am = widget_get_assets_manager(widget);
+  return_value_if_fail(window_base != NULL, RET_BAD_PARAMS);
+  return_value_if_fail(am != NULL, RET_BAD_PARAMS);
 
-  if (window_base->theme != NULL) {
+  if (window_base->theme_obj != NULL) {
+    return RET_OK;
+  }
+
+  window_base_unload_theme_obj_impl(widget);
+
+  if (window_base->theme != NULL && window_base->theme[0] != 0) {
     theme_name = window_base->theme;
   }
 
@@ -63,10 +150,80 @@ static ret_t window_base_load_theme_obj(widget_t* widget) {
   }
 
   if (window_base->res_theme != NULL) {
-    window_base->theme_obj = theme_create(window_base->res_theme->data);
+    asset_info_t* res = (asset_info_t*)window_base->res_theme;
+    window_base->theme_obj = theme_load_from_asset(res);
+  }
+
+  if (window_base->theme_obj != NULL) {
+    *update_style = TRUE;
   }
 
   return RET_OK;
+}
+
+static ret_t window_base_load_theme_obj(widget_t* widget) {
+  bool_t update_style = FALSE;
+
+  window_base_load_default_theme_obj_impl(widget, &update_style);
+  window_base_load_theme_obj_impl(widget, &update_style);
+
+  if (update_style) {
+    widget_reload_style_recursive(widget);
+    widget_layout(widget);
+  }
+
+  return RET_OK;
+}
+
+static ret_t window_base_reload_theme_obj(widget_t* widget) {
+  window_base_unload_theme_obj(widget);
+  window_base_load_theme_obj(widget);
+
+  return RET_OK;
+}
+
+assets_manager_t* window_base_get_assets_manager(widget_t* widget) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  return_value_if_fail(window_base != NULL, NULL);
+
+  if (window_base->assets_manager != NULL) {
+    return window_base->assets_manager;
+  } else {
+    return assets_manager();
+  }
+}
+
+font_manager_t* window_base_get_font_manager(widget_t* widget) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  return_value_if_fail(window_base != NULL, NULL);
+
+  if (window_base->font_manager != NULL) {
+    return window_base->font_manager;
+  } else {
+    return font_manager();
+  }
+}
+
+locale_info_t* window_base_get_locale_info(widget_t* widget) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  return_value_if_fail(window_base != NULL, NULL);
+
+  if (window_base->locale_info != NULL) {
+    return window_base->locale_info;
+  } else {
+    return locale_info();
+  }
+}
+
+image_manager_t* window_base_get_image_manager(widget_t* widget) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  return_value_if_fail(window_base != NULL, NULL);
+
+  if (window_base->image_manager != NULL) {
+    return window_base->image_manager;
+  } else {
+    return image_manager();
+  }
 }
 
 ret_t window_base_get_prop(widget_t* widget, const char* name, value_t* v) {
@@ -74,13 +231,28 @@ ret_t window_base_get_prop(widget_t* widget, const char* name, value_t* v) {
   return_value_if_fail(widget != NULL && name != NULL && v != NULL, RET_BAD_PARAMS);
 
   if (tk_str_eq(name, WIDGET_PROP_ANIM_HINT)) {
-    value_set_str(v, window_base->open_anim_hint);
+    if (window_base->disable_anim) {
+      value_set_str(v, NULL);
+    } else {
+      value_set_str(v, window_base->open_anim_hint);
+    }
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_OPEN_ANIM_HINT)) {
-    value_set_str(v, window_base->open_anim_hint);
+    if (window_base->disable_anim) {
+      value_set_str(v, NULL);
+    } else {
+      value_set_str(v, window_base->open_anim_hint);
+    }
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_CLOSE_ANIM_HINT)) {
-    value_set_str(v, window_base->close_anim_hint);
+    if (window_base->disable_anim) {
+      value_set_str(v, NULL);
+    } else {
+      value_set_str(v, window_base->close_anim_hint);
+    }
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_DISABLE_ANIM)) {
+    value_set_bool(v, window_base->disable_anim);
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_NATIVE_WINDOW)) {
     value_set_pointer(v, window_base->native_window);
@@ -92,19 +264,19 @@ ret_t window_base_get_prop(widget_t* widget, const char* name, value_t* v) {
     value_set_pointer(v, (void*)(window_base->theme_obj));
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_DEFAULT_THEME_OBJ)) {
-    value_set_pointer(v, (void*)(theme()));
+    value_set_pointer(v, (void*)(window_base->default_theme_obj));
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_IMAGE_MANAGER)) {
-    value_set_pointer(v, (void*)(image_manager()));
+    value_set_pointer(v, window_base_get_image_manager(widget));
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_LOCALE_INFO)) {
-    value_set_pointer(v, (void*)(locale_info()));
+    value_set_pointer(v, window_base_get_locale_info(widget));
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_FONT_MANAGER)) {
-    value_set_pointer(v, (void*)(font_manager()));
+    value_set_pointer(v, window_base_get_font_manager(widget));
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_ASSETS_MANAGER)) {
-    value_set_pointer(v, (void*)(assets_manager()));
+    value_set_pointer(v, window_base_get_assets_manager(widget));
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_STAGE)) {
     value_set_int(v, window_base->stage);
@@ -113,14 +285,131 @@ ret_t window_base_get_prop(widget_t* widget, const char* name, value_t* v) {
     value_set_int(v, window_base->closable);
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_PREV_KEY)) {
-    value_set_int(v, window_base->move_focus_prev_key);
+    value_set_str(v, window_base->move_focus_prev_key);
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY)) {
-    value_set_int(v, window_base->move_focus_next_key);
+    value_set_str(v, window_base->move_focus_next_key);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_UP_KEY)) {
+    value_set_str(v, window_base->move_focus_up_key);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_DOWN_KEY)) {
+    value_set_str(v, window_base->move_focus_down_key);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_LEFT_KEY)) {
+    value_set_str(v, window_base->move_focus_left_key);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_RIGHT_KEY)) {
+    value_set_str(v, window_base->move_focus_right_key);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_SINGLE_INSTANCE)) {
+    value_set_bool(v, window_base->single_instance);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_STRONGLY_FOCUS)) {
+    value_set_bool(v, window_base->strongly_focus);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_DESIGN_W)) {
+    value_set_uint32(v, window_base->design_w);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_DESIGN_H)) {
+    value_set_uint32(v, window_base->design_h);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_AUTO_SCALE_CHILDREN_X)) {
+    value_set_bool(v, window_base->auto_scale_children_x);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_AUTO_SCALE_CHILDREN_Y)) {
+    value_set_bool(v, window_base->auto_scale_children_y);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_AUTO_SCALE_CHILDREN_W)) {
+    value_set_bool(v, window_base->auto_scale_children_w);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_AUTO_SCALE_CHILDREN_H)) {
+    value_set_bool(v, window_base->auto_scale_children_h);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_APPLET_NAME)) {
+    value_set_str(v, window_base->applet_name);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_ACCEPT_BUTTON)) {
+    value_set_pointer(v, window_base->accept_button_widget);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_CANCEL_BUTTON)) {
+    value_set_pointer(v, window_base->cancel_button_widget);
     return RET_OK;
   }
 
   return RET_NOT_FOUND;
+}
+
+static ret_t window_base_set_applet_name(widget_t* widget, const char* applet_name) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  return_value_if_fail(window_base != NULL, RET_BAD_PARAMS);
+
+  if (tk_str_eq(window_base->applet_name, applet_name)) {
+    return RET_OK;
+  }
+
+  if (window_base->applet_name != NULL) {
+    assets_managers_unref(window_base->assets_manager);
+    window_base->assets_manager = NULL;
+    image_managers_unref(window_base->image_manager);
+    window_base->image_manager = NULL;
+    font_managers_unref(window_base->font_manager);
+    window_base->font_manager = NULL;
+    locale_infos_unref(window_base->locale_info);
+    window_base->locale_info = NULL;
+  }
+
+  if (TK_STR_IS_EMPTY(applet_name)) {
+    TKMEM_FREE(window_base->applet_name);
+  } else {
+    window_base->applet_name = tk_str_copy(window_base->applet_name, applet_name);
+    window_base->assets_manager = assets_managers_ref(applet_name);
+    window_base->image_manager = image_managers_ref(applet_name);
+    window_base->font_manager = font_managers_ref(applet_name);
+    window_base->locale_info = locale_infos_ref(applet_name);
+  }
+
+  return RET_OK;
+}
+
+ret_t window_base_set_accept_button(widget_t* widget, const char* accept_button) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  return_value_if_fail(widget != NULL, RET_BAD_PARAMS);
+  if (accept_button == NULL) {
+    if (window_base->accept_button != NULL) {
+      TKMEM_FREE(window_base->accept_button);
+      window_base->accept_button = NULL;
+    }
+    if (window_base->accept_button_widget != NULL) {
+      widget_set_accept_button_widget_state(window_base->accept_button_widget, FALSE);
+    }
+    window_base->accept_button_widget = NULL;
+    return RET_OK;
+  } else {
+    window_base->accept_button = tk_str_copy(window_base->accept_button, accept_button);
+    window_base->accept_button_widget = widget_lookup(widget, accept_button, TRUE);
+    return_value_if_fail(window_base->accept_button_widget != NULL, RET_FAIL);
+    widget_set_accept_button_widget_state(window_base->accept_button_widget, TRUE);
+  }
+  return RET_OK;
+}
+
+ret_t window_base_set_cancel_button(widget_t* widget, const char* cancel_button) {
+  window_base_t* window_base = WINDOW_BASE(widget);
+  return_value_if_fail(widget != NULL, RET_BAD_PARAMS);
+  if (cancel_button == NULL) {
+    if (window_base->cancel_button != NULL) {
+      TKMEM_FREE(window_base->cancel_button);
+      window_base->cancel_button = NULL;
+    }
+    window_base->cancel_button_widget = NULL;
+    return RET_OK;
+  } else {
+    window_base->cancel_button = tk_str_copy(window_base->cancel_button, cancel_button);
+    window_base->cancel_button_widget = widget_lookup(widget, cancel_button, TRUE);
+    return_value_if_fail(window_base->cancel_button_widget != NULL, RET_FAIL);
+  }
+  return RET_OK;
 }
 
 ret_t window_base_set_prop(widget_t* widget, const char* name, const value_t* v) {
@@ -134,6 +423,9 @@ ret_t window_base_set_prop(widget_t* widget, const char* name, const value_t* v)
   } else if (tk_str_eq(name, WIDGET_PROP_OPEN_ANIM_HINT)) {
     window_base->open_anim_hint = tk_str_copy(window_base->open_anim_hint, value_str(v));
     return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_DISABLE_ANIM)) {
+    window_base->disable_anim = value_bool(v);
+    return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_NATIVE_WINDOW)) {
     window_base->native_window = (native_window_t*)value_pointer(v);
     return RET_OK;
@@ -142,30 +434,50 @@ ret_t window_base_set_prop(widget_t* widget, const char* name, const value_t* v)
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_THEME)) {
     window_base->theme = tk_str_copy(window_base->theme, value_str(v));
+    window_base_reload_theme_obj(widget);
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_PREV_KEY)) {
-    if (v->type == VALUE_TYPE_STRING) {
-      const key_type_value_t* kv = keys_type_find(value_str(v));
-      if (kv != NULL) {
-        window_base->move_focus_prev_key = kv->value;
-      } else {
-        log_debug("invalid key: %s\n", value_str(v));
-      }
-    } else {
-      window_base->move_focus_prev_key = value_int(v);
-    }
+    window_base->move_focus_prev_key = tk_str_copy(window_base->move_focus_prev_key, value_str(v));
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_NEXT_KEY)) {
-    if (v->type == VALUE_TYPE_STRING) {
-      const key_type_value_t* kv = keys_type_find(value_str(v));
-      if (kv != NULL) {
-        window_base->move_focus_next_key = kv->value;
-      } else {
-        log_debug("invalid key: %s\n", value_str(v));
-      }
-    } else {
-      window_base->move_focus_next_key = value_int(v);
-    }
+    window_base->move_focus_next_key = tk_str_copy(window_base->move_focus_next_key, value_str(v));
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_UP_KEY)) {
+    window_base->move_focus_up_key = tk_str_copy(window_base->move_focus_up_key, value_str(v));
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_DOWN_KEY)) {
+    window_base->move_focus_down_key = tk_str_copy(window_base->move_focus_down_key, value_str(v));
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_LEFT_KEY)) {
+    window_base->move_focus_left_key = tk_str_copy(window_base->move_focus_left_key, value_str(v));
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_MOVE_FOCUS_RIGHT_KEY)) {
+    window_base->move_focus_right_key =
+        tk_str_copy(window_base->move_focus_right_key, value_str(v));
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_SINGLE_INSTANCE)) {
+    window_base->single_instance = value_bool(v);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_STRONGLY_FOCUS)) {
+    window_base->strongly_focus = value_bool(v);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_DESIGN_W)) {
+    window_base->design_w = value_uint32(v);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_DESIGN_H)) {
+    window_base->design_h = value_uint32(v);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_AUTO_SCALE_CHILDREN_X)) {
+    window_base->auto_scale_children_x = value_bool(v);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_AUTO_SCALE_CHILDREN_Y)) {
+    window_base->auto_scale_children_y = value_bool(v);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_AUTO_SCALE_CHILDREN_W)) {
+    window_base->auto_scale_children_w = value_bool(v);
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_AUTO_SCALE_CHILDREN_H)) {
+    window_base->auto_scale_children_h = value_bool(v);
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_CLOSABLE)) {
     if (v->type == VALUE_TYPE_STRING) {
@@ -177,6 +489,23 @@ ret_t window_base_set_prop(widget_t* widget, const char* name, const value_t* v)
       window_base->closable = (window_closable_t)value_int(v);
     }
     return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_APPLET_NAME)) {
+    window_base_set_applet_name(widget, value_str(v));
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_ACCEPT_BUTTON)) {
+    if (widget->loading) {
+      window_base->accept_button = tk_str_copy(window_base->accept_button, value_str(v));
+    } else {
+      window_base_set_accept_button(widget, value_str(v));
+    }
+    return RET_OK;
+  } else if (tk_str_eq(name, WIDGET_PROP_CANCEL_BUTTON)) {
+    if (widget->loading) {
+      window_base->cancel_button = tk_str_copy(window_base->cancel_button, value_str(v));
+    } else {
+      window_base_set_cancel_button(widget, value_str(v));
+    }
+    return RET_OK;
   }
 
   return RET_NOT_FOUND;
@@ -186,25 +515,48 @@ ret_t window_base_on_destroy(widget_t* widget) {
   window_base_t* window_base = WINDOW_BASE(widget);
   return_value_if_fail(widget != NULL && window_base != NULL, RET_BAD_PARAMS);
 
+  if (window_base->save_focus_widget) {
+    widget_unref(window_base->save_focus_widget);
+    window_base->save_focus_widget = NULL;
+  }
+
   TKMEM_FREE(window_base->theme);
+  TKMEM_FREE(window_base->applet_name);
   TKMEM_FREE(window_base->open_anim_hint);
   TKMEM_FREE(window_base->close_anim_hint);
+  TKMEM_FREE(window_base->move_focus_prev_key);
+  TKMEM_FREE(window_base->move_focus_next_key);
+  TKMEM_FREE(window_base->move_focus_up_key);
+  TKMEM_FREE(window_base->move_focus_down_key);
+  TKMEM_FREE(window_base->move_focus_left_key);
+  TKMEM_FREE(window_base->move_focus_right_key);
 
-  if (window_base->theme_obj != NULL) {
-    theme_destroy(window_base->theme_obj);
-  }
+  TKMEM_FREE(window_base->accept_button);
+  TKMEM_FREE(window_base->cancel_button);
 
-  if (window_base->res_theme != NULL) {
-    assets_manager_t* am = widget_get_assets_manager(widget);
-    assets_manager_unref(am, window_base->res_theme);
-  }
+  window_base_unload_theme_obj(widget);
 
   return RET_OK;
 }
 
-ret_t window_base_invalidate(widget_t* widget, rect_t* r) {
+ret_t window_base_invalidate(widget_t* widget, const rect_t* rect) {
+  rect_t t = *rect;
+  rect_t* r = &t;
   native_window_t* nw = NULL;
   return_value_if_fail(widget != NULL, RET_BAD_PARAMS);
+
+  if (widget->parent != NULL) {
+    widget_t* top = window_manager_get_top_main_window(widget->parent);
+    if (top != widget) {
+      if (widget_index_of(widget) < widget_index_of(top)) {
+        if (widget->x >= top->x && widget->y >= top->y &&
+            (widget->x + widget->w) <= (top->x + top->w) &&
+            (widget->y + widget->h) <= (top->y + top->h)) {
+          return RET_OK;
+        }
+      }
+    }
+  }
 
   nw = (native_window_t*)widget_get_prop_pointer(widget, WIDGET_PROP_NATIVE_WINDOW);
   if (nw != NULL) {
@@ -218,25 +570,313 @@ ret_t window_base_invalidate(widget_t* widget, rect_t* r) {
   return RET_OK;
 }
 
-ret_t window_base_on_event(widget_t* widget, event_t* e) {
-  window_base_t* win = WINDOW_BASE(widget);
-  return_value_if_fail(widget != NULL && win != NULL, RET_BAD_PARAMS);
+static widget_t* window_base_get_key_target_leaf(widget_t* widget) {
+  widget_t* iter = widget;
 
-  if (e->type == EVT_WINDOW_WILL_OPEN) {
-    win->stage = WINDOW_STAGE_CREATED;
-    window_base_load_theme_obj(widget);
-    widget_update_style_recursive(widget);
-  } else if (e->type == EVT_WINDOW_OPEN) {
-    win->stage = WINDOW_STAGE_OPENED;
-  } else if (e->type == EVT_WINDOW_CLOSE) {
-    win->stage = WINDOW_STAGE_CLOSED;
-  } else if (e->type == EVT_REQUEST_CLOSE_WINDOW) {
-    log_debug("EVT_REQUEST_CLOSE_WINDOW\n");
-    if (win->closable == WINDOW_CLOSABLE_YES) {
-      window_close(widget);
+  while (iter->key_target != NULL) {
+    iter = iter->key_target;
+  }
+
+  return iter;
+}
+
+ret_t window_base_auto_scale_children(widget_t* widget) {
+  window_base_t* win = WINDOW_BASE(widget);
+  return_value_if_fail(win != NULL && win->design_w > 0 && win->design_h > 0, RET_BAD_PARAMS);
+
+  return widget_auto_scale_children(widget, win->design_w, win->design_h,
+                                    win->auto_scale_children_x, win->auto_scale_children_y,
+                                    win->auto_scale_children_w, win->auto_scale_children_h);
+}
+
+ret_t window_set_auto_scale_children(widget_t* widget, uint32_t design_w, uint32_t design_h) {
+  window_base_t* base = WINDOW_BASE(widget);
+  return_value_if_fail(base != NULL && design_w > 0 && design_h > 0, RET_BAD_PARAMS);
+
+  base->design_w = design_w;
+  base->design_h = design_h;
+  base->auto_scale_children_x = TRUE;
+  base->auto_scale_children_y = TRUE;
+  base->auto_scale_children_w = TRUE;
+  base->auto_scale_children_h = TRUE;
+
+  return window_base_auto_scale_children(widget);
+}
+
+static ret_t window_base_on_event_window_will_open(widget_t* widget, window_base_t* win) {
+  win->stage = WINDOW_STAGE_CREATED;
+  window_base_load_theme_obj(widget);
+  widget_update_style_recursive(widget);
+  widget_layout(widget);
+  if (widget->sensitive) {
+    widget_set_focused_internal(widget, TRUE);
+  }
+  window_base_set_accept_button(widget, win->accept_button);
+  window_base_set_cancel_button(widget, win->cancel_button);
+
+  return RET_OK;
+}
+
+static ret_t window_base_on_event_window_open(widget_t* widget, window_base_t* win) {
+  win->stage = WINDOW_STAGE_OPENED;
+  if (widget->sensitive) {
+    widget_set_focused_internal(widget, TRUE);
+  }
+
+  return RET_OK;
+}
+
+static ret_t window_base_on_event_window_load(widget_t* widget, window_base_t* win) {
+  win->stage = WINDOW_STAGE_LOADED;
+  window_base_load_theme_obj(widget);
+  widget_layout(widget);
+
+  if (win->design_w && win->design_h) {
+    if (win->auto_scale_children_x || win->auto_scale_children_y || win->auto_scale_children_w ||
+        win->auto_scale_children_h) {
+      window_base_auto_scale_children(widget);
     }
   }
 
+  return RET_OK;
+}
+
+static ret_t window_base_on_event_window_close(widget_t* widget, window_base_t* win) {
+  win->stage = WINDOW_STAGE_CLOSED;
+  widget_off_by_ctx(window_manager(), widget);
+
+  return RET_OK;
+}
+
+static ret_t window_base_on_event_request_close_window(widget_t* widget, window_base_t* win) {
+  log_debug("EVT_REQUEST_CLOSE_WINDOW\n");
+  if (win->closable == WINDOW_CLOSABLE_YES) {
+    window_close(widget);
+  }
+
+  if (win->closable != WINDOW_CLOSABLE_CONFIRM) {
+    return RET_STOP;
+  }
+
+  return RET_OK;
+}
+
+static ret_t window_base_on_event_blur(widget_t* widget, window_base_t* win) {
+  widget_t* save_focus_widget = NULL;
+
+  if (win->save_focus_widget) {
+    widget_unref(win->save_focus_widget);
+    win->save_focus_widget = NULL;
+  }
+  save_focus_widget = window_base_get_key_target_leaf(widget);
+  if (save_focus_widget != widget) {
+    win->save_focus_widget = save_focus_widget;
+    if (win->save_focus_widget) {
+      widget_ref(win->save_focus_widget);
+    }
+  }
+
+  return RET_OK;
+}
+
+ret_t window_base_on_window_to_foreground(widget_t* widget) {
+  pointer_event_t enter;
+  window_base_t* win = WINDOW_BASE(widget);
+  widget_t* wm = widget_get_window_manager(widget);
+  return_value_if_fail(widget != NULL && win != NULL, RET_BAD_PARAMS);
+
+  win->stage = WINDOW_STAGE_OPENED;
+  if (widget->parent != NULL) {
+    widget->parent->grab_widget_count =
+        widget->grab_widget_count + win->grab_count_when_to_foreground;
+    if (widget->parent->grab_widget_count) {
+      widget->parent->grab_widget = widget;
+    }
+  }
+  if (wm != NULL && wm->target != widget) {
+    pointer_event_init(&enter, EVT_POINTER_ENTER, widget, 0, 0);
+    widget_dispatch_enter_event(widget, &enter);
+  }
+  if (win->save_focus_widget) {
+    widget_set_focused_internal(win->save_focus_widget, TRUE);
+    widget_unref(win->save_focus_widget);
+    win->save_focus_widget = NULL;
+  } else if (widget->parent != NULL && widget_is_window_manager(widget->parent)) {
+    if (widget->sensitive) {
+      widget_set_focused_internal(widget, TRUE);
+    }
+  }
+
+  return RET_OK;
+}
+
+ret_t window_base_on_window_to_background(widget_t* widget) {
+  pointer_event_t leave;
+  window_base_t* win = WINDOW_BASE(widget);
+  widget_t* wm = widget_get_window_manager(widget);
+  return_value_if_fail(widget != NULL && win != NULL, RET_BAD_PARAMS);
+
+  win->stage = WINDOW_STAGE_SUSPEND;
+  if (wm != NULL && wm->target == widget) {
+    pointer_event_init(&leave, EVT_POINTER_LEAVE, widget, 0, 0);
+    widget_dispatch_leave_event(widget, &leave);
+  }
+  if (win->pressed) {
+    pointer_event_t abort;
+    pointer_event_init(&abort, EVT_POINTER_DOWN_ABORT, widget, 0, 0);
+    widget_on_pointer_up(widget, &abort);
+  }
+
+  if (widget->parent != NULL && widget->parent->grab_widget == widget) {
+    win->grab_count_when_to_foreground =
+        widget->parent->grab_widget_count - widget->grab_widget_count;
+    widget->parent->grab_widget_count = 0;
+    widget->parent->grab_widget = NULL;
+  } else {
+    win->grab_count_when_to_foreground = 0;
+  }
+
+  return RET_OK;
+}
+
+ret_t window_base_on_event(widget_t* widget, event_t* e) {
+  ret_t ret = RET_OK;
+  window_base_t* win = WINDOW_BASE(widget);
+  return_value_if_fail(widget != NULL && win != NULL && e != NULL, RET_BAD_PARAMS);
+
+  if (e->type == EVT_WINDOW_WILL_OPEN) {
+    return window_base_on_event_window_will_open(widget, win);
+  } else if (e->type == EVT_WINDOW_OPEN) {
+    return window_base_on_event_window_open(widget, win);
+  } else if (e->type == EVT_WINDOW_LOAD) {
+    return window_base_on_event_window_load(widget, win);
+  } else if (e->type == EVT_WINDOW_CLOSE) {
+    return window_base_on_event_window_close(widget, win);
+  } else if (e->type == EVT_THEME_CHANGED) {
+    window_base_reload_theme_obj(widget);
+  } else if (e->type == EVT_REQUEST_CLOSE_WINDOW) {
+    ret = window_base_on_event_request_close_window(widget, win);
+  } else if (e->type == EVT_WINDOW_TO_FOREGROUND) {
+    return window_base_on_window_to_foreground(widget);
+  } else if (e->type == EVT_WINDOW_TO_BACKGROUND) {
+    return window_base_on_window_to_background(widget);
+  } else if (e->type == EVT_BLUR) {
+    return window_base_on_event_blur(widget, win);
+  } else if (e->type == EVT_POINTER_DOWN) {
+    win->pressed = TRUE;
+  } else if (e->type == EVT_POINTER_UP) {
+    win->pressed = FALSE;
+  }
+
+  return ret;
+}
+
+static ret_t window_35keys_mode_activate(window_base_t* base, int key) {
+  widget_t* focus = NULL;
+  return_value_if_fail(base != NULL, RET_BAD_PARAMS);
+
+  focus = widget_get_focused_widget(WIDGET(base));
+
+  if (focus != NULL) {
+    if (focus->vt->return_key_to_activate) {
+      /*对于按钮等通过回车键激活控件，方向键始终用于切换焦点*/
+      base->moving_focus_mode = TRUE;
+    } else {
+      /*其它控件，回车键用于切换模式*/
+      if (key_code_is_enter(key)) {
+        ret_t ret = RET_OK;
+        base->moving_focus_mode = !base->moving_focus_mode;
+        log_debug("%s: change moving_focus_mode:%s.\n", __FUNCTION__,
+                  base->moving_focus_mode ? "on" : "off");
+
+#ifdef WITH_STATE_ACTIVATED
+        if (!base->moving_focus_mode) {
+          event_t e = event_init(EVT_ACTIVATED, focus);
+          widget_set_state(focus, WIDGET_STATE_ACTIVATED);
+          ret = widget_dispatch(focus, &e);
+        } else {
+          event_t e = event_init(EVT_UNACTIVATED, focus);
+          widget_set_state(focus, WIDGET_STATE_FOCUSED);
+          ret = widget_dispatch(focus, &e);
+        }
+#endif /*WITH_STATE_ACTIVATED*/
+
+        return ret;
+      }
+    }
+  } else {
+    /* 当窗口没有焦点控件时，设置一个默认的焦点控件以保证流程正常 */
+    if (key_code_is_enter(key)) {
+      widget_focus_first(WIDGET(base));
+      log_debug("%s: reset focus widget.\n", __FUNCTION__);
+      return RET_STOP;
+    }
+  }
+
+  return RET_OK;
+}
+
+static ret_t window_35keys_mode_moving_focus(window_base_t* base, int key) {
+  widget_t* focus = NULL;
+  return_value_if_fail(base != NULL, RET_BAD_PARAMS);
+
+  if (!base->moving_focus_mode) {
+    return RET_OK;
+  }
+
+  focus = widget_get_focused_widget(WIDGET(base));
+  if (focus == NULL) {
+    return RET_OK;
+  }
+
+  if (KEYBOARD_3KEYS == system_info()->keyboard_type) {
+    if (key_code_is_left(key) || key_code_is_up(key)) {
+      widget_focus_prev(focus);
+      return RET_STOP;
+    } else if (key_code_is_right(key) || key_code_is_down(key)) {
+      widget_focus_next(focus);
+      return RET_STOP;
+    }
+  } else {
+    if (key_code_is_left(key)) {
+      widget_focus_left(focus);
+      return RET_STOP;
+    } else if (key_code_is_right(key)) {
+      widget_focus_right(focus);
+      return RET_STOP;
+    } else if (key_code_is_up(key)) {
+      widget_focus_up(focus);
+      return RET_STOP;
+    } else if (key_code_is_down(key)) {
+      widget_focus_down(focus);
+      return RET_STOP;
+    }
+  }
+
+  return RET_OK;
+}
+
+static ret_t window_35keys_mode_on_keyup_before_children(void* ctx, event_t* e) {
+  widget_t* win = WIDGET(ctx);
+  key_event_t* evt = key_event_cast(e);
+  window_base_t* base = WINDOW_BASE(win);
+  return_value_if_fail(win != NULL && evt != NULL && base != NULL, RET_BAD_PARAMS);
+
+  return window_35keys_mode_activate(base, evt->key);
+}
+
+static ret_t window_35keys_mode_on_keydown_before_children(void* ctx, event_t* e) {
+  widget_t* win = WIDGET(ctx);
+  key_event_t* evt = key_event_cast(e);
+  window_base_t* base = WINDOW_BASE(win);
+  return_value_if_fail(win != NULL && evt != NULL && base != NULL, RET_BAD_PARAMS);
+
+  return window_35keys_mode_moving_focus(base, evt->key);
+}
+
+ret_t window_enable_35keys_mode(widget_t* win) {
+  widget_on(win, EVT_KEY_UP_BEFORE_CHILDREN, window_35keys_mode_on_keyup_before_children, win);
+  widget_on(win, EVT_KEY_DOWN_BEFORE_CHILDREN, window_35keys_mode_on_keydown_before_children, win);
   return RET_OK;
 }
 
@@ -244,6 +884,7 @@ widget_t* window_base_create(widget_t* parent, const widget_vtable_t* vt, xy_t x
                              wh_t h) {
   widget_t* widget = widget_create(NULL, vt, x, y, w, h);
   window_base_t* win = WINDOW_BASE(widget);
+  keyboard_type_t keyboard_type = system_info()->keyboard_type;
 
   return_value_if_fail(win != NULL, NULL);
 
@@ -253,13 +894,22 @@ widget_t* window_base_create(widget_t* parent, const widget_vtable_t* vt, xy_t x
 
   return_value_if_fail(window_manager_open_window(parent, widget) == RET_OK, NULL);
   win->stage = WINDOW_STAGE_NONE;
-  win->move_focus_next_key = TK_KEY_MOVE_FOCUS_NEXT;
-  win->move_focus_prev_key = TK_KEY_MOVE_FOCUS_PREV;
-#ifdef ENABLE_MEM_LEAK_CHECK
-  tk_mem_dump();
-#endif /*ENABLE_MEM_LEAK_CHECK*/
+  win->move_focus_next_key = tk_strdup(TK_KEY_MOVE_FOCUS_NEXT);
+  win->move_focus_prev_key = tk_strdup(TK_KEY_MOVE_FOCUS_PREV);
+  if (keyboard_type == KEYBOARD_3KEYS || keyboard_type == KEYBOARD_5KEYS) {
+    window_enable_35keys_mode(widget);
+  }
 
   return widget;
+}
+
+ret_t window_base_set_need_relayout(widget_t* widget, bool_t need_relayout) {
+  window_base_t* win = WINDOW_BASE(widget);
+  return_value_if_fail(win != NULL, RET_BAD_PARAMS);
+
+  win->need_relayout = need_relayout;
+
+  return RET_OK;
 }
 
 ret_t window_close_force(widget_t* widget) {
@@ -276,10 +926,44 @@ ret_t window_close(widget_t* widget) {
   return window_manager_close_window(widget->parent, widget);
 }
 
-TK_DECL_VTABLE(window_base) = {.size = sizeof(window_base_t), .parent = TK_PARENT_VTABLE(widget)};
+static const char* s_window_base_properties[] = {WIDGET_PROP_ANIM_HINT,
+                                                 WIDGET_PROP_OPEN_ANIM_HINT,
+                                                 WIDGET_PROP_DISABLE_ANIM,
+                                                 WIDGET_PROP_NATIVE_WINDOW,
+                                                 WIDGET_PROP_CLOSE_ANIM_HINT,
+                                                 WIDGET_PROP_THEME,
+                                                 WIDGET_PROP_MOVE_FOCUS_PREV_KEY,
+                                                 WIDGET_PROP_MOVE_FOCUS_NEXT_KEY,
+                                                 WIDGET_PROP_MOVE_FOCUS_UP_KEY,
+                                                 WIDGET_PROP_MOVE_FOCUS_DOWN_KEY,
+                                                 WIDGET_PROP_MOVE_FOCUS_LEFT_KEY,
+                                                 WIDGET_PROP_MOVE_FOCUS_RIGHT_KEY,
+                                                 WIDGET_PROP_SINGLE_INSTANCE,
+                                                 WIDGET_PROP_STRONGLY_FOCUS,
+                                                 WIDGET_PROP_DESIGN_W,
+                                                 WIDGET_PROP_DESIGN_H,
+                                                 WIDGET_PROP_AUTO_SCALE_CHILDREN_X,
+                                                 WIDGET_PROP_AUTO_SCALE_CHILDREN_Y,
+                                                 WIDGET_PROP_AUTO_SCALE_CHILDREN_W,
+                                                 WIDGET_PROP_AUTO_SCALE_CHILDREN_H,
+                                                 WIDGET_PROP_CLOSABLE,
+                                                 NULL};
+
+TK_DECL_VTABLE(window_base) = {
+    .size = sizeof(window_base_t),
+    .get_parent_vt = TK_GET_PARENT_VTABLE(widget),
+    .clone_properties = s_window_base_properties,
+    .persistent_properties = s_window_base_properties,
+};
 
 widget_t* window_base_cast(widget_t* widget) {
-  return_value_if_fail(WIDGET_IS_INSTANCE_OF(widget, window_base), NULL);
+  if (widget != NULL && widget->vt != NULL && widget->vt->is_window) {
+    return widget;
+  }
 
-  return widget;
+  return NULL;
+}
+
+ret_t window_base_on_copy(widget_t* widget, widget_t* other) {
+  return widget_copy_props(widget, other, s_window_base_properties);
 }

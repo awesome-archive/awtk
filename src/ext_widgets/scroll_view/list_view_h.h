@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  list_view_h
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -49,7 +49,7 @@ BEGIN_C_DECLS
  *
  *
  * > 更多用法请参考：[list\_view\_h.xml](
- *https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/list_view_h.xml)
+ *https://github.com/zlgopen/awtk/blob/master/design/default/ui/list_view_h.xml)
  *
  * 在c代码中使用函数list\_view\_h\_create创建水平列表视图控件。如：
  *
@@ -116,7 +116,7 @@ ret_t list_view_h_set_item_width(widget_t* widget, int32_t item_width);
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t list_view_h_set_spacing(widget_t* widget, bool_t spacing);
+ret_t list_view_h_set_spacing(widget_t* widget, int32_t spacing);
 
 /**
  * @method list_view_h_cast

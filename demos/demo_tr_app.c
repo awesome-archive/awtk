@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   demo_tr_app.c
  * Author: AWTK Develop Team
  * Brief:  text translation
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2025 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,7 +24,7 @@
 #include "widgets/button.h"
 #include "base/locale_info.h"
 #include "widgets/check_button.h"
-#include "widgets/dialog.h"
+#include "base/dialog.h"
 #include "widgets/image.h"
 #include "base/image_manager.h"
 #include "widgets/label.h"
@@ -32,20 +32,23 @@
 #include "widgets/progress_bar.h"
 #include "tkc/utils.h"
 #include "tkc/utf8.h"
-#include "widgets/window.h"
+#include "base/window.h"
 #include "widgets/slider.h"
 #include "widgets/group_box.h"
 
 static ret_t change_locale(void* ctx, event_t* e) {
-  char country[3];
-  char language[3];
-  const char* str = (const char*)ctx;
+  widget_t* radio_button = WIDGET(e->target);
+  if (widget_get_value_int(radio_button)) {
+    char country[3];
+    char language[3];
+    const char* str = (const char*)ctx;
 
-  widget_t* widget = WIDGET(e->target);
-  if (widget_get_value(widget)) {
-    strncpy(language, str, 2);
-    strncpy(country, str + 3, 2);
-    locale_info_change(locale_info(), language, country);
+    widget_t* widget = WIDGET(e->target);
+    if (widget_get_value(widget)) {
+      strncpy(language, str, 2);
+      strncpy(country, str + 3, 2);
+      locale_info_change(locale_info(), language, country);
+    }
   }
 
   return RET_OK;
@@ -102,3 +105,10 @@ ret_t application_init() {
 
   return RET_OK;
 }
+
+ret_t application_exit() {
+  log_debug("application_exit\n");
+  return RET_OK;
+}
+
+#include "awtk_main.inc"

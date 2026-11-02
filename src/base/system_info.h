@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  system info
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -28,12 +28,31 @@
 BEGIN_C_DECLS
 
 /**
+ * @enum system_info_flag_t
+ * @annotation ["scriptable"]
+ * @prefix SYSTEM_INFO_FLAG_
+ * SystemInfo常量定义。
+ */
+typedef enum _system_info_flag_t {
+  /**
+   * @const SYSTEM_INFO_FLAG_NONE
+   * 无特殊标志。
+   */
+  SYSTEM_INFO_FLAG_NONE = 0,
+  /**
+   * @const SYSTEM_INFO_FLAG_FAST_LCD_PORTRAIT
+   * 使用快速旋转功能。
+   */
+  SYSTEM_INFO_FLAG_FAST_LCD_PORTRAIT = 1,
+} system_info_flag_t;
+
+/**
  * @class system_info_t
- * @parent object_t
+ * @parent tk_object_t
  * 当前系统的信息。
  */
 struct _system_info_t {
-  object_t object;
+  tk_object_t object;
 
   /**
    * @property {uint32_t} lcd_w
@@ -71,11 +90,11 @@ struct _system_info_t {
   float_t font_scale;
 
   /**
-   * @property {const char*} default_font
+   * @property {char*} default_font
    * @annotation ["readable"]
    * 缺省字体。
    */
-  const char* default_font;
+  char* default_font;
 
   /**
    * @property {lcd_orientation_t} lcd_orientation
@@ -83,6 +102,13 @@ struct _system_info_t {
    * 显示屏的旋转角度。
    */
   lcd_orientation_t lcd_orientation;
+
+  /**
+   * @property {keyboard_type_t} keyboard_type
+   * @annotation ["readable"]
+   * 键盘类型。
+   */
+  keyboard_type_t keyboard_type;
 
   /**
    * @property {const char*} device_orientation
@@ -116,18 +142,24 @@ struct _system_info_t {
   app_type_t app_type;
 
   /**
-   * @property {const char*} app_name
+   * @property {char*} app_name
    * @annotation ["readable"]
    * 应用程序的名称。
    */
-  const char* app_name;
+  char* app_name;
 
   /**
-   * @property {const char*} app_root
+   * @property {char*} app_root
    * @annotation ["readable"]
    * 应用程序的根目录，用于定位资源文件。
    */
   char* app_root;
+  /**
+   * @property {uint32_t} flags
+   * @annotation ["readable"]
+   * 标志。请参考{system_info_flag_t}。
+   */
+  uint32_t flags;
 };
 
 /**
@@ -164,7 +196,7 @@ ret_t system_info_deinit(void);
  * @method system_info_set_font_scale
  * 设置字体缩放比例。
  *
- * @param {system_info_t* info} info system_info对象。
+ * @param {system_info_t*} info system_info对象。
  * @param {float_t} font_scale 字体缩放比例。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -172,10 +204,21 @@ ret_t system_info_deinit(void);
 ret_t system_info_set_font_scale(system_info_t* info, float_t font_scale);
 
 /**
+ * @method system_info_set_app_root
+ * 设置app root。
+ *
+ * @param {system_info_t*} info system_info对象。
+ * @param {const char*} app_root app root。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t system_info_set_app_root(system_info_t* info, const char* app_root);
+
+/**
  * @method system_info_set_default_font
  * 设置缺省字体。
  *
- * @param {system_info_t* info} info system_info对象。
+ * @param {system_info_t*} info system_info对象。
  * @param {const char*} default_font 缺省字体。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -186,7 +229,7 @@ ret_t system_info_set_default_font(system_info_t* info, const char* default_font
  * @method system_info_set_lcd_w
  * 设置LCD宽度。
  *
- * @param {system_info_t* info} info system_info对象。
+ * @param {system_info_t*} info system_info对象。
  * @param {uint32_t} lcd_w 设置LCD宽度。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -197,7 +240,7 @@ ret_t system_info_set_lcd_w(system_info_t* info, uint32_t lcd_w);
  * @method system_info_set_lcd_h
  * 设置LCD高度。
  *
- * @param {system_info_t* info} info system_info对象。
+ * @param {system_info_t*} info system_info对象。
  * @param {uint32_t} lcd_h 设置LCD高度。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -208,7 +251,7 @@ ret_t system_info_set_lcd_h(system_info_t* info, uint32_t lcd_h);
  * @method system_info_set_lcd_type
  * 设置LCD类型。
  *
- * @param {system_info_t* info} info system_info对象。
+ * @param {system_info_t*} info system_info对象。
  * @param {lcd_type_t} lcd_type 设置LCD类型。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -219,7 +262,7 @@ ret_t system_info_set_lcd_type(system_info_t* info, lcd_type_t lcd_type);
  * @method system_info_set_lcd_orientation
  * 设置LCD的旋转角度。
  *
- * @param {system_info_t* info} info system_info对象。
+ * @param {system_info_t*} info system_info对象。
  * @param {lcd_orientation_t} lcd_orientation 设置LCD的旋转角度。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -227,10 +270,21 @@ ret_t system_info_set_lcd_type(system_info_t* info, lcd_type_t lcd_type);
 ret_t system_info_set_lcd_orientation(system_info_t* info, lcd_orientation_t lcd_orientation);
 
 /**
+ * @method system_info_set_keyboard_type
+ * 设置键盘类型。
+ *
+ * @param {system_info_t*} info system_info对象。
+ * @param {keyboard_type_t} keyboard_type 键盘类型。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t system_info_set_keyboard_type(system_info_t* info, keyboard_type_t keyboard_type);
+
+/**
  * @method system_info_set_device_pixel_ratio
  * 设置LCD密度。
  *
- * @param {system_info_t* info} info system_info对象。
+ * @param {system_info_t*} info system_info对象。
  * @param {float_t} device_pixel_ratio 设置LCD密度。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
@@ -263,13 +317,44 @@ const char* system_info_fix_font_name(const char* name);
 #define SYSTEM_INFO_PROP_LANGUAGE "language"
 #define SYSTEM_INFO_PROP_COUNTRY "country"
 
-/*public for test*/
+/**
+ * @method system_info_create
+ * 创建system_info对象。
+ * @annotation ["static"]
+ * @param {app_type_t} app_type 应用程序的类型。
+ * @param {const char*} app_name 应用程序的名称。
+ * @param {const char*} app_root 应用程序的根目录，用于定位资源文件。
+ *
+ * @return {system_info_t*} 返回创建的对象指针。
+ */
 system_info_t* system_info_create(app_type_t app_type, const char* app_name, const char* app_root);
 ret_t system_info_set_app_info(system_info_t* info, app_type_t app_type, const char* app_name,
                                const char* app_root);
 
 ret_t system_info_eval_exprs(system_info_t* info, const char* exprs, tk_visit_t on_expr_result,
                              void* ctx);
+
+/**
+ * @method system_info_set_app_name
+ * 设置应用程序的名称。
+ * @annotation ["static"]
+ * @param {system_info_t*} info system_info对象。
+ * @param {const char*} app_name 应用程序的名称。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t system_info_set_app_name(system_info_t* info, const char* app_name);
+
+/**
+ * @method tk_is_swap_size_by_orientation
+ * 根据旧的和新的方向判断是否需要交换宽度和高度。
+ * @annotation ["static"]
+ * @param {lcd_orientation_t} old_orientation 旧的方向。
+ * @param {lcd_orientation_t} new_orientation 新的方向。
+ * @return {bool_t} 返回是否需要交换宽度和高度。
+*/
+bool_t tk_is_swap_size_by_orientation(lcd_orientation_t old_orientation,
+                                      lcd_orientation_t new_orientation);
 
 END_C_DECLS
 

@@ -1,9 +1,9 @@
-/**
+﻿/**
  * File:   lcd_profile.c
  * Author: AWTK Develop Team
  * Brief:  wrap lcd for performance profile.
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,7 +24,7 @@
 #include "base/lcd_profile.h"
 
 #ifdef ENABLE_PERFORMANCE_PROFILE
-static ret_t lcd_profile_begin_frame(lcd_t* lcd, rect_t* dirty_rect) {
+static ret_t lcd_profile_begin_frame(lcd_t* lcd, const dirty_rects_t* dirty_rects) {
   ret_t ret = RET_OK;
   lcd_profile_t* profile = LCD_PROFILE(lcd);
 
@@ -42,12 +42,12 @@ static ret_t lcd_profile_begin_frame(lcd_t* lcd, rect_t* dirty_rect) {
   profile->stroke_pixels = 0;
 
   profile->begin_frame_time = time_now_ms();
-  ret = lcd_begin_frame(profile->impl, dirty_rect, lcd->draw_mode);
+  ret = lcd_begin_frame(profile->impl, dirty_rects, lcd->draw_mode);
 
   return ret;
 }
 
-static ret_t lcd_profile_set_clip_rect(lcd_t* lcd, rect_t* rect) {
+static ret_t lcd_profile_set_clip_rect(lcd_t* lcd, const rect_t* rect) {
   lcd_profile_t* profile = LCD_PROFILE(lcd);
 
   return lcd_set_clip_rect(profile->impl, rect);
@@ -63,6 +63,13 @@ static ret_t lcd_profile_resize(lcd_t* lcd, wh_t w, wh_t h, uint32_t line_length
   lcd_profile_t* profile = LCD_PROFILE(lcd);
 
   return lcd_resize(profile->impl, w, h, line_length);
+}
+
+static ret_t lcd_profile_set_orientation(lcd_t* lcd, lcd_orientation_t old_orientation,
+                                         lcd_orientation_t new_orientation) {
+  lcd_profile_t* profile = LCD_PROFILE(lcd);
+
+  return lcd_set_orientation(profile->impl, old_orientation, new_orientation);
 }
 
 static ret_t lcd_profile_set_global_alpha(lcd_t* lcd, uint8_t alpha) {
@@ -105,7 +112,7 @@ static ret_t lcd_profile_draw_vline(lcd_t* lcd, xy_t x, xy_t y, xy_t h) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_draw_vline(profile->impl, x, y, h);
   cost = time_now_ms() - start;
@@ -121,7 +128,7 @@ static ret_t lcd_profile_draw_hline(lcd_t* lcd, xy_t x, xy_t y, xy_t w) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_draw_hline(profile->impl, x, y, w);
   cost = time_now_ms() - start;
@@ -137,7 +144,7 @@ static ret_t lcd_profile_draw_points(lcd_t* lcd, point_t* points, uint32_t nr) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_draw_points(profile->impl, points, nr);
   cost = time_now_ms() - start;
@@ -159,7 +166,7 @@ static ret_t lcd_profile_fill_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_fill_rect(profile->impl, x, y, w, h);
   cost = time_now_ms() - start;
@@ -175,7 +182,7 @@ static ret_t lcd_profile_stroke_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h)
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_stroke_rect(profile->impl, x, y, w, h);
   cost = time_now_ms() - start;
@@ -187,11 +194,11 @@ static ret_t lcd_profile_stroke_rect(lcd_t* lcd, xy_t x, xy_t y, wh_t w, wh_t h)
   return ret;
 }
 
-static ret_t lcd_profile_draw_glyph(lcd_t* lcd, glyph_t* glyph, rect_t* src, xy_t x, xy_t y) {
+static ret_t lcd_profile_draw_glyph(lcd_t* lcd, glyph_t* glyph, const rect_t* src, xy_t x, xy_t y) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_draw_glyph(profile->impl, glyph, src, x, y);
   cost = time_now_ms() - start;
@@ -213,7 +220,7 @@ static ret_t lcd_profile_draw_text(lcd_t* lcd, const wchar_t* str, uint32_t nr, 
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_draw_text(profile->impl, str, nr, x, y);
   cost = time_now_ms() - start;
@@ -225,11 +232,12 @@ static ret_t lcd_profile_draw_text(lcd_t* lcd, const wchar_t* str, uint32_t nr, 
   return ret;
 }
 
-static ret_t lcd_profile_draw_image(lcd_t* lcd, bitmap_t* img, rect_t* src, rect_t* dst) {
+static ret_t lcd_profile_draw_image(lcd_t* lcd, bitmap_t* img, const rectf_t* src,
+                                    const rectf_t* dst) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_draw_image(profile->impl, img, src, dst);
   cost = time_now_ms() - start;
@@ -245,7 +253,7 @@ static ret_t lcd_profile_draw_image_matrix(lcd_t* lcd, draw_image_info_t* info) 
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_draw_image_matrix(profile->impl, info);
   cost = time_now_ms() - start;
@@ -262,18 +270,6 @@ static vgcanvas_t* lcd_profile_get_vgcanvas(lcd_t* lcd) {
   return lcd_get_vgcanvas(profile->impl);
 }
 
-static ret_t lcd_profile_take_snapshot(lcd_t* lcd, bitmap_t* img, bool_t auto_rotate) {
-  ret_t ret = RET_OK;
-
-  uint32_t cost = 0;
-  uint32_t start = time_now_ms();
-  lcd_profile_t* profile = LCD_PROFILE(lcd);
-  ret = lcd_take_snapshot(profile->impl, img, auto_rotate);
-  cost = time_now_ms() - start;
-
-  return ret;
-}
-
 static bitmap_format_t lcd_profile_get_desired_bitmap_format(lcd_t* lcd) {
   lcd_profile_t* profile = LCD_PROFILE(lcd);
 
@@ -284,7 +280,7 @@ static ret_t lcd_profile_swap(lcd_t* lcd) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_swap(profile->impl);
   cost = time_now_ms() - start;
@@ -298,7 +294,7 @@ static ret_t lcd_profile_flush(lcd_t* lcd) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t start = time_now_ms();
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_flush(profile->impl);
   cost = time_now_ms() - start;
@@ -312,8 +308,8 @@ static ret_t lcd_profile_end_frame(lcd_t* lcd) {
   ret_t ret = RET_OK;
 
   uint32_t cost = 0;
-  uint32_t end = 0;
-  uint32_t start = time_now_ms();
+  uint64_t end = 0;
+  uint64_t start = time_now_ms();
   lcd_profile_t* profile = LCD_PROFILE(lcd);
   ret = lcd_end_frame(profile->impl);
   end = time_now_ms();
@@ -354,10 +350,10 @@ lcd_t* lcd_profile_create(lcd_t* impl) {
   lcd = (lcd_t*)TKMEM_ZALLOC(lcd_profile_t);
   return_value_if_fail(lcd != NULL, NULL);
 
-  lcd->w = impl->w;
-  lcd->h = impl->h;
   lcd->type = impl->type;
   lcd->ratio = impl->ratio;
+  lcd->w = lcd_get_width(impl);
+  lcd->h = lcd_get_height(impl);
   LCD_PROFILE(lcd)->impl = impl;
   lcd->support_dirty_rect = impl->support_dirty_rect;
 
@@ -382,6 +378,10 @@ lcd_t* lcd_profile_create(lcd_t* impl) {
 
   if (impl->resize != NULL) {
     lcd->resize = lcd_profile_resize;
+  }
+
+  if (lcd->set_orientation != NULL) {
+    lcd->set_orientation = lcd_profile_set_orientation;
   }
 
   if (impl->draw_vline != NULL) {
@@ -430,10 +430,6 @@ lcd_t* lcd_profile_create(lcd_t* impl) {
 
   if (impl->get_vgcanvas != NULL) {
     lcd->get_vgcanvas = lcd_profile_get_vgcanvas;
-  }
-
-  if (impl->take_snapshot != NULL) {
-    lcd->take_snapshot = lcd_profile_take_snapshot;
   }
 
   if (impl->get_desired_bitmap_format != NULL) {

@@ -1,8 +1,6 @@
 ## self\_layouter\_factory\_t
 ### 概述
- 控件自身布局算法工厂。
-
-
+控件自身布局算法工厂。
 ----------------------------------
 ### 函数
 <p id="self_layouter_factory_t_methods">
@@ -20,8 +18,7 @@
 
 * 函数功能：
 
-> <p id="self_layouter_factory_t_self_layouter_factory"> 获取缺省的控件自身布局算法工厂对象。
-
+> <p id="self_layouter_factory_t_self_layouter_factory">获取缺省的控件自身布局算法工厂对象。
 
 * 函数原型：
 
@@ -39,9 +36,7 @@ self_layouter_factory_t* self_layouter_factory ();
 
 * 函数功能：
 
-> <p id="self_layouter_factory_t_self_layouter_factory_create"> 创建控件自身布局算法工厂对象。
-
-
+> <p id="self_layouter_factory_t_self_layouter_factory_create">创建控件自身布局算法工厂对象。
 
 * 函数原型：
 
@@ -59,9 +54,7 @@ self_layouter_factory_t* self_layouter_factory_create ();
 
 * 函数功能：
 
-> <p id="self_layouter_factory_t_self_layouter_factory_create_layouter"> 创建指定类型的控件自身布局算法对象。
-
-
+> <p id="self_layouter_factory_t_self_layouter_factory_create_layouter">创建指定类型的控件自身布局算法对象。
 
 * 函数原型：
 
@@ -73,7 +66,7 @@ self_layouter_t* self_layouter_factory_create_layouter (self_layouter_factory_t*
 
 | 参数 | 类型 | 说明 |
 | -------- | ----- | --------- |
-| 返回值 | self\_layouter\_t* | 返回窗口动画对象。 |
+| 返回值 | self\_layouter\_t* | 返回控件自身布局算法对象。 |
 | factory | self\_layouter\_factory\_t* | 控件自身布局算法工厂对象。 |
 | type | const char* | 类型。 |
 #### self\_layouter\_factory\_destroy 函数
@@ -81,9 +74,7 @@ self_layouter_t* self_layouter_factory_create_layouter (self_layouter_factory_t*
 
 * 函数功能：
 
-> <p id="self_layouter_factory_t_self_layouter_factory_destroy"> 析构并释放控件自身布局算法工厂对象。
-
-
+> <p id="self_layouter_factory_t_self_layouter_factory_destroy">析构并释放控件自身布局算法工厂对象。
 
 * 函数原型：
 
@@ -102,9 +93,7 @@ ret_t self_layouter_factory_destroy (self_layouter_factory_t* factory);
 
 * 函数功能：
 
-> <p id="self_layouter_factory_t_self_layouter_factory_register"> 注册控件自身布局算法创建函数。
-
-
+> <p id="self_layouter_factory_t_self_layouter_factory_register">注册控件自身布局算法创建函数。
 
 * 函数原型：
 
@@ -117,7 +106,7 @@ ret_t self_layouter_factory_register (self_layouter_factory_t* factory, const ch
 | 参数 | 类型 | 说明 |
 | -------- | ----- | --------- |
 | 返回值 | ret\_t | 返回RET\_OK表示成功，否则表示失败。 |
-| factory | self\_layouter\_factory\_t* | highlighter工厂对象。 |
+| factory | self\_layouter\_factory\_t* | layouter工厂对象。 |
 | type | const char* | 控件自身布局算法类型。 |
 | create | self\_layouter\_create\_t | 控件自身布局算法创建函数。 |
 #### self\_layouter\_factory\_set 函数
@@ -125,9 +114,7 @@ ret_t self_layouter_factory_register (self_layouter_factory_t* factory, const ch
 
 * 函数功能：
 
-> <p id="self_layouter_factory_t_self_layouter_factory_set"> 设置缺省的控件自身布局算法工厂对象。
-
-
+> <p id="self_layouter_factory_t_self_layouter_factory_set">设置缺省的控件自身布局算法工厂对象。
 
 * 函数原型：
 

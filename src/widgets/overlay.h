@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  overlay
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -28,7 +28,7 @@ BEGIN_C_DECLS
 
 /**
  * @class overlay_t
- * @parent widget_t
+ * @parent window_base_t
  * @annotation ["scriptable","design","widget","window"]
  * overlay窗口。
  *
@@ -38,7 +38,7 @@ BEGIN_C_DECLS
  *
  * overlay\_t是[window\_base\_t](window_base_t.md)的子类控件，window\_base\_t的函数均适用于overlay\_t控件。
  *
- * 在xml中使用"overlay"标签创建窗口。需要指定坐标和大小，可以指定主题和动画名称。如：
+ * 在xml中使用"overlay"标签创建窗口。需要指定坐标和大小，可以指定窗体样式和动画名称。如：
  *
  * ```xml
  * <overlay theme="basic" x="100" y="100" w="200" h="300">
@@ -47,7 +47,7 @@ BEGIN_C_DECLS
  * ```
  *
  * >
- * 更多用法请参考：[overlay.xml](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/ui/)
+ * 更多用法请参考：[overlay.xml](https://github.com/zlgopen/awtk/blob/master/design/default/ui/)
  *
  * 在c代码中使用函数overlay\_create创建窗口。如：
  *
@@ -67,11 +67,40 @@ BEGIN_C_DECLS
  * ```
  *
  * > 更多用法请参考：[theme
- * default](https://github.com/zlgopen/awtk/blob/master/demos/assets/raw/styles/default.xml#L0)
+ * default](https://github.com/zlgopen/awtk/blob/master/design/default/styles/default.xml#L0)
  */
 typedef struct _overlay_t {
   window_base_t overlay;
 
+  /**
+   * @property {bool_t} click_through
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 点击穿透。点击没有子控件的位置，是否穿透到底层窗口。
+   *
+   * 缺省不启用。
+   *
+   */
+  bool_t click_through;
+
+  /**
+   * @property {bool_t} always_on_top
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 是否总在最上面。
+   *
+   * 缺省不启用。
+   *
+   */
+  bool_t always_on_top;
+
+  /**
+   * @property {bool_t} modeless
+   * @annotation ["set_prop","get_prop","readable","persitent","design","scriptable"]
+   * 非模态窗口。
+   *
+   * 缺省不启用。
+   *
+   */
+  bool_t modeless;
 } overlay_t;
 
 /**
@@ -89,6 +118,39 @@ typedef struct _overlay_t {
 widget_t* overlay_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
 
 /**
+ * @method overlay_set_click_through
+ * 设置是否启用点击穿透。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  click_through 是否启用点击穿透。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t overlay_set_click_through(widget_t* widget, bool_t click_through);
+
+/**
+ * @method overlay_set_always_on_top
+ * 设置是否总是在最上面。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  always_on_top 是否总是在最上面。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t overlay_set_always_on_top(widget_t* widget, bool_t always_on_top);
+
+/**
+ * @method overlay_set_modeless
+ * 设置是否非模态窗口模式。
+ * @annotation ["scriptable"]
+ * @param {widget_t*} widget 控件对象。
+ * @param {bool_t}  modeless 是否非模态窗口模式。
+ *
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t overlay_set_modeless(widget_t* widget, bool_t modeless);
+
+/**
  * @method overlay_cast
  * 转换为overlay对象(供脚本语言使用)。
  * @annotation ["cast", "scriptable"]
@@ -97,6 +159,8 @@ widget_t* overlay_create(widget_t* parent, xy_t x, xy_t y, wh_t w, wh_t h);
  * @return {widget_t*} overlay对象。
  */
 widget_t* overlay_cast(widget_t* widget);
+
+#define OVERLAY_PROP_MODELESS "modeless"
 
 #define OVERLAY(widget) ((overlay_t*)(overlay_cast(WIDGET(widget))))
 

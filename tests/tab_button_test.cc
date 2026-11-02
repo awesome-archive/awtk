@@ -25,6 +25,11 @@ TEST(TabButton, basic) {
   ASSERT_EQ(widget_get_prop(w, WIDGET_PROP_ACTIVE_ICON, &v2), RET_OK);
   ASSERT_EQ(strcmp(v1.value.str, v2.value.str), 0);
 
+  value_set_str(&v1, "tab_button_view_page1");
+  ASSERT_EQ(widget_set_prop(w, WIDGET_PROP_LOAD_UI, &v1), RET_OK);
+  ASSERT_EQ(widget_get_prop(w, WIDGET_PROP_LOAD_UI, &v2), RET_OK);
+  ASSERT_EQ(strcmp(v1.value.str, v2.value.str), 0);
+
   widget_destroy(g);
 }
 
@@ -57,4 +62,38 @@ TEST(TabButton, cast) {
   ASSERT_NE(w, tab_button_group_cast(w));
 
   widget_destroy(g);
+}
+
+TEST(TabButton, change_value) {
+  widget_t* g = tab_button_group_create(NULL, 0, 0, 100, 100);
+  widget_t* w = tab_button_create(g, 0, 0, 100, 100);
+  value_change_event_t evt;
+  memset(&evt, 0x00, sizeof(evt));
+
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_VALUE, FALSE), RET_OK);
+  widget_on(w, EVT_VALUE_WILL_CHANGE, on_value_will_changed_accept, NULL);
+  widget_on(w, EVT_VALUE_CHANGED, on_value_changed, &evt);
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_VALUE, TRUE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_VALUE, FALSE), TRUE);
+
+  ASSERT_EQ(value_bool(&(evt.old_value)), FALSE);
+  ASSERT_EQ(value_bool(&(evt.new_value)), TRUE);
+
+  widget_destroy(g);
+  idle_dispatch();
+}
+
+TEST(TabButton, change_value_abort) {
+  widget_t* g = tab_button_group_create(NULL, 0, 0, 100, 100);
+  widget_t* w = tab_button_create(g, 0, 0, 100, 100);
+  value_change_event_t evt;
+  memset(&evt, 0x00, sizeof(evt));
+
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_VALUE, FALSE), RET_OK);
+  widget_on(w, EVT_VALUE_WILL_CHANGE, on_value_will_changed_abort, NULL);
+  ASSERT_EQ(widget_set_prop_bool(w, WIDGET_PROP_VALUE, TRUE), RET_OK);
+  ASSERT_EQ(widget_get_prop_bool(w, WIDGET_PROP_VALUE, TRUE), FALSE);
+
+  widget_destroy(g);
+  idle_dispatch();
 }

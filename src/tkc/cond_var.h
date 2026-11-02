@@ -3,7 +3,7 @@
  * Author: AWTK Develop Team
  * Brief:  cond_var
  *
- * Copyright (c) 2018 - 2019  Guangzhou ZHIYUAN Electronics Co.,Ltd.
+ * Copyright (c) 2018 - 2026 Guangzhou ZHIYUAN Electronics Co.,Ltd.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,10 +19,8 @@
  *
  */
 
-#ifndef TK_COND_VAR_H
-#define TK_COND_VAR_H
-
-#include "tkc/types_def.h"
+#ifndef TK_COND_VAR_SIMPLE_H
+#define TK_COND_VAR_SIMPLE_H
 
 BEGIN_C_DECLS
 
@@ -45,11 +43,11 @@ tk_cond_var_t* tk_cond_var_create(void);
  * @method tk_cond_var_wait
  * 等待。
  * @param {tk_cond_var_t*}    cond_var cond_var对象。
- * @param {uint32_t*}  timeout_ms 最长等待时间。
+ * @param {uint32_t}  timeout 最长等待时间(毫秒)。
  *
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
-ret_t tk_cond_var_wait(tk_cond_var_t* cond_var, uint32_t timeout_ms);
+ret_t tk_cond_var_wait(tk_cond_var_t* cond_var, uint32_t timeout);
 
 /**
  * @method tk_cond_var_awake
@@ -59,6 +57,14 @@ ret_t tk_cond_var_wait(tk_cond_var_t* cond_var, uint32_t timeout_ms);
  * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
  */
 ret_t tk_cond_var_awake(tk_cond_var_t* cond_var);
+
+/**
+ * @method tk_cond_var_clear
+ * 清除。
+ * @param {tk_cond_var_t*}    cond_var cond_var对象。
+ * @return {ret_t} 返回RET_OK表示成功，否则表示失败。
+ */
+ret_t tk_cond_var_clear(tk_cond_var_t* cond_var);
 
 /**
  * @method tk_cond_var_destroy
@@ -71,4 +77,4 @@ ret_t tk_cond_var_destroy(tk_cond_var_t* cond_var);
 
 END_C_DECLS
 
-#endif /*TK_COND_VAR_H*/
+#endif /*TK_COND_VAR_SIMPLE_H*/
